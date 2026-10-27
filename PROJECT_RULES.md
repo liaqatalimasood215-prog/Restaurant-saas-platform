@@ -143,8 +143,10 @@ preview and its Open Full App button are clearly labelled PLACEHOLDERS.
 
 ## 7. Roles and permissions
 
-- Roles: **OWNER, MANAGER, CASHIER, WAITER, KITCHEN, RIDER**. Full permission matrix:
-  MASTER_PROMPT.md §4.
+- Roles: **OWNER, MANAGER, CASHIER, WAITER (Super Waiter), SERVICE_WAITER (Service Waiter), KITCHEN,
+  RIDER**. Full permission matrix: MASTER_PROMPT.md §4. The Service Waiter serves food on assigned
+  tables and calls the cashier; it never creates or changes orders, prices, discounts, payments,
+  refunds or voids (owner, 2026-10-28).
 - The Owner works across all branches; everyone else belongs to one branch.
 - Each role sees only its own sections in Restaurant OS.
 - Riders can use only the Rider App; staff can use only Restaurant OS.
@@ -286,10 +288,13 @@ Details: MASTER_PROMPT.md §6 (order engine) and §8 (money).
   adapter. Screens never import demo data directly, so nothing has to be rebuilt.
 - Statuses, transitions, roles and money come from `packages/shared`, so prototype screens follow
   the real rules and show correct totals (Table 5 = Rs. 5,900).
-- Every prototype screen shows a visible **DEMO / PROTOTYPE** badge. Demo data is clearly sample
-  data ("Aziz Pizza — DEMO").
-- A demo role switcher replaces login during Phases 1–3 and is labelled DEMO.
-- Screen-to-screen updates in the prototype are labelled "DEMO sync — not real-time".
+- DEMO stays visible on every screen through one small **"Demo mode"** indicator in the header; tapping
+  it explains that the data is sample data ("Aziz Pizza — DEMO") and that sync works only between
+  tabs of one browser. PLACEHOLDER screens keep their own badge (owner, 2026-10-28).
+- A simple DEMO login (pick your account, no password) replaces real login during Phases 1–3 and is
+  labelled DEMO. Staff cannot change their own role; the Owner or a Manager does it in Staff.
+- Screen-to-screen updates in the prototype are "DEMO sync — not real-time"; nothing may be labelled
+  live before Phase 5.
 - Mobile-first for Waiter, Customer and Rider; tablet layout for Kitchen and Cashier; follow the
   owner's design (brand red, white cards, left sidebar).
 - Each UI phase ends with: a running preview, screenshots of every screen, the list of screens with
@@ -402,3 +407,6 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-27 | Preview 1 feedback (owner): the long DEMO notice strip is removed; the DEMO / PROTOTYPE badge on every screen title and the DEMO role-switcher label stay (§16) | Active |
 | 2026-10-28 | Owner and Manager start at POS / New Bill instead of Tables (owner, after Preview 1) | Active (replaces "Tables as home" in the navigation row above) |
 | 2026-10-28 | Owner approves Preview 1 (layout and navigation) and starts Preview 2: Tables → Waiter Orders → Kitchen / KDS | Active |
+| 2026-10-28 | Owner workflow: two waiter roles — Super Waiter (WAITER, takes orders) and Service Waiter (SERVICE_WAITER, serves food on assigned tables, calls the cashier); assigned tables per waiter; chefs per kitchen station; selling units (1 kg); bill request → cashier accepts → waiter sees it; cashier finds a bill by table number, prints a pre-bill, records payment, prints the paid receipt | Active (permission model updated, MASTER_PROMPT.md §4, §5.1) |
+| 2026-10-28 | Moved forward into Phase 1 by the owner: POS dine-in billing (from Preview 3) and Staff with waiter type and tables (from Preview 5); DEMO login replaces the role switcher; Restaurant OS is installable as one PWA for all staff (no offline data) | Active |
+| 2026-10-28 | One small "Demo mode" indicator replaces the per-screen DEMO badges and the green connection dot (a simulated sync is never shown as live) | Active (§16) |

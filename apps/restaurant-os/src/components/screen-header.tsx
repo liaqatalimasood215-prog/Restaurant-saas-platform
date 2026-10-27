@@ -2,7 +2,10 @@ import type { ReactNode } from 'react';
 import type { FeatureStatus } from '@restaurant-saas/shared';
 import { FeatureStatusBadge } from '@/components/ui/badge';
 
-/** Title row of every screen, with its visible status badge. */
+/**
+ * Title row of every screen. PLACEHOLDER screens show their badge; working DEMO screens rely on the
+ * one "Demo mode" indicator in the header (owner decision 2026-10-28).
+ */
 export function ScreenHeader({
   title,
   status,
@@ -19,7 +22,7 @@ export function ScreenHeader({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{title}</h1>
-          <FeatureStatusBadge status={status} />
+          {status !== 'DEMO_PROTOTYPE' && <FeatureStatusBadge status={status} />}
         </div>
         {description && <p className="mt-1 max-w-3xl text-sm text-slate-600">{description}</p>}
       </div>

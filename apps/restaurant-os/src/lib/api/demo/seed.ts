@@ -18,7 +18,7 @@ import {
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 2;
+export const DEMO_DATA_VERSION = 3;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -44,11 +44,18 @@ export interface DemoData {
   dailyCounters: Record<string, number>;
   /** Idempotency key → order id: a double tap or retry returns the first result */
   idempotency: Record<string, string>;
+  /** Last invoice number of the branch (gap-free, given when an order is paid) */
+  invoiceCounter: number;
 }
 
 const scoped = { restaurantId: RESTAURANT_ID, branchId: BRANCH_ID };
 
-function staff(n: number, name: string, role: StaffUser['role'], stationIds: string[] = []): StaffUser {
+function staff(
+  n: number,
+  name: string,
+  role: StaffUser['role'],
+  { stationIds = [], tableIds = [] }: { stationIds?: string[]; tableIds?: string[] } = {},
+): StaffUser {
   return {
     id: demoId(100 + n),
     restaurantId: RESTAURANT_ID,
@@ -58,6 +65,7 @@ function staff(n: number, name: string, role: StaffUser['role'], stationIds: str
     role,
     isActive: true,
     stationIds,
+    tableIds,
   };
 }
 
@@ -66,6 +74,7 @@ export const STATION = {
   grillFry: demoId(201),
   hotKitchen: demoId(202),
   drinks: demoId(203),
+  chicken: demoId(204),
 };
 
 function station(id: string, name: string, sort: number, autoReady = false): KitchenStation {
@@ -74,11 +83,14 @@ function station(id: string, name: string, sort: number, autoReady = false): Kit
 
 const AREA = { hall: demoId(300), family: demoId(301) };
 
+const tableId = (n: number) => demoId(400 + n);
+const tableRange = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => tableId(from + i));
+
 function tables(): DiningTable[] {
   const list: DiningTable[] = [];
   for (let n = 1; n <= 16; n++) {
     list.push({
-      id: demoId(400 + n),
+      id: tableId(n),
       ...scoped,
       areaId: n <= 10 ? AREA.hall : AREA.family,
       name: `T${n}`,
@@ -96,6 +108,7 @@ const CATEGORY = {
   fries: demoId(502),
   pasta: demoId(503),
   drinks: demoId(504),
+  chicken: demoId(505),
 };
 
 function category(id: string, name: string, sort: number): MenuCategory {
@@ -115,7 +128,7 @@ function item(
   categoryId: string,
   stationId: string,
   rupees: number,
-  extra: Partial<Pick<MenuItem, 'variants' | 'modifierGroupIds' | 'description'>> = {},
+  extra: Partial<Pick<MenuItem, 'variants' | 'modifierGroupIds' | 'description' | 'unit'>> = {},
 ): MenuItem {
   return {
     id: demoId(700 + n),
@@ -126,6 +139,7 @@ function item(
     name,
     description: extra.description ?? '',
     basePrice: rupeesToPaisa(rupees),
+    unit: extra.unit ?? 'piece',
     isAvailable: true,
     isOnline: true,
     sort: itemSort++,
@@ -163,17 +177,25 @@ export function createSeed(): DemoData {
       staff(1, 'Aziz Ahmed', 'OWNER'),
       staff(2, 'Sana Khan', 'MANAGER'),
       staff(3, 'Bilal Hussain', 'CASHIER'),
+      // Super Waiter: takes orders on every table.
       staff(4, 'Imran Ali', 'WAITER'),
-      staff(5, 'Usman Tariq', 'WAITER'),
+      // Service Waiters: serve food on their own tables.
+      staff(5, 'Usman Tariq', 'SERVICE_WAITER', { tableIds: tableRange(1, 8) }),
+      staff(9, 'Kashif Raza', 'SERVICE_WAITER', { tableIds: tableRange(9, 16) }),
+      // Head chef sees every station; the other chefs see only their own station.
       staff(6, 'Rashid Mehmood', 'KITCHEN'),
+      staff(10, 'Nadeem (Pizza Chef)', 'KITCHEN', { stationIds: [STATION.pizzaOven] }),
+      staff(11, 'Javed (Burger Chef)', 'KITCHEN', { stationIds: [STATION.grillFry] }),
+      staff(12, 'Akram (Chicken Chef)', 'KITCHEN', { stationIds: [STATION.chicken] }),
       staff(7, 'Faisal Riaz', 'RIDER'),
       staff(8, 'Naveed Akhtar', 'RIDER'),
     ],
     stations: [
       station(STATION.pizzaOven, 'Pizza Oven', 1),
       station(STATION.grillFry, 'Grill & Fry', 2),
-      station(STATION.hotKitchen, 'Hot Kitchen', 3),
-      station(STATION.drinks, 'Drinks', 4, true),
+      station(STATION.chicken, 'Chicken Station', 3),
+      station(STATION.hotKitchen, 'Hot Kitchen', 4),
+      station(STATION.drinks, 'Drinks', 5, true),
     ],
     areas: [
       { id: AREA.hall, ...scoped, name: 'Hall', sort: 1 },
@@ -183,9 +205,10 @@ export function createSeed(): DemoData {
     categories: [
       category(CATEGORY.pizza, 'Pizza', 1),
       category(CATEGORY.burgers, 'Burgers', 2),
-      category(CATEGORY.fries, 'Fries & Sides', 3),
-      category(CATEGORY.pasta, 'Pasta', 4),
-      category(CATEGORY.drinks, 'Drinks', 5),
+      category(CATEGORY.chicken, 'Chicken', 3),
+      category(CATEGORY.fries, 'Fries & Sides', 4),
+      category(CATEGORY.pasta, 'Pasta', 5),
+      category(CATEGORY.drinks, 'Drinks', 6),
     ],
     modifierGroups: [
       {
@@ -223,6 +246,8 @@ export function createSeed(): DemoData {
       }),
       item(3, 'Zinger Burger', CATEGORY.burgers, STATION.grillFry, 450, { modifierGroupIds: [GROUP.burgerExtras] }),
       item(4, 'Beef Burger', CATEGORY.burgers, STATION.grillFry, 550, { modifierGroupIds: [GROUP.burgerExtras] }),
+      item(10, 'Chicken Karahi', CATEGORY.chicken, STATION.chicken, 2600, { unit: 'kg', description: 'Price per kg' }),
+      item(11, 'Chicken Tikka', CATEGORY.chicken, STATION.chicken, 450),
       item(5, 'Loaded Fries', CATEGORY.fries, STATION.grillFry, 350),
       item(6, 'Wings', CATEGORY.fries, STATION.grillFry, 550),
       item(7, 'Alfredo Pasta', CATEGORY.pasta, STATION.hotKitchen, 600),
@@ -232,5 +257,6 @@ export function createSeed(): DemoData {
     orders: [],
     dailyCounters: {},
     idempotency: {},
+    invoiceCounter: 0,
   };
 }

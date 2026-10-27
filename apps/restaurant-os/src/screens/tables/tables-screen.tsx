@@ -62,7 +62,6 @@ export function TablesScreen() {
           </li>
         ))}
       </ul>
-      <p className="mt-4 text-xs text-slate-500">{t('sync.note')}</p>
     </>
   );
 }

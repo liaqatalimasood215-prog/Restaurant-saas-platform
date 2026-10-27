@@ -1,7 +1,7 @@
 'use client';
 
 import type { KitchenStation, Order, OrderItem } from '@restaurant-saas/shared';
-import { formatPaisa } from '@restaurant-saas/shared';
+import { formatPaisa, formatQuantity } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { t } from '@/i18n';
@@ -54,7 +54,7 @@ export function SentRounds({
                         <li key={item.id} className="flex items-start gap-2 text-sm">
                           <span className={cn('flex-1', item.isVoid && 'text-slate-400 line-through')}>
                             <span className="font-semibold">
-                              {item.quantity} × {item.name}
+                              {formatQuantity(item.quantity, item.unit)} {item.name}
                             </span>
                             {item.variantName && ` (${item.variantName})`}
                             {item.modifiers.map((m) => ` + ${m.name}`).join('')}

@@ -2,7 +2,7 @@ import type { ApiClient, DemoControls } from './client';
 import { DemoAdapter } from './demo/demo-adapter';
 
 export { ApiError } from './client';
-export type { ApiClient, DemoControls, Session } from './client';
+export type { ApiClient, DemoControls, RecordPaymentInput, SendRoundInput, Session, StaffInput } from './client';
 
 let adapter: DemoAdapter | null = null;
 

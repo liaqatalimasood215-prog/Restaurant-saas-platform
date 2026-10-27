@@ -115,6 +115,8 @@ export interface TransitionRule {
 }
 
 const FLOOR: readonly StaffRole[] = ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'];
+/** Everyone on the floor who may ask for the bill, including the Service Waiter. */
+const BILL_REQUESTERS: readonly StaffRole[] = [...FLOOR, 'SERVICE_WAITER'];
 const COUNTER: readonly StaffRole[] = ['OWNER', 'MANAGER', 'CASHIER'];
 const MANAGEMENT: readonly StaffRole[] = ['OWNER', 'MANAGER'];
 
@@ -144,7 +146,7 @@ function onlineIntakeRules(type: OrderType): TransitionRule[] {
 /** Every allowed status change (MASTER_PROMPT.md §6.3, §6.5). Anything not listed here is rejected. */
 export const ORDER_TRANSITIONS: readonly TransitionRule[] = [
   // Dine-in
-  { type: 'DINE_IN', from: 'OPEN', to: 'BILL_REQUESTED', roles: FLOOR, buttonLabel: 'Print bill' },
+  { type: 'DINE_IN', from: 'OPEN', to: 'BILL_REQUESTED', roles: BILL_REQUESTERS, buttonLabel: 'Request bill' },
   { type: 'DINE_IN', from: 'BILL_REQUESTED', to: 'OPEN', roles: FLOOR, buttonLabel: 'Add round' },
   { type: 'DINE_IN', from: 'OPEN', to: 'PAID', roles: COUNTER, needsFullPayment: true, buttonLabel: 'Pay' },
   { type: 'DINE_IN', from: 'BILL_REQUESTED', to: 'PAID', roles: COUNTER, needsFullPayment: true, buttonLabel: 'Pay' },

@@ -90,9 +90,18 @@ export class DemoStore {
     return this.session?.userId ?? null;
   }
 
-  setSessionUserId(userId: string): void {
-    this.session = { userId };
-    writeJson(() => window.sessionStorage, SESSION_KEY, this.session);
+  /** null = logged out */
+  setSessionUserId(userId: string | null): void {
+    this.session = userId ? { userId } : null;
+    if (this.session) {
+      writeJson(() => window.sessionStorage, SESSION_KEY, this.session);
+    } else {
+      try {
+        window.sessionStorage.removeItem(SESSION_KEY);
+      } catch {
+        // storage blocked
+      }
+    }
     this.emit();
   }
 

@@ -4,17 +4,16 @@ import { useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Bell, Search, Store } from 'lucide-react';
 import { t } from '@/i18n';
-import { cn } from '@/lib/cn';
 import { minutesSince } from '@/lib/format';
 import { useNow } from '@/lib/hooks/use-now';
 import { useSession } from '@/lib/session';
 import { useDismiss } from '@/components/ui/use-dismiss';
+import { DemoModeIndicator } from './demo-mode';
 import { Logo } from './logo';
-import { useReadyAlerts } from './ready-alerts';
-import { RoleSwitcher } from './role-switcher';
-import { useDemoFailure } from './use-demo-failure';
+import { notificationBody, notificationLink, notificationTitle, useNotifications } from './notifications';
+import { ProfileMenu } from './profile-menu';
 
-/** Header: search, branch, connection dot, alerts bell and the DEMO role switcher (MASTER_PROMPT.md §7.1). */
+/** Header: search, branch, Demo mode, notifications and the profile (MASTER_PROMPT.md §7.1). */
 export function Header() {
   const { data: session } = useSession();
 
@@ -47,35 +46,20 @@ export function Header() {
             </span>
           </div>
         )}
-        <ConnectionDot />
-        <AlertsBell />
-        <RoleSwitcher />
+        <DemoModeIndicator />
+        <NotificationsBell />
+        <ProfileMenu />
       </div>
     </header>
   );
 }
 
-/** Green/red connection dot. In Phases 1–3 it only reflects the DEMO tool, never a real connection. */
-function ConnectionDot() {
-  const failing = useDemoFailure();
-  const label = failing ? t('header.connectionFailing') : t('header.connectionDemo');
-  return (
-    <span className="flex items-center gap-1.5 rounded-full px-2 py-1" title={t('demo.sync')}>
-      <span className={cn('size-2.5 rounded-full', failing ? 'bg-red-500' : 'bg-green-500')} aria-hidden />
-      <span className={cn('sr-only text-xs font-semibold sm:not-sr-only', failing ? 'text-red-700' : 'text-slate-600')}>
-        {label}
-      </span>
-    </span>
-  );
-}
-
-/** Alerts bell: food-ready alerts for floor staff (online-order alarms join in Preview 4). */
-function AlertsBell() {
+function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(ref, open, close);
-  const alerts = useReadyAlerts();
+  const list = useNotifications();
   const now = useNow(30_000);
 
   return (
@@ -84,36 +68,35 @@ function AlertsBell() {
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        aria-label={`${t('header.alerts')} (${alerts.length})`}
+        aria-label={`${t('header.alerts')} (${list.length})`}
         className="relative flex size-12 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100"
       >
         <Bell className="size-6" aria-hidden />
-        {alerts.length > 0 && (
+        {list.length > 0 && (
           <span className="absolute right-1.5 top-1.5 flex min-w-5 items-center justify-center rounded-full bg-brand px-1 text-[11px] font-bold text-white">
-            {alerts.length}
+            {list.length}
           </span>
         )}
       </button>
       {open && (
-        <div className="absolute right-0 z-40 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600 shadow-xl">
-          <p className="mb-2 px-1 font-bold text-slate-900">{t('alerts.title')}</p>
-          {alerts.length === 0 ? (
+        <div className="absolute right-0 z-40 mt-2 w-[min(92vw,22rem)] rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600 shadow-xl">
+          <p className="mb-2 px-1 font-bold text-slate-900">{t('header.alerts')}</p>
+          {list.length === 0 ? (
             <p className="px-1 pb-1">{t('header.noAlerts')}</p>
           ) : (
-            <ul className="space-y-1">
-              {alerts.map((alert) => (
-                <li key={alert.ticketId}>
+            <ul className="max-h-96 space-y-1 overflow-y-auto">
+              {list.map((n) => (
+                <li key={n.id}>
                   <Link
-                    href={`/waiter?table=${alert.tableId}`}
+                    href={notificationLink(n)}
                     onClick={close}
-                    className="flex min-h-12 items-center justify-between gap-2 rounded-xl px-3 hover:bg-green-50"
+                    className="flex min-h-12 flex-col justify-center rounded-xl px-3 py-2 hover:bg-slate-50"
                   >
-                    <span className="font-semibold text-slate-900">
-                      {t('alerts.foodReady', { table: alert.tableName, station: alert.stationName })}
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-slate-900">{notificationTitle(n)}</span>
+                      <span className="shrink-0 text-xs text-slate-500">{t('alerts.ago', { n: minutesSince(n.at, now) })}</span>
                     </span>
-                    <span className="shrink-0 text-xs text-slate-500">
-                      {t('alerts.ago', { n: minutesSince(alert.readyAt, now) })}
-                    </span>
+                    <span className="text-xs text-slate-600">{notificationBody(n)}</span>
                   </Link>
                 </li>
               ))}

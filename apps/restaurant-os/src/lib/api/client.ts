@@ -5,8 +5,9 @@ import type {
   KitchenTicketView,
   MenuSnapshot,
   Order,
-  ReadyAlert,
+  PaymentMethod,
   Restaurant,
+  StaffNotification,
   StaffRole,
   StaffUser,
   TicketStatus,
@@ -48,21 +49,55 @@ export interface SendRoundInput {
   idempotencyKey: string;
 }
 
-export interface ApiClient {
-  /** The logged-in staff member. Phases 1–3: the DEMO role switcher; Phase 4: the login token. */
-  getSession(): Promise<Session>;
+export interface RecordPaymentInput {
+  orderId: Uuid;
+  method: PaymentMethod;
+  /** Paisa applied to the bill (never more than what is due) */
+  amount: number;
+  /** Paisa; tips are recorded with the payment but are not sales */
+  tipAmount: number;
+  /** Cash only: what the customer handed over (change is calculated) */
+  cashReceived: number | null;
+  /** Card slip or wallet transfer reference */
+  reference: string | null;
+  /** One key per tap of "Record payment": a double tap never records two payments. */
+  idempotencyKey: string;
+}
 
-  /** Areas and the live table board (table status is derived from each table's open order). */
+export interface StaffInput {
+  /** Empty for a new account */
+  id: Uuid | null;
+  name: string;
+  phone: string;
+  role: StaffRole;
+  stationIds: Uuid[];
+  tableIds: Uuid[];
+}
+
+export interface ApiClient {
+  /** The logged-in staff member, or null. Phases 1–3: DEMO login; Phase 4: phone + password. */
+  getSession(): Promise<Session | null>;
+  logout(): Promise<void>;
+
+  /** Areas and the live table board (a waiter with assigned tables sees only those). */
   getFloorPlan(): Promise<FloorPlan>;
   getMenu(): Promise<MenuSnapshot>;
-  /** The open dine-in order of a table, or null when the table is free. */
-  getOpenOrderForTable(tableId: Uuid): Promise<Order | null>;
-  /** Creates the table's order if needed and adds one round, split into kitchen tickets by station. */
+  getOrder(orderId: Uuid): Promise<Order>;
+  /** Super Waiter / counter: creates the table's order if needed and adds one round. */
   sendRound(input: SendRoundInput): Promise<Order>;
-  /** Print bill: the order becomes BILL_REQUESTED (adding a round reopens it). */
-  requestBill(orderId: Uuid): Promise<Order>;
   /** Owner/Manager only, with a reason. The item stays on the order, marked VOID, and leaves the bill. */
   voidItem(orderItemId: Uuid, reason: string): Promise<Order>;
+
+  /** Waiter: "Request bill / Call cashier". Repeated taps send one request. */
+  requestBill(orderId: Uuid): Promise<Order>;
+  /** Cashier accepts the request; the waiter who asked sees the acknowledgement. */
+  acceptBillRequest(orderId: Uuid): Promise<Order>;
+  /** Cashier prints the pre-bill ("NOT A RECEIPT"); the order is not paid by this. */
+  printPreBill(orderId: Uuid): Promise<Order>;
+  /** Records one payment (split payments = several calls); the order becomes PAID when covered. */
+  recordPayment(input: RecordPaymentInput): Promise<Order>;
+  /** Counts receipt prints; every print after the first is marked DUPLICATE. */
+  printReceipt(orderId: Uuid): Promise<Order>;
 
   /** Open kitchen tickets (New / Preparing / Ready) of the stations the user works on. */
   listKitchenTickets(): Promise<KitchenTicketView[]>;
@@ -71,8 +106,13 @@ export interface ApiClient {
   /** Out of stock ON/OFF for a menu item (Owner, Manager, Cashier, Kitchen). */
   setItemAvailable(menuItemId: Uuid, available: boolean): Promise<void>;
 
-  /** "Food ready" alerts: Waiters see their own tables, Owner/Manager/Cashier see all. */
-  listReadyAlerts(): Promise<ReadyAlert[]>;
+  /** Food ready, bill requested, bill accepted — only the ones meant for the logged-in user. */
+  listNotifications(): Promise<StaffNotification[]>;
+
+  /** Staff management (Owner, Manager; Managers not for Owner/Manager accounts). */
+  listStaff(): Promise<StaffUser[]>;
+  saveStaff(input: StaffInput): Promise<StaffUser>;
+  setStaffActive(userId: Uuid, active: boolean): Promise<StaffUser>;
 
   /**
    * Called whenever data may have changed, so screens reload from the API.
@@ -82,13 +122,13 @@ export interface ApiClient {
 }
 
 /**
- * DEMO-only controls (role switcher and demo tools). They exist only in Phases 1–3 and are never
+ * DEMO-only controls (demo login and demo tools). They exist only in Phases 1–3 and are never
  * part of the real API: the HttpAdapter will not implement them.
  */
 export interface DemoControls {
-  /** One demo user per role, for the role switcher */
-  listDemoUsers(): StaffUser[];
-  switchRole(role: StaffRole): void;
+  /** Active staff accounts to pick on the DEMO login screen */
+  listLoginAccounts(): StaffUser[];
+  demoLogin(userId: Uuid): void;
   isSimulatingFailure(): boolean;
   setSimulatedFailure(on: boolean): void;
   resetData(): void;

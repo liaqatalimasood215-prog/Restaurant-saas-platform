@@ -5,7 +5,8 @@ import type { PermissionContext } from '@restaurant-saas/shared';
 import { getApi, type Session } from '@/lib/api';
 import { useApiQuery, type ApiQuery } from '@/lib/hooks/use-api-query';
 
-interface SessionState extends ApiQuery<Session> {
+/** data: undefined = still loading, null = logged out. */
+interface SessionState extends ApiQuery<Session | null> {
   /** Restaurant-level switches that change permissions (e.g. Manager money reports) */
   permissionContext: PermissionContext;
 }

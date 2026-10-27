@@ -14,18 +14,19 @@ Read before changing anything:
 ## Current stage
 
 **Phase 1 — Restaurant OS UI prototype: in progress.** Preview 1 approved (2026-10-28). Preview 2
-(Tables, Waiter Orders, Kitchen / KDS) is ready for the owner's review.
+(Tables, Waiter, Kitchen) plus the owner's waiter → kitchen → cashier workflow (Super / Service
+Waiter, POS table billing, Staff, DEMO login, installable app) are ready for the owner's review.
 
-Phase 1 preview order: 1 layout and navigation → 2 Tables, Waiter, Kitchen → 3 Cashier / POS →
-4 Online Orders, Orders → 5 Menu, Online App, Riders, Staff, Today's Summary, Settings.
+Still to build in Phase 1: Orders and Online Orders (Preview 4); Menu, Online App, Riders, Today's
+Summary, Settings (Preview 5); POS takeaway / phone delivery, discounts and refunds.
 
 ## Folder map
 
 | Folder | What it is | Status |
 |---|---|---|
 | `docs/` | Master prompt v2.1, AI Manager plan | Written |
-| `packages/shared` | Six roles and permission matrix, sidebar sections, order engine (dine-in, delivery, takeaway), kitchen tickets, pricing engine, payments/refunds, business day, real-time names, API data types | NOT CONNECTED — 55 unit tests pass |
-| `apps/restaurant-os` | Restaurant OS (Next.js, Tailwind) with ApiClient + DemoAdapter | DEMO / PROTOTYPE — Preview 1 |
+| `packages/shared` | Seven roles (Super Waiter, Service Waiter) and permission matrix, sidebar sections, order engine (dine-in, delivery, takeaway), kitchen tickets, pricing engine, payments/refunds, business day, selling units, API data types | NOT CONNECTED — 57 unit tests pass |
+| `apps/restaurant-os` | Restaurant OS (Next.js, Tailwind) with ApiClient + DemoAdapter; installable PWA | DEMO / PROTOTYPE |
 | `backend/api/prisma/schema.prisma` | Database design draft (delivery only, 4 roles) | NOT CONNECTED — draft, not validated; Phase 4 |
 | `apps/customer` | Customer Online App (PWA) | Not started — Phase 2 |
 | `apps/rider` | Rider App (PWA) | Not started — Phase 3 |
@@ -39,27 +40,31 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 
 | Feature | Status |
 |---|---|
-| Shared rules: roles, permissions, order and ticket transitions, bill formula (Test A Rs. 4,200 → Rs. 5,900, Test C), payments, refunds, business day | NOT CONNECTED — 55 unit tests pass |
-| Restaurant OS layout: sidebar always visible (tablet/desktop), bottom navigation (phone), one feature per screen | DEMO / PROTOTYPE |
-| DEMO role switcher (6 roles), per-role sidebar, role home screens, "not available for this role" screen | DEMO / PROTOTYPE — not a login; real login in Phase 4 |
-| Rider role in Restaurant OS → "Riders use the Rider App" | DEMO / PROTOTYPE |
-| ApiClient + DemoAdapter, DEMO sync between tabs, simulated connection error, reset demo data | DEMO / PROTOTYPE |
-| Tables: live board (Hall T1–T10, Family T11–T16), Free / Occupied / Bill requested, running total, guests, waiter, time seated | DEMO / PROTOTYPE |
-| Waiter Orders: menu with search, categories, sizes, add-ons, notes, quantity; guests; rounds; Send to kitchen (double-tap safe); Served; Print bill → Bill requested; Void (Owner/Manager, with reason) | DEMO / PROTOTYPE — pre-bill print layout in Preview 3 |
-| Kitchen / KDS: station tabs, New / Preparing / Ready, timers (orange 10 min, red 20 min), Start / Ready / Undo (2 min), VOID marks, "do not cook" on fully voided tickets, out of stock, sound after "Tap to enable sound" | DEMO / PROTOTYPE |
-| Food-ready alerts: bell count, message, sound and vibration for floor staff | DEMO / PROTOTYPE — DEMO sync between tabs only |
-| Test A steps 1–5 (Rs. 4,200 → Rs. 5,900, tickets by station, alerts, Served, Bill requested) and the Test B void check | DEMO / PROTOTYPE — automated walkthrough passes; payment (steps 6–7) in Preview 3 |
-| POS / New Bill | PLACEHOLDER — Preview 3 |
-| Online Orders, Orders, header search | PLACEHOLDER — Preview 4 |
-| Menu, Staff, Today's Summary, Settings | PLACEHOLDER — Preview 5 |
-| Online App and Riders pages: management area | PLACEHOLDER — Preview 5 |
+| Shared rules: roles, permissions, order and ticket transitions, bill formula (Test A Rs. 4,200 → Rs. 5,900, Test C), payments, refunds, business day, units | NOT CONNECTED — 57 unit tests pass |
+| Layout: sidebar always visible (tablet/desktop), bottom navigation (phone), one feature per screen; sidebar starts with POS, Tables, Orders, Online Orders | DEMO / PROTOTYPE |
+| One small "Demo mode" indicator with explanation (no live connection is claimed) | DEMO / PROTOTYPE |
+| DEMO login (pick an account, no password); profile top-right with Log out; nobody can change their own role | DEMO / PROTOTYPE — real phone + password login in Phase 4 |
+| Super Waiter: tables, guests, menu with sizes / add-ons / notes / units, rounds, Send to kitchen (double-tap safe), item statuses, Request Bill + cashier acknowledgement | DEMO / PROTOTYPE |
+| Service Waiter: assigned tables only, food-ready notifications with items and quantities, Served (partly ready orders), Request Bill / Call Cashier; no ordering, prices, discounts, payments, refunds or voids | DEMO / PROTOTYPE |
+| Kitchen / KDS: chefs see only their station (Pizza Oven, Grill & Fry, Chicken Station, Hot Kitchen, Drinks), same order number and table on every station, units ("1 kg"), timers, Start / Ready / Undo, VOID, out of stock, sound | DEMO / PROTOTYPE |
+| Tables: live board, a waiter with assigned tables sees only those | DEMO / PROTOTYPE |
+| POS (dine-in): bill requests with Accept, find a bill by table number, full item list and total, Print Bill (pre-bill, NOT A RECEIPT), Record Payment (cash / card / wallet, split, tip, change), invoice number, Print Receipt, DUPLICATE reprint, table Free | DEMO / PROTOTYPE — printing uses the browser print dialog (80 mm layout) |
+| Staff: add / edit / disable, Super Waiter or Service Waiter, assigned tables, chef stations | DEMO / PROTOTYPE — passwords in Phase 4 |
+| Installable app (PWA): manifest, icons, Install App in the profile and on the login screen | DEMO / PROTOTYPE — needs HTTPS to install on a real phone (hosting needs owner approval); no offline data |
+| Notifications: food ready (Service Waiter), bill requested (Cashier), bill accepted (waiter) with message, sound and vibration | DEMO / PROTOTYPE — between tabs of one browser only |
+| Owner workflow + Test A steps 1–6 + safety checks (automated walkthrough) | DEMO / PROTOTYPE — passes |
+| Test A step 7 (Today's Summary) | PLACEHOLDER — Preview 5 |
+| POS takeaway / phone delivery, discounts, refunds | PLACEHOLDER — next steps of Phase 1 |
+| Orders, Online Orders, header search | PLACEHOLDER — Preview 4 |
+| Menu, Online App and Riders management, Today's Summary, Settings | PLACEHOLDER — Preview 5 |
 | Online App and Riders pages: app preview + Open Full App | PLACEHOLDER — Customer App in Phase 2, Rider App in Phase 3 |
 | Dashboard, Customers, Finance & Reports (P7), Inventory & Suppliers, Payroll (P8), AI Manager (P10) | PLACEHOLDER — Coming Soon |
-| Online-order alarms in the bell | PLACEHOLDER — Preview 4 |
-| Real-time between devices | Not started — Phase 5 (Phase 1 only has "DEMO sync — not real-time" between tabs of one browser) |
+| Sync between phones, tablets and laptops | Not started — needs the shared backend (Phase 4) and Socket.IO (Phase 5) |
 
 Known gaps: the optional "different tax rate per payment method" setting (MASTER_PROMPT.md §8) is
-not in the pricing engine yet — add it with tests when the owner confirms the tax rules.
+not in the pricing engine yet — add it with tests when the owner confirms the tax rules. Half-kg
+portions need a size (variant) or decimal quantities — decide with the real menu. The Prisma
+schema draft does not have the new roles, units, waiter tables and bill requests yet (Phase 4).
 
 ## Progress log
 
@@ -75,6 +80,7 @@ not in the pricing engine yet — add it with tests when the owner confirms the 
 | 2026-10-28 | Preview 1 feedback: sidebar starts with POS / New Bill, Tables, Orders, Online Orders; long DEMO strip removed (screen-title and role-switcher DEMO badges stay) | 55 tests, `pnpm typecheck`, `pnpm lint` pass; screenshots retaken; waiting for owner review |
 | 2026-10-28 | Owner and Manager now open on POS / New Bill (owner decision) | 55 tests, typecheck, lint pass |
 | 2026-10-28 | Phase 1 · Preview 2: Tables board, Waiter order screen (rounds, Served, Void, Print bill), Kitchen Display by station, food-ready alerts; DEMO sync now sends the data with the message (a tab read stale data before) | 55 tests, typecheck, lint, build pass; Test A steps 1–5 + Test B void walkthrough passes (run twice); screenshots; waiting for owner review |
+| 2026-10-28 | Owner workflow: Super Waiter / Service Waiter, assigned tables, chefs per station, units (1 kg), notifications, bill request → accept → acknowledgement, POS table billing with pre-bill, payment and receipt, Staff screen, DEMO login, one "Demo mode" indicator, installable PWA | 57 tests, typecheck, lint, build pass; full workflow walkthrough passes (Test A steps 1–6 + safety checks); screenshots; waiting for owner review |
 
 ## Commands
 
@@ -89,7 +95,7 @@ pnpm typecheck
 pnpm lint
 pnpm build
 pnpm --filter @restaurant-saas/restaurant-os screenshots   # needs pnpm dev running; uses installed Microsoft Edge
-pnpm --filter @restaurant-saas/restaurant-os walkthrough   # clicks through Test A steps 1–5 + the void check (needs pnpm dev)
+pnpm --filter @restaurant-saas/restaurant-os walkthrough   # owner workflow + Test A steps 1–6 (needs pnpm dev)
 ```
 
 Screenshots are written to `screenshots/` (git-ignored).

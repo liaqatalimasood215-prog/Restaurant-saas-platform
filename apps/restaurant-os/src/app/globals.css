@@ -18,3 +18,24 @@ body {
   background: var(--color-surface);
   color: #0f172a;
 }
+
+/* 80 mm bills and receipts: only the bill is printed. */
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 3mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    background: white;
+    padding: 0;
+  }
+}

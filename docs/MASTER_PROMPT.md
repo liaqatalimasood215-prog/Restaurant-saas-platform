@@ -205,37 +205,44 @@ screen → hooks (useTables, useOrders …) → ApiClient interface (src/lib/api
 
 ## 4. Roles and permissions
 
-Roles: **OWNER, MANAGER, CASHIER, WAITER, KITCHEN, RIDER.** Platform admins are a separate type of
-user (Phase 9). Further staff roles (e.g. Admin, Inventory Staff, Finance Staff) are a future idea
-and need an explicit update of this matrix first (§16 #17).
+Roles: **OWNER, MANAGER, CASHIER, WAITER (Super Waiter), SERVICE_WAITER (Service Waiter), KITCHEN,
+RIDER.** Platform admins are a separate type of user (Phase 9). Further staff roles (e.g. Admin,
+Inventory Staff, Finance Staff) are a future idea and need an explicit update of this matrix first
+(§16 #17).
 
 - The Owner works across all branches of their restaurant; everyone else belongs to one branch.
-- Kitchen users are linked to one or more stations (or all stations).
+- Kitchen users (chefs) are linked to one or more stations (or all stations) and see only those
+  tickets.
+- Waiters can be assigned tables (empty = all tables). A Service Waiter sees only the assigned
+  tables and gets their food-ready notifications (owner, 2026-10-28).
 - Riders can use only the Rider App; staff can use only Restaurant OS.
 - A disabled user cannot log in, and their existing sessions stop working immediately (checked on
-  every request).
-- Each role sees only its own sections. Home screen by role: Waiter → Tables, Kitchen → Kitchen
-  Display, Cashier → POS, Owner/Manager → POS / New Bill (owner, 2026-10-28).
+  every request). Nobody changes their own role; the Owner or a Manager does it in Staff.
+- Each role sees only its own sections. Home screen by role: Super Waiter → Tables, Service
+  Waiter → Ready to Serve, Kitchen → Kitchen Display, Cashier → POS, Owner/Manager → POS / New Bill
+  (owner, 2026-10-28).
 
-| Action | Owner | Manager | Cashier | Waiter | Kitchen | Rider |
-|---|---|---|---|---|---|---|
-| Open table, add items, send to kitchen, print bill | ✓ | ✓ | ✓ | ✓ | | |
-| Void an item after sending (with reason) | ✓ | ✓ | | | | |
-| Start / Ready / Undo kitchen tickets (own stations) | ✓ | ✓ | | | ✓ | |
-| Mark served | ✓ | ✓ | | ✓ | | |
-| Mark item out of stock | ✓ | ✓ | ✓ | | ✓ | |
-| Give discount (with reason) | ✓ | ✓ | | | | |
-| Record payment and tip, print/reprint receipt | ✓ | ✓ | ✓ | | | |
-| Refund or reverse a payment (with reason) | ✓ | ✓ | | | | |
-| Accept/reject online orders, phone and takeaway orders, assign rider | ✓ | ✓ | ✓ | | | |
-| Cancel order (with reason) | ✓ | ✓ | delivery/takeaway, before the kitchen starts | | | |
-| Picked up / Delivered / cash collected | | | | | | own orders only |
-| Settle rider cash | ✓ | ✓ | ✓ | | | |
-| Menu, tables, stations; Online App and Riders pages | ✓ | ✓ | | | | |
-| Staff management | ✓ | ✓ (not Owner/Manager accounts) | | | | |
-| Payroll (Phase 8) | ✓ | | | | | |
-| Money reports | ✓ | if the Owner allows | | own tips | | own cash |
-| Settings (tax, service charge, receipt, business day) | ✓ | | | | | |
+| Action | Owner | Manager | Cashier | Super Waiter | Service Waiter | Kitchen | Rider |
+|---|---|---|---|---|---|---|---|
+| Open table, add items, send to kitchen | ✓ | ✓ | ✓ | ✓ | | | |
+| Request bill / call cashier | ✓ | ✓ | ✓ | ✓ | ✓ (own tables) | | |
+| Accept a bill request, print the pre-bill | ✓ | ✓ | ✓ | | | | |
+| Void an item after sending (with reason) | ✓ | ✓ | | | | | |
+| Start / Ready / Undo kitchen tickets (own stations) | ✓ | ✓ | | | | ✓ | |
+| Mark served | ✓ | ✓ | | ✓ | ✓ (own tables) | | |
+| Mark item out of stock | ✓ | ✓ | ✓ | | | ✓ | |
+| Give discount (with reason) | ✓ | ✓ | | | | | |
+| Record payment and tip, print/reprint receipt | ✓ | ✓ | ✓ | | | | |
+| Refund or reverse a payment (with reason) | ✓ | ✓ | | | | | |
+| Accept/reject online orders, phone and takeaway orders, assign rider | ✓ | ✓ | ✓ | | | | |
+| Cancel order (with reason) | ✓ | ✓ | delivery/takeaway, before the kitchen starts | | | | |
+| Picked up / Delivered / cash collected | | | | | | | own orders only |
+| Settle rider cash | ✓ | ✓ | ✓ | | | | |
+| Menu, tables, stations; Online App and Riders pages | ✓ | ✓ | | | | | |
+| Staff management (incl. waiter type and assigned tables) | ✓ | ✓ (not Owner/Manager accounts) | | | | | |
+| Payroll (Phase 8) | ✓ | | | | | | |
+| Money reports | ✓ | if the Owner allows | | own tips | own tips | | own cash |
+| Settings (tax, service charge, receipt, business day) | ✓ | | | | | | |
 
 ## 5. Core workflows
 
@@ -252,15 +259,20 @@ and need an explicit update of this matrix first (§16 #17).
    Grill & Fry, Hot Kitchen). Bottled drinks go to an "auto-ready" Drinks station.
 4. Each station's Kitchen Display shows its ticket instantly with a sound. The cashier sees Table
    5's running bill instantly.
-5. The kitchen taps **Start**, then **Ready**. The waiter's phone alerts: "Table 5 — Pizza Oven
-   ready" (sound + vibration).
-6. The waiter serves and taps **Served**.
-7. Guests order more → the waiter adds **round 2** to the same order → new tickets → same bill.
-8. Guests ask for the bill → the waiter or cashier taps **Print bill** (pre-bill with items,
-   discount, service charge, tax, total).
-9. The cashier opens Table 5 → total **Rs. 5,900** → discount if allowed → records payment (cash /
-   card / wallet; can be split) and tip → **Print receipt** → order **PAID** → table becomes
-   **Free**.
+5. The kitchen taps **Start**, then **Ready**. The **Service Waiter** of that table gets a
+   notification with the table number, items and quantities — "T5 — Pizza Oven ready: 2 × Classic
+   Pizza (Medium)" (sound + vibration). Without a Service Waiter for the table, the Super Waiter who
+   took the order is notified. Items that are ready can be served while others still cook.
+6. The waiter serves and taps **Served** (repeated taps change nothing).
+7. Guests order more → the Super Waiter adds **round 2** to the same order → new tickets → same bill.
+8. Guests ask for the bill → the waiter taps **Request Bill / Call Cashier** → POS shows
+   "T5 requested bill" → the cashier taps **Accept** (or prints the bill) → the waiter sees "Cashier
+   accepted the bill request". A customer at the counter can also say "Table 5": the cashier finds
+   the running bill by table number.
+9. The cashier opens Table 5 → total **Rs. 5,900** → **Print Bill** prints the pre-bill ("NOT A
+   RECEIPT"; the order is not paid by this) → discount if allowed → records payment (cash / card /
+   wallet; can be split) and tip → order **PAID** with an invoice number → **Print Receipt** →
+   table becomes **Free**.
 10. The owner sees all of this live and in today's summary.
 
 Rules: before sending, items can be changed freely. After sending, only the Owner or Manager can
@@ -584,18 +596,19 @@ never deleted.
 |---|---|---|
 | `restaurants` | name, slug, status | Pilot |
 | `branches` | name, slug, phone, address, timezone, business_day_start, tax settings, service_charge_pct, receipt_header, receipt_footer, online_orders_enabled, delivery_fee, min_order, default_prep_minutes | Pilot |
-| `staff_users` | branch_id (empty = all branches, Owner only), name, phone, password_hash, role, is_active, token_version | Pilot |
+| `staff_users` | branch_id (empty = all branches, Owner only), name, phone, password_hash, role (incl. WAITER = Super Waiter, SERVICE_WAITER), is_active, token_version | Pilot |
+| `staff_tables` | staff_user_id, table_id — assigned tables of a waiter (none = all tables) | Pilot |
 | `kitchen_stations` | name, auto_ready, warn_minutes, late_minutes, sort | Pilot |
 | `staff_stations` | staff_user_id, station_id | Pilot |
 | `areas` | name, sort | Pilot |
 | `dining_tables` | area_id, name, seats, is_active, sort (status is derived, not stored) | Pilot |
 | `menu_categories` | branch_id (empty = all branches), name, sort, is_active | Pilot |
-| `menu_items` | category_id, station_id, name, description, base_price, is_available, is_online, sort, image_url (P7) | Pilot |
+| `menu_items` | category_id, station_id, name, description, base_price, unit (piece / kg / plate / litre), is_available, is_online, sort, image_url (P7) | Pilot |
 | `item_variants` | menu_item_id, name (Small / Medium / Large), price, sort | Pilot |
 | `modifier_groups`, `modifiers` | group: name, min_select, max_select · modifier: group_id, name, price, is_available | Pilot |
 | `menu_item_modifier_groups` | menu_item_id, group_id, sort | Pilot |
-| `orders` | type, channel, status, business_date, daily_number, invoice_number, table_id, waiter_id, guests, customer_id, customer name/phone/address (copies), rider_id, tracking_token, prep_minutes, items_subtotal, discount_total, service_charge, tax_total, delivery_fee, rounding, total, paid_total, refunded_total, tip_total, payment_status, note, created_by, milestone times | Pilot |
-| `order_items` | order_id, menu_item_id, variant_id, copies of name/size/add-ons (JSON), unit_price, quantity, line_total, note, round_no, ticket_id, is_void, void_reason, voided_by, voided_at | Pilot |
+| `orders` | type, channel, status, business_date, daily_number, invoice_number, bill_requested_by, bill_requested_at, bill_accepted_by, bill_accepted_at, receipt_prints, table_id, waiter_id, guests, customer_id, customer name/phone/address (copies), rider_id, tracking_token, prep_minutes, items_subtotal, discount_total, service_charge, tax_total, delivery_fee, rounding, total, paid_total, refunded_total, tip_total, payment_status, note, created_by, milestone times | Pilot |
+| `order_items` | order_id, menu_item_id, variant_id, copies of name/size/add-ons (JSON), unit_price, quantity, unit (copy), line_total, note, round_no, ticket_id, is_void, void_reason, voided_by, voided_at | Pilot |
 | `kitchen_tickets` | order_id, station_id, round_no, status, started_at, ready_at, served_at | Pilot |
 | `order_status_history` | order_id, from_status, to_status, changed_by, reason, changed_at | Pilot |
 | `payments` | order_id, kind (PAYMENT / REFUND / REVERSAL), method, amount, tip_amount, cash_received, change_given, reference, received_by, related_payment_id, reason, idempotency_key | Pilot |
@@ -1124,4 +1137,5 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-27 | v2.1: owner approved the baseline and the Phase 1 plan; Restaurant OS navigation (§7.1); Open Full App buttons (§5.5, §5.6); white-label branding and publishing stages (§7.6); kitchen Undo on READY delivery/takeaway orders (§6.4); open decisions #16–#18; repository folder `restaurant-saas-platform`. |
 | 2026-10-27 | v2.1 update after Preview 1: sidebar starts with POS / New Bill, Tables, Orders, Online Orders; long DEMO strip removed (badges stay). |
 | 2026-10-28 | Owner and Manager home screen: POS / New Bill (§4, §7.1). |
+| 2026-10-28 | §4, §5.1: Super Waiter and Service Waiter, assigned tables, chefs per station, bill request → accept → acknowledgement, cashier finds a bill by table number; §9: selling units and waiter tables. |
 | 2026-10-28 | §6.4: fully voided tickets ("do not cook", 2 minutes) and harmless repeated ticket presses (Preview 2). |

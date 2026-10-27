@@ -16,8 +16,9 @@ const USERS = {
   MANAGER: '00000000-0000-4000-8000-000000000102',
   CASHIER: '00000000-0000-4000-8000-000000000103',
   WAITER: '00000000-0000-4000-8000-000000000104',
+  SERVICE_WAITER: '00000000-0000-4000-8000-000000000105',
   KITCHEN: '00000000-0000-4000-8000-000000000106',
-  RIDER: '00000000-0000-4000-8000-000000000107',
+  LOGGED_OUT: null,
 };
 
 const SIZES = {
@@ -33,14 +34,18 @@ const SHOTS = [
   { name: '03-desktop-owner-online-app-open-full-app', size: 'desktop', role: 'OWNER', path: '/online-app', click: 'button:has-text("Open Full App")' },
   { name: '04-desktop-owner-riders', size: 'desktop', role: 'OWNER', path: '/riders' },
   { name: '05-desktop-owner-dashboard-coming-soon', size: 'desktop', role: 'OWNER', path: '/dashboard' },
-  { name: '06-desktop-owner-role-switcher', size: 'desktop', role: 'OWNER', path: '/tables', click: 'button[aria-label="Switch role (DEMO)"]' },
+  { name: '06-desktop-owner-profile-menu', size: 'desktop', role: 'OWNER', path: '/tables', click: 'button[aria-label="Profile menu"]' },
   { name: '07-desktop-manager-summary-no-access', size: 'desktop', role: 'MANAGER', path: '/summary' },
-  { name: '08-desktop-rider-notice', size: 'desktop', role: 'RIDER', path: '/' },
+  { name: '08-phone-login', size: 'phone', role: 'LOGGED_OUT', path: '/' },
   { name: '09-desktop-owner-simulated-offline', size: 'desktop', role: 'OWNER', path: '/tables', simulateError: true },
   { name: '10-tablet-landscape-cashier-pos', size: 'tabletLandscape', role: 'CASHIER', path: '/pos' },
   { name: '11-tablet-kitchen-kds', size: 'tablet', role: 'KITCHEN', path: '/kitchen' },
   { name: '12-phone-waiter-tables', size: 'phone', role: 'WAITER', path: '/tables' },
   { name: '13-phone-owner-more-menu', size: 'phone', role: 'OWNER', path: '/tables', click: 'button:has-text("More")' },
+  { name: '14-desktop-demo-mode-explained', size: 'desktop', role: 'OWNER', path: '/pos', click: 'button:has-text("Demo mode")' },
+  { name: '15-desktop-owner-staff', size: 'desktop', role: 'OWNER', path: '/staff' },
+  { name: '16-desktop-owner-add-service-waiter', size: 'desktop', role: 'OWNER', path: '/staff', click: 'button:has-text("Add staff")', then: 'button:has-text("Service Waiter")' },
+  { name: '17-phone-service-waiter-home', size: 'phone', role: 'SERVICE_WAITER', path: '/' },
 ];
 
 const browser = await chromium.launch({ channel: 'msedge' });
@@ -48,21 +53,24 @@ await mkdir(OUT_DIR, { recursive: true });
 
 for (const shot of SHOTS) {
   const context = await browser.newContext({ viewport: SIZES[shot.size], deviceScaleFactor: 1 });
-  await context.addInitScript(
-    ([key, userId]) => window.sessionStorage.setItem(key, JSON.stringify({ userId })),
-    [SESSION_KEY, USERS[shot.role]],
-  );
+  if (USERS[shot.role]) {
+    await context.addInitScript(
+      ([key, userId]) => window.sessionStorage.setItem(key, JSON.stringify({ userId })),
+      [SESSION_KEY, USERS[shot.role]],
+    );
+  }
   const page = await context.newPage();
   await page.goto(`${BASE_URL}${shot.path}`, { waitUntil: 'networkidle' });
-  await page.locator('main h1').first().waitFor({ timeout: 15_000 });
+  await page.locator('h1').first().waitFor({ timeout: 15_000 });
   if (shot.simulateError) {
-    await page.click('button[aria-label="Switch role (DEMO)"]');
+    await page.click('button[aria-label="Profile menu"]');
     await page.getByLabel('Simulate connection error').check();
     await page.keyboard.press('Escape');
-    await page.getByText('Offline (simulated)').waitFor({ timeout: 5_000 });
+    await page.getByText('Demo mode · offline (simulated)').waitFor({ timeout: 5_000 });
   }
   if (shot.click) {
     await page.click(shot.click);
+    if (shot.then) await page.click(shot.then);
     await page.waitForTimeout(400);
   }
   const file = path.join(OUT_DIR, `${shot.name}.png`);

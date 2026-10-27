@@ -46,7 +46,7 @@ export interface OsSection {
   phase1Status: FeatureStatus;
 }
 
-const FLOOR: readonly StaffRole[] = ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'];
+const FLOOR: readonly StaffRole[] = ['OWNER', 'MANAGER', 'CASHIER', 'WAITER', 'SERVICE_WAITER'];
 const COUNTER: readonly StaffRole[] = ['OWNER', 'MANAGER', 'CASHIER'];
 const MANAGEMENT: readonly StaffRole[] = ['OWNER', 'MANAGER'];
 
@@ -105,5 +105,6 @@ export const HOME_SECTION: Record<OsRole, OsSectionKey> = {
   MANAGER: 'pos',
   CASHIER: 'pos',
   WAITER: 'tables',
+  SERVICE_WAITER: 'waiter',
   KITCHEN: 'kitchen',
 };

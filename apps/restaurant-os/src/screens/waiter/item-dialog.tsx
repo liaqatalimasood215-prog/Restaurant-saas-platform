@@ -130,7 +130,10 @@ export function ItemDialog({
         </label>
 
         <div className="flex items-center justify-between">
-          <span className="text-sm font-bold text-slate-900">{t('waiter.quantity')}</span>
+          <span className="text-sm font-bold text-slate-900">
+            {t('waiter.quantity')}
+            {item.unit !== 'piece' && ` (${item.unit})`}
+          </span>
           <QuantityStepper value={quantity} onChange={setQuantity} label={t('waiter.quantity')} />
         </div>
       </div>

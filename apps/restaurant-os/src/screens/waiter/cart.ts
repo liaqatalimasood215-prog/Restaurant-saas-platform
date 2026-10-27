@@ -1,4 +1,4 @@
-import { unitPriceFor, type DraftItemInput, type MenuSnapshot } from '@restaurant-saas/shared';
+import { unitPriceFor, type DraftItemInput, type MenuSnapshot, type MenuUnit } from '@restaurant-saas/shared';
 
 /** One line of the round being built on the waiter's phone (not sent yet). */
 export interface CartLine extends DraftItemInput {
@@ -9,6 +9,7 @@ export interface CartLineView {
   line: CartLine;
   name: string;
   details: string;
+  unit: MenuUnit;
   /** Display only — the server prices every item itself when the round is sent. */
   unitPrice: number;
 }
@@ -21,6 +22,7 @@ export function describeLine(line: CartLine, menu: MenuSnapshot): CartLineView |
   return {
     line,
     name: item.name,
+    unit: item.unit,
     details: [variant?.name, ...modifiers.map((m) => `+ ${m.name}`)].filter(Boolean).join(' · '),
     unitPrice: unitPriceFor({
       basePrice: item.basePrice,

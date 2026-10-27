@@ -3,6 +3,7 @@ import type { OrderChannel, OrderStatus, OrderType, TableStatus } from './order-
 import type { PaymentKind, PaymentMethod } from './payments';
 import type { BillTotals, DiscountInput, TaxSettings } from './pricing';
 import type { StaffRole } from './roles';
+import type { MenuUnit } from './units';
 
 /**
  * Data shapes shared by the API contract (MASTER_PROMPT.md §9). Phase 1 screens get these from the
@@ -62,6 +63,8 @@ export interface StaffUser extends RestaurantScoped {
   isActive: boolean;
   /** Kitchen users: their stations; empty = all stations */
   stationIds: Uuid[];
+  /** Waiters: their assigned tables; empty = all tables */
+  tableIds: Uuid[];
 }
 
 export interface KitchenStation extends BranchScoped {
@@ -127,6 +130,8 @@ export interface MenuItem extends RestaurantScoped {
   name: string;
   description: string;
   basePrice: Paisa;
+  /** Selling unit: the kitchen sees "1 kg", not "1 ×" */
+  unit: MenuUnit;
   /** In stock / can be sold (POS + online) */
   isAvailable: boolean;
   /** Shown in the Customer App */
@@ -152,6 +157,7 @@ export interface OrderItem extends BranchScoped {
   modifiers: OrderItemModifier[];
   unitPrice: Paisa;
   quantity: number;
+  unit: MenuUnit;
   lineTotal: Paisa;
   note: string;
   roundNo: number;
@@ -197,6 +203,14 @@ export interface OrderDiscount {
   givenBy: Uuid;
 }
 
+/** A waiter asked for the bill; the cashier accepts it (the waiter sees the acknowledgement). */
+export interface BillRequest {
+  requestedBy: Uuid;
+  requestedAt: IsoDateTime;
+  acceptedBy: Uuid | null;
+  acceptedAt: IsoDateTime | null;
+}
+
 export interface StatusHistoryEntry {
   fromStatus: OrderStatus | null;
   toStatus: OrderStatus;
@@ -232,6 +246,9 @@ export interface Order extends BranchScoped {
   paidTotal: Paisa;
   refundedTotal: Paisa;
   tipTotal: Paisa;
+  billRequest: BillRequest | null;
+  /** How often the paid receipt was printed; every print after the first is marked DUPLICATE */
+  receiptPrints: number;
   history: StatusHistoryEntry[];
   createdBy: Uuid | null;
   createdAt: IsoDateTime;
@@ -270,15 +287,34 @@ export interface KitchenTicketView {
   items: OrderItem[];
 }
 
-/** "Food ready" alert for floor staff: a READY ticket of a dine-in order that is not served yet. */
-export interface ReadyAlert {
-  ticketId: Uuid;
-  orderId: Uuid;
-  tableId: Uuid;
-  tableName: string;
-  stationName: string;
-  readyAt: IsoDateTime;
+/** An item line inside a notification, e.g. "2 × Classic Pizza (Medium)" or "1 kg Chicken Karahi". */
+export interface NotificationItem {
+  quantity: number;
+  unit: MenuUnit;
+  name: string;
+  variantName: string | null;
 }
+
+/**
+ * Staff notifications (owner workflow 2026-10-28). The server decides who receives each one:
+ * - FOOD_READY: a READY ticket of a dine-in order, for the Service Waiter assigned to the table
+ *   (or, without one, the Super Waiter who took the order) and for Owner/Manager.
+ * - BILL_REQUESTED: a table asked for the bill, for Cashier/Owner/Manager until accepted.
+ * - BILL_ACCEPTED: the cashier accepted, for the waiter who asked, until the bill is paid.
+ */
+export type StaffNotification =
+  | {
+      kind: 'FOOD_READY';
+      id: string;
+      orderId: Uuid;
+      tableId: Uuid;
+      tableName: string;
+      stationName: string;
+      items: NotificationItem[];
+      at: IsoDateTime;
+    }
+  | { kind: 'BILL_REQUESTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; total: Paisa; requestedByName: string; at: IsoDateTime }
+  | { kind: 'BILL_ACCEPTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; acceptedByName: string; at: IsoDateTime };
 
 /** An item the waiter or cashier adds; the server looks up every price itself. */
 export interface DraftItemInput {

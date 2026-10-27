@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Printer, Search, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, Search, Send, Trash2 } from 'lucide-react';
 import {
   can,
   formatPaisa,
+  formatQuantity,
   type DraftItemInput,
   type MenuItem,
   type MenuSnapshot,
@@ -27,12 +28,19 @@ import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
 import { TABLE_TONES } from '@/lib/tones';
+import { BillRequestControl } from './bill-request';
 import { addToCart, describeLine, type CartLine } from './cart';
 import { ItemDialog } from './item-dialog';
 import { SentRounds } from './sent-rounds';
+import { ServiceWaiterScreen } from './service-waiter-screen';
 
-/** Waiter order screen, phone first (MASTER_PROMPT.md §5.1, §7.1 Waiter). */
+/**
+ * Waiter screen, phone first (MASTER_PROMPT.md §5.1, §7.1 Waiter). The Super Waiter (and counter
+ * staff) take orders here; the Service Waiter gets a serving-only screen (owner 2026-10-28).
+ */
 export function WaiterScreen({ tableId }: { tableId?: string }) {
+  const { data: session } = useSession();
+  if (session?.user.role === 'SERVICE_WAITER') return <ServiceWaiterScreen tableId={tableId} />;
   return tableId ? <TableOrder key={tableId} tableId={tableId} /> : <TablePicker />;
 }
 
@@ -268,7 +276,11 @@ function OrderWorkspace({
                       <span className="font-bold text-slate-900">{item.name}</span>
                       <span className="flex items-center justify-between gap-1 text-sm font-semibold text-slate-700">
                         {item.isAvailable ? (
-                          item.variants.length ? t('waiter.fromPrice', { price: formatPaisa(from) }) : formatPaisa(from)
+                          item.variants.length
+                            ? t('waiter.fromPrice', { price: formatPaisa(from) })
+                            : item.unit === 'piece'
+                              ? formatPaisa(from)
+                              : t('waiter.perUnit', { price: formatPaisa(from), unit: item.unit })
                         ) : (
                           <Badge tone="red">{t('waiter.outOfStock')}</Badge>
                         )}
@@ -347,7 +359,9 @@ function OrderWorkspace({
                           <p className="font-bold text-slate-900">{v.name}</p>
                           {v.details && <p className="text-xs text-slate-600">{v.details}</p>}
                           {v.line.note && <p className="text-xs text-amber-700">“{v.line.note}”</p>}
-                          <p className="text-xs font-semibold text-slate-700">{formatPaisa(v.unitPrice * v.line.quantity)}</p>
+                          <p className="text-xs font-semibold text-slate-700">
+                            {formatQuantity(v.line.quantity, v.unit)} · {formatPaisa(v.unitPrice * v.line.quantity)}
+                          </p>
                         </div>
                         <QuantityStepper
                           size="sm"
@@ -385,26 +399,19 @@ function OrderWorkspace({
                   <Send className="size-5" aria-hidden />
                   {busy ? t('waiter.sending') : t('waiter.send')}
                 </Button>
-                {order?.status === 'BILL_REQUESTED' ? (
-                  <div className="flex min-h-14 items-center justify-center rounded-xl bg-amber-50 text-sm font-bold text-amber-800">
-                    {t('waiter.billRequested')}
-                  </div>
-                ) : (
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    disabled={!order || busy || cart.length > 0}
-                    onClick={() =>
-                      order &&
-                      run(() => getApi().requestBill(order.id), {
-                        title: t('waiter.billRequested'),
-                        body: t('waiter.billRequestedBody'),
-                      })
-                    }
-                  >
-                    <Printer className="size-5" aria-hidden />
-                    {t('waiter.printBill')}
-                  </Button>
+                <BillRequestControl
+                  order={order}
+                  busy={busy}
+                  disabled={cart.length > 0}
+                  onRequest={(orderId) =>
+                    run(() => getApi().requestBill(orderId), {
+                      title: t('waiter.billRequested'),
+                      body: t('waiter.billRequestedBody'),
+                    })
+                  }
+                />
+                {order?.status === 'BILL_REQUESTED' && cart.length > 0 && (
+                  <p className="text-xs text-amber-800 sm:col-span-2 lg:col-span-1 xl:col-span-2">{t('waiter.reopensBill')}</p>
                 )}
               </div>
             </CardBody>
@@ -412,7 +419,6 @@ function OrderWorkspace({
         </section>
       </div>
 
-      <p className="mt-4 text-xs text-slate-500">{t('sync.note')}</p>
 
       {dialogItem && <ItemDialog item={dialogItem} menu={menu} onClose={() => setDialogItem(null)} onAdd={addDraft} />}
       {voidTarget && (
@@ -445,7 +451,7 @@ function VoidDialog({
     <Dialog
       open
       onClose={onClose}
-      title={t('waiter.voidTitle', { name: `${item.quantity} × ${item.name}` })}
+      title={t('waiter.voidTitle', { name: `${formatQuantity(item.quantity, item.unit)} ${item.name}` })}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

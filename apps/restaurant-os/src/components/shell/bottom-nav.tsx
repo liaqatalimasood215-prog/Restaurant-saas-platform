@@ -7,13 +7,16 @@ import type { OsSection } from '@restaurant-saas/shared';
 import { Dialog } from '@/components/ui/dialog';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
+import { useSession } from '@/lib/session';
 import { SectionIcon } from './section-icon';
+import { sectionLabel } from './section-label';
 import { useIsActive, useVisibleSections } from './use-sections';
 
 const MAX_TABS = 4;
 
 /** Phones: bottom navigation with the role's first sections and a "More" sheet (MASTER_PROMPT.md §7.1). */
 export function BottomNav() {
+  const role = useSession().data?.user.role;
   const { features, comingSoon } = useVisibleSections();
   const isActive = useIsActive();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -41,7 +44,7 @@ export function BottomNav() {
                 )}
               >
                 <SectionIcon sectionKey={section.key} className="size-6" />
-                <span className="text-[11px] font-semibold leading-tight">{t(`nav.${section.key}`)}</span>
+                <span className="text-[11px] font-semibold leading-tight">{sectionLabel(section.key, role)}</span>
               </Link>
             </li>
           ))}
@@ -87,6 +90,7 @@ function SheetList({
   onPick: () => void;
   muted?: boolean;
 }) {
+  const role = useSession().data?.user.role;
   return (
     <ul className="grid grid-cols-2 gap-2">
       {sections.map((section) => (
@@ -101,7 +105,7 @@ function SheetList({
             )}
           >
             <SectionIcon sectionKey={section.key} className="size-5 shrink-0" />
-            <span className="min-w-0 flex-1">{t(`nav.${section.key}`)}</span>
+            <span className="min-w-0 flex-1">{sectionLabel(section.key, role)}</span>
             {muted && (
               <span className="text-[10px] font-bold text-slate-400">
                 {t('nav.phaseShort', { phase: section.phase })}

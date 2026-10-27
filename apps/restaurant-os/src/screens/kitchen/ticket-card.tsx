@@ -2,6 +2,7 @@
 
 import {
   TICKET_UNDO_WINDOW_MS,
+  formatQuantity,
   ticketTimerLevel,
   type KitchenStation,
   type KitchenTicketView,
@@ -79,7 +80,7 @@ export function TicketCard({
         {view.items.map((item) => (
           <li key={item.id} className={cn('text-xl leading-snug', item.isVoid && 'text-red-700')}>
             <span className={cn('font-extrabold', item.isVoid && 'line-through')}>
-              {item.quantity} × {item.name}
+              {formatQuantity(item.quantity, item.unit)} {item.name}
             </span>
             {item.variantName && <span className={cn('font-semibold', item.isVoid && 'line-through')}> ({item.variantName})</span>}
             {item.isVoid && (

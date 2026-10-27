@@ -13,8 +13,29 @@ import {
   sectionsForRole,
 } from './index';
 
-test('six roles, in the approved order', () => {
-  assert.deepEqual(STAFF_ROLES, ['OWNER', 'MANAGER', 'CASHIER', 'WAITER', 'KITCHEN', 'RIDER']);
+test('seven roles: the waiter is split into Super Waiter (WAITER) and Service Waiter (2026-10-28)', () => {
+  assert.deepEqual(STAFF_ROLES, ['OWNER', 'MANAGER', 'CASHIER', 'WAITER', 'SERVICE_WAITER', 'KITCHEN', 'RIDER']);
+});
+
+test('Service Waiter serves food and asks for the bill, but never changes orders or money', () => {
+  const allowed = ['ticket.serve', 'bill.request'] as const;
+  const forbidden = [
+    'table.order',
+    'item.void',
+    'order.discount',
+    'payment.record',
+    'payment.refund',
+    'order.cancel',
+    'bill.accept',
+    'setup.manage',
+    'staff.manage',
+  ] as const;
+  for (const p of allowed) assert.equal(can('SERVICE_WAITER', p), true, p);
+  for (const p of forbidden) assert.equal(can('SERVICE_WAITER', p), false, p);
+  assert.equal(can('WAITER', 'table.order'), true);
+  assert.equal(can('WAITER', 'bill.accept'), false);
+  assert.equal(can('CASHIER', 'bill.accept'), true);
+  assert.equal(canManageStaffAccount('MANAGER', 'SERVICE_WAITER'), true);
 });
 
 test('permission matrix follows MASTER_PROMPT §4', () => {
@@ -101,6 +122,7 @@ test('each role sees only its own sections', () => {
       .filter((s) => s.group === 'FEATURES')
       .map((s) => s.key);
   assert.deepEqual(keys('WAITER'), ['tables', 'waiter']);
+  assert.deepEqual(keys('SERVICE_WAITER'), ['tables', 'waiter']);
   assert.deepEqual(keys('KITCHEN'), ['kitchen']);
   assert.deepEqual(keys('CASHIER'), ['pos', 'tables', 'orders', 'online-orders', 'waiter']);
   assert.ok(!keys('MANAGER').includes('summary'));
@@ -116,6 +138,7 @@ test('every role lands on a home section it is allowed to see; Owner and Manager
   assert.equal(HOME_SECTION.MANAGER, 'pos');
   assert.equal(HOME_SECTION.CASHIER, 'pos');
   assert.equal(HOME_SECTION.KITCHEN, 'kitchen');
+  assert.equal(HOME_SECTION.SERVICE_WAITER, 'waiter');
   for (const [role, key] of Object.entries(HOME_SECTION)) {
     const section = findSection(key);
     assert.ok(section && canSeeSection(section, role as keyof typeof HOME_SECTION), role);

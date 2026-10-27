@@ -5,8 +5,10 @@ import { ChevronRight } from 'lucide-react';
 import type { OsSection } from '@restaurant-saas/shared';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
+import { useSession } from '@/lib/session';
 import { Logo } from './logo';
 import { SectionIcon } from './section-icon';
+import { sectionLabel } from './section-label';
 import { useIsActive, useVisibleSections } from './use-sections';
 
 /**
@@ -55,7 +57,8 @@ export function Sidebar() {
 }
 
 function FeatureLink({ section, active }: { section: OsSection; active: boolean }) {
-  const label = t(`nav.${section.key}`);
+  const role = useSession().data?.user.role;
+  const label = sectionLabel(section.key, role);
   return (
     <Link
       href={section.path}
@@ -74,7 +77,8 @@ function FeatureLink({ section, active }: { section: OsSection; active: boolean 
 }
 
 function ComingSoonLink({ section, active }: { section: OsSection; active: boolean }) {
-  const label = t(`nav.${section.key}`);
+  const role = useSession().data?.user.role;
+  const label = sectionLabel(section.key, role);
   return (
     <Link
       href={section.path}

@@ -192,7 +192,6 @@ export function KitchenScreen() {
           );
         })}
       </div>
-      <p className="mt-4 text-xs text-slate-500">{t('sync.note')}</p>
 
       {stockOpen && (
         <StockDialog

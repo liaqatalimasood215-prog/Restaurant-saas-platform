@@ -6,14 +6,18 @@ import type { StaffRole } from './roles';
  * Roman Urdu: Kaun kya kar sakta hai — asli check hamesha server karega.
  */
 export const PERMISSIONS = {
-  /** Open table, add items, send to kitchen, print bill */
+  /** Open table, add items, send to kitchen (Super Waiter; never the Service Waiter) */
   'table.order': ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'],
+  /** Request the bill / call the cashier for a table */
+  'bill.request': ['OWNER', 'MANAGER', 'CASHIER', 'WAITER', 'SERVICE_WAITER'],
+  /** Accept a bill request, print the pre-bill */
+  'bill.accept': ['OWNER', 'MANAGER', 'CASHIER'],
   /** Void an item after it was sent (with reason) */
   'item.void': ['OWNER', 'MANAGER'],
   /** Start / Ready / Undo kitchen tickets (Kitchen: own stations only) */
   'ticket.update': ['OWNER', 'MANAGER', 'KITCHEN'],
   /** Mark served */
-  'ticket.serve': ['OWNER', 'MANAGER', 'WAITER'],
+  'ticket.serve': ['OWNER', 'MANAGER', 'WAITER', 'SERVICE_WAITER'],
   'item.outOfStock': ['OWNER', 'MANAGER', 'CASHIER', 'KITCHEN'],
   /** Give discount (with reason) */
   'order.discount': ['OWNER', 'MANAGER'],

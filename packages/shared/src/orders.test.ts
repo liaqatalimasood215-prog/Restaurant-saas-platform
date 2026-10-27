@@ -9,8 +9,10 @@ import {
   tableStatusFor,
 } from './index';
 
-test('dine-in: floor staff print the bill, a new round reopens it', () => {
+test('dine-in: floor staff and the Service Waiter request the bill; only order takers reopen it', () => {
   assert.equal(checkTransition({ type: 'DINE_IN', from: 'OPEN', to: 'BILL_REQUESTED', role: 'WAITER' }).ok, true);
+  assert.equal(checkTransition({ type: 'DINE_IN', from: 'OPEN', to: 'BILL_REQUESTED', role: 'SERVICE_WAITER' }).ok, true);
+  assert.equal(checkTransition({ type: 'DINE_IN', from: 'BILL_REQUESTED', to: 'OPEN', role: 'SERVICE_WAITER' }).ok, false);
   assert.equal(checkTransition({ type: 'DINE_IN', from: 'BILL_REQUESTED', to: 'OPEN', role: 'WAITER' }).ok, true);
   assert.equal(checkTransition({ type: 'DINE_IN', from: 'OPEN', to: 'BILL_REQUESTED', role: 'KITCHEN' }).ok, false);
 });

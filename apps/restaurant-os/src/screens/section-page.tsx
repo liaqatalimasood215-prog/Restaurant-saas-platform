@@ -10,6 +10,8 @@ import { useSession } from '@/lib/session';
 import { AppPreviewScreen } from './app-preview-screen';
 import { ComingSoonScreen } from './coming-soon-screen';
 import { KitchenScreen } from './kitchen/kitchen-screen';
+import { PosScreen } from './pos/pos-screen';
+import { StaffScreen } from './staff/staff-screen';
 import { TablesScreen } from './tables/tables-screen';
 import { UpcomingScreen } from './upcoming-screen';
 import { WaiterScreen } from './waiter/waiter-screen';
@@ -23,6 +25,8 @@ function renderSection(section: OsSection, options: SectionOptions) {
   if (section.key === 'tables') return <TablesScreen />;
   if (section.key === 'waiter') return <WaiterScreen tableId={options.tableId} />;
   if (section.key === 'kitchen') return <KitchenScreen />;
+  if (section.key === 'pos') return <PosScreen tableId={options.tableId} />;
+  if (section.key === 'staff') return <StaffScreen />;
   if (section.key === 'online-app') return <AppPreviewScreen section={section} app="customer" />;
   if (section.key === 'riders') return <AppPreviewScreen section={section} app="rider" />;
   if (section.group === 'COMING_SOON') return <ComingSoonScreen section={section} />;
