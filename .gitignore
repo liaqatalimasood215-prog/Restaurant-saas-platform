@@ -16,3 +16,10 @@ coverage/
 # misc
 .DS_Store
 *.log
+
+# Next.js generated files
+next-env.d.ts
+*.tsbuildinfo
+
+# Generated screenshots (recreate with: pnpm --filter @restaurant-saas/restaurant-os screenshots)
+/screenshots/

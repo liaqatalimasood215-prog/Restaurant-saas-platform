@@ -1,0 +1,17 @@
+import { ChefHat } from 'lucide-react';
+import { t } from '@/i18n';
+import { cn } from '@/lib/cn';
+
+export function Logo({ compact = false, dark = false }: { compact?: boolean; dark?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <ChefHat className="size-8 shrink-0 text-brand" strokeWidth={2.5} aria-hidden />
+      <div className={cn('leading-none', compact && 'hidden lg:block')}>
+        <p className={cn('text-xl font-black tracking-tight', dark ? 'text-white' : 'text-slate-900')}>
+          {t('app.logoTop')}
+        </p>
+        <p className={cn('text-xs font-semibold', dark ? 'text-slate-300' : 'text-slate-500')}>{t('app.logoBottom')}</p>
+      </div>
+    </div>
+  );
+}

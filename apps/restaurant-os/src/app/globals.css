@@ -1,0 +1,20 @@
+@import 'tailwindcss';
+
+/* Owner's design: brand red, white cards on light grey, dark navy sidebar (MASTER_PROMPT.md §11). */
+@theme {
+  --color-brand: #e31e24;
+  --color-brand-dark: #c0161c;
+  --color-brand-soft: #fdecec;
+  --color-navy: #0f1d33;
+  --color-surface: #f3f5f8;
+  --font-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-surface);
+  color: #0f172a;
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@restaurant-saas/restaurant-os",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Restaurant OS — staff software (Phase 1: UI prototype with DEMO data)",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "typecheck": "next typegen && tsc --noEmit",
+    "lint": "eslint .",
+    "screenshots": "node scripts/screenshots.mjs"
+  },
+  "dependencies": {
+    "@restaurant-saas/shared": "workspace:*",
+    "lucide-react": "^1.62.0",
+    "next": "^16.4.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.3",
+    "playwright-core": "^1.64.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3"
+  }
+}

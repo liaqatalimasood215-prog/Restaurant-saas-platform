@@ -16,11 +16,14 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 
 ## Current stage
 
-- Phase 0 (foundation + documents): done — waiting for the owner to approve PROJECT_RULES.md v2.0
-  and MASTER_PROMPT.md v2.0.
-- Next: **Phase 1 — Restaurant OS UI prototype** with DEMO data (PROJECT_RULES.md §15–§16,
-  MASTER_PROMPT.md §12).
-- Never start a phase until the owner says "shuru karo" or approves it.
+- Phase 0 approved by the owner on 2026-10-27.
+- **Phase 1 — Restaurant OS UI prototype** in progress on branch `phase-1/restaurant-os-ui`
+  (PROJECT_RULES.md §15–§16, MASTER_PROMPT.md §12). Build in the approved preview order and wait
+  for the owner's review after each preview: 1 layout and navigation → 2 Tables, Waiter, Kitchen →
+  3 Cashier / POS → 4 Online Orders, Orders → 5 Menu, Online App, Riders, Staff, Summary, Settings.
+- Customer App (Phase 2) and Rider App (Phase 3) stay PLACEHOLDERS inside Restaurant OS.
+- Never start a phase until the owner says "shuru karo" or approves it. Never push, deploy or
+  connect a paid service without the owner's approval.
 
 ## Every session
 
@@ -29,26 +32,40 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 2. Work only on the current phase, in small steps; run the tests after each step.
 3. Use the five statuses: REAL / VERIFIED, DEMO / PROTOTYPE, NOT CONNECTED, PLACEHOLDER, BLOCKED.
 4. Never invent test results, previews, screenshots, deployments or integrations.
-5. Show progress: run the app and share screenshots of every new screen (Playwright is available
-   for screenshots). If the owner runs the project on his own computer, give him the exact steps
-   to open the preview.
+5. Show progress: run the app and share screenshots of every new screen. `pnpm --filter
+   @restaurant-saas/restaurant-os screenshots` drives the installed Microsoft Edge through
+   `playwright-core` (no browser download) while `pnpm dev` runs. Add new screens to
+   `apps/restaurant-os/scripts/screenshots.mjs`.
 6. Report with the template in MASTER_PROMPT.md §15.4, in Roman Urdu.
 7. If something is unclear, ask one short question with a recommended answer. Never connect a
    paid service without explaining the cost and getting approval.
+
+## How Restaurant OS is built
+
+- Screens get data only through `getApi()` from `apps/restaurant-os/src/lib/api` (the ApiClient).
+  The DemoAdapter lives in `src/lib/api/demo`; an ESLint rule blocks importing it anywhere else.
+- Rules and money always come from `packages/shared` (rebuilt automatically by turbo before `dev`,
+  `typecheck`, `lint` and `build`).
+- All UI text lives in `apps/restaurant-os/src/i18n/en.ts` (Urdu in Phase 7).
+- `src/lib/build-plan.ts` lists which preview builds which screen; remove an entry when the screen
+  is built and render it in `src/screens/section-page.tsx`.
 
 ## Commands
 
 ```bash
 pnpm install
-pnpm --filter @restaurant-saas/shared test    # shared rules (unit tests)
-pnpm dev                                      # restaurant-os :3000, customer :3001, rider :3002, api :4000
+pnpm dev          # restaurant-os :3000 (customer :3001, rider :3002, api :4000 in later phases)
+pnpm test         # shared rules (unit tests)
+pnpm typecheck
+pnpm lint
+pnpm build
 ```
 
-## Known gaps to fix at the start of Phase 1
+Keep the repository in a short folder path — Windows' 260-character path limit breaks
+`node_modules` in deep folders.
 
-- `packages/shared` models only the delivery path and 4 roles. Extend it to dine-in, kitchen
-  tickets, refunds, six roles and five statuses (MASTER_PROMPT.md §4, §6, §8, §15.3), with tests.
-- `OS_SECTIONS` in `packages/shared/src/roles.ts` uses the old sidebar and `phase1Status`; update it
-  to MASTER_PROMPT.md §7.1.
-- Root `package.json` has no `turbo` dev dependency yet; add it when the first app is created.
-- `backend/api/prisma/schema.prisma` is an unvalidated draft (delivery only) — it is Phase 4 work.
+## Known gaps
+
+- `backend/api/prisma/schema.prisma` is an unvalidated draft (delivery only, 4 roles) — Phase 4 work.
+- Pricing engine: the optional "different tax rate per payment method" setting is not built yet.
+- Open owner decisions: MASTER_PROMPT.md §16 (#16 rider availability before Phase 3).
