@@ -401,3 +401,4 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-27 | Preview 1 feedback (owner): sidebar starts with the most-used sections — POS / New Bill, Tables, Orders, Online Orders (§3). The build order of the previews does not change | Active (replaces the sidebar order in the navigation row above) |
 | 2026-10-27 | Preview 1 feedback (owner): the long DEMO notice strip is removed; the DEMO / PROTOTYPE badge on every screen title and the DEMO role-switcher label stay (§16) | Active |
 | 2026-10-28 | Owner and Manager start at POS / New Bill instead of Tables (owner, after Preview 1) | Active (replaces "Tables as home" in the navigation row above) |
+| 2026-10-28 | Owner approves Preview 1 (layout and navigation) and starts Preview 2: Tables → Waiter Orders → Kitchen / KDS | Active |

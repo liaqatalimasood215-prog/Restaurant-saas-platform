@@ -13,8 +13,8 @@ Read before changing anything:
 
 ## Current stage
 
-**Phase 1 — Restaurant OS UI prototype: in progress.** Preview 1 (layout, navigation, DEMO role
-switcher, data layer) is ready for the owner's review.
+**Phase 1 — Restaurant OS UI prototype: in progress.** Preview 1 approved (2026-10-28). Preview 2
+(Tables, Waiter Orders, Kitchen / KDS) is ready for the owner's review.
 
 Phase 1 preview order: 1 layout and navigation → 2 Tables, Waiter, Kitchen → 3 Cashier / POS →
 4 Online Orders, Orders → 5 Menu, Online App, Riders, Staff, Today's Summary, Settings.
@@ -44,14 +44,18 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | DEMO role switcher (6 roles), per-role sidebar, role home screens, "not available for this role" screen | DEMO / PROTOTYPE — not a login; real login in Phase 4 |
 | Rider role in Restaurant OS → "Riders use the Rider App" | DEMO / PROTOTYPE |
 | ApiClient + DemoAdapter, DEMO sync between tabs, simulated connection error, reset demo data | DEMO / PROTOTYPE |
-| Tables, Waiter Orders, Kitchen / KDS | PLACEHOLDER — Preview 2 |
+| Tables: live board (Hall T1–T10, Family T11–T16), Free / Occupied / Bill requested, running total, guests, waiter, time seated | DEMO / PROTOTYPE |
+| Waiter Orders: menu with search, categories, sizes, add-ons, notes, quantity; guests; rounds; Send to kitchen (double-tap safe); Served; Print bill → Bill requested; Void (Owner/Manager, with reason) | DEMO / PROTOTYPE — pre-bill print layout in Preview 3 |
+| Kitchen / KDS: station tabs, New / Preparing / Ready, timers (orange 10 min, red 20 min), Start / Ready / Undo (2 min), VOID marks, "do not cook" on fully voided tickets, out of stock, sound after "Tap to enable sound" | DEMO / PROTOTYPE |
+| Food-ready alerts: bell count, message, sound and vibration for floor staff | DEMO / PROTOTYPE — DEMO sync between tabs only |
+| Test A steps 1–5 (Rs. 4,200 → Rs. 5,900, tickets by station, alerts, Served, Bill requested) and the Test B void check | DEMO / PROTOTYPE — automated walkthrough passes; payment (steps 6–7) in Preview 3 |
 | POS / New Bill | PLACEHOLDER — Preview 3 |
 | Online Orders, Orders, header search | PLACEHOLDER — Preview 4 |
 | Menu, Staff, Today's Summary, Settings | PLACEHOLDER — Preview 5 |
 | Online App and Riders pages: management area | PLACEHOLDER — Preview 5 |
 | Online App and Riders pages: app preview + Open Full App | PLACEHOLDER — Customer App in Phase 2, Rider App in Phase 3 |
 | Dashboard, Customers, Finance & Reports (P7), Inventory & Suppliers, Payroll (P8), AI Manager (P10) | PLACEHOLDER — Coming Soon |
-| Alerts bell | PLACEHOLDER — alerts arrive in Previews 2 and 4 |
+| Online-order alarms in the bell | PLACEHOLDER — Preview 4 |
 | Real-time between devices | Not started — Phase 5 (Phase 1 only has "DEMO sync — not real-time" between tabs of one browser) |
 
 Known gaps: the optional "different tax rate per payment method" setting (MASTER_PROMPT.md §8) is
@@ -70,6 +74,7 @@ not in the pricing engine yet — add it with tests when the owner confirms the 
 | 2026-10-27 | Phase 1 · Preview 1: `apps/restaurant-os` layout and navigation, DEMO role switcher, ApiClient + DemoAdapter, placeholders | `pnpm typecheck`, `pnpm lint`, `pnpm build` pass; 13 screenshots (phone, tablet, desktop); waiting for owner review |
 | 2026-10-28 | Preview 1 feedback: sidebar starts with POS / New Bill, Tables, Orders, Online Orders; long DEMO strip removed (screen-title and role-switcher DEMO badges stay) | 55 tests, `pnpm typecheck`, `pnpm lint` pass; screenshots retaken; waiting for owner review |
 | 2026-10-28 | Owner and Manager now open on POS / New Bill (owner decision) | 55 tests, typecheck, lint pass |
+| 2026-10-28 | Phase 1 · Preview 2: Tables board, Waiter order screen (rounds, Served, Void, Print bill), Kitchen Display by station, food-ready alerts; DEMO sync now sends the data with the message (a tab read stale data before) | 55 tests, typecheck, lint, build pass; Test A steps 1–5 + Test B void walkthrough passes (run twice); screenshots; waiting for owner review |
 
 ## Commands
 
@@ -84,6 +89,7 @@ pnpm typecheck
 pnpm lint
 pnpm build
 pnpm --filter @restaurant-saas/restaurant-os screenshots   # needs pnpm dev running; uses installed Microsoft Edge
+pnpm --filter @restaurant-saas/restaurant-os walkthrough   # clicks through Test A steps 1–5 + the void check (needs pnpm dev)
 ```
 
 Screenshots are written to `screenshots/` (git-ignored).

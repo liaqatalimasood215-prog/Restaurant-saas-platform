@@ -362,6 +362,10 @@ TAKEAWAY  PLACED → ACCEPTED → PREPARING → READY → PICKED_UP
 - Undo: READY → PREPARING within 2 minutes (for mistakes). If a delivery or takeaway order is
   already READY, the undo moves the order back to PREPARING automatically. Undo is not possible
   after a rider is assigned or the order is picked up.
+- A ticket whose items were all voided shows "VOID — do not cook" on the kitchen screen for 2
+  minutes and then leaves it; it never blocks the order from becoming READY.
+- Pressing a ticket button twice (double tap, retry) is harmless: asking for the status a ticket
+  already has changes nothing.
 - "Auto-ready" stations (e.g. bottled drinks) create tickets that are READY at once.
 - Delivery/takeaway tickets leave the screen when the order is OUT_FOR_DELIVERY or PICKED_UP.
 - Every ticket shows a timer; it turns orange after `warn_minutes` and red after `late_minutes`
@@ -1120,3 +1124,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-27 | v2.1: owner approved the baseline and the Phase 1 plan; Restaurant OS navigation (§7.1); Open Full App buttons (§5.5, §5.6); white-label branding and publishing stages (§7.6); kitchen Undo on READY delivery/takeaway orders (§6.4); open decisions #16–#18; repository folder `restaurant-saas-platform`. |
 | 2026-10-27 | v2.1 update after Preview 1: sidebar starts with POS / New Bill, Tables, Orders, Online Orders; long DEMO strip removed (badges stay). |
 | 2026-10-28 | Owner and Manager home screen: POS / New Bill (§4, §7.1). |
+| 2026-10-28 | §6.4: fully voided tickets ("do not cook", 2 minutes) and harmless repeated ticket presses (Preview 2). |

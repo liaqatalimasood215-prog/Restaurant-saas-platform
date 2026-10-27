@@ -9,9 +9,20 @@ import { PREVIEW_FOR_SECTION } from '@/lib/build-plan';
 import { useSession } from '@/lib/session';
 import { AppPreviewScreen } from './app-preview-screen';
 import { ComingSoonScreen } from './coming-soon-screen';
+import { KitchenScreen } from './kitchen/kitchen-screen';
+import { TablesScreen } from './tables/tables-screen';
 import { UpcomingScreen } from './upcoming-screen';
+import { WaiterScreen } from './waiter/waiter-screen';
 
-function renderSection(section: OsSection) {
+/** Screen options passed in from the URL (e.g. /waiter?table=…). */
+export interface SectionOptions {
+  tableId?: string;
+}
+
+function renderSection(section: OsSection, options: SectionOptions) {
+  if (section.key === 'tables') return <TablesScreen />;
+  if (section.key === 'waiter') return <WaiterScreen tableId={options.tableId} />;
+  if (section.key === 'kitchen') return <KitchenScreen />;
   if (section.key === 'online-app') return <AppPreviewScreen section={section} app="customer" />;
   if (section.key === 'riders') return <AppPreviewScreen section={section} app="rider" />;
   if (section.group === 'COMING_SOON') return <ComingSoonScreen section={section} />;
@@ -19,7 +30,7 @@ function renderSection(section: OsSection) {
 }
 
 /** One sidebar feature = one screen. Checks that the current role may open it (UI only; the server checks from Phase 4). */
-export function SectionPage({ sectionKey }: { sectionKey: OsSectionKey }) {
+export function SectionPage({ sectionKey, ...options }: { sectionKey: OsSectionKey } & SectionOptions) {
   const { data: session, permissionContext } = useSession();
   const section = findSection(sectionKey);
   if (!section) throw new Error(`Unknown section: ${sectionKey}`);
@@ -32,7 +43,7 @@ export function SectionPage({ sectionKey }: { sectionKey: OsSectionKey }) {
   if (!canSeeSection(section, session.user.role, permissionContext)) {
     return <NoAccess section={section} role={session.user.role} />;
   }
-  return renderSection(section);
+  return renderSection(section, options);
 }
 
 function NoAccess({ section, role }: { section: OsSection; role: Parameters<typeof canSeeSection>[1] }) {

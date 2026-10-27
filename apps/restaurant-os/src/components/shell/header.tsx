@@ -1,12 +1,16 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Bell, Search, Store } from 'lucide-react';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
+import { minutesSince } from '@/lib/format';
+import { useNow } from '@/lib/hooks/use-now';
 import { useSession } from '@/lib/session';
 import { useDismiss } from '@/components/ui/use-dismiss';
 import { Logo } from './logo';
+import { useReadyAlerts } from './ready-alerts';
 import { RoleSwitcher } from './role-switcher';
 import { useDemoFailure } from './use-demo-failure';
 
@@ -65,11 +69,14 @@ function ConnectionDot() {
   );
 }
 
+/** Alerts bell: food-ready alerts for floor staff (online-order alarms join in Preview 4). */
 function AlertsBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(ref, open, close);
+  const alerts = useReadyAlerts();
+  const now = useNow(30_000);
 
   return (
     <div ref={ref} className="relative">
@@ -77,15 +84,41 @@ function AlertsBell() {
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        aria-label={t('header.alerts')}
-        className="flex size-12 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100"
+        aria-label={`${t('header.alerts')} (${alerts.length})`}
+        className="relative flex size-12 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100"
       >
         <Bell className="size-6" aria-hidden />
+        {alerts.length > 0 && (
+          <span className="absolute right-1.5 top-1.5 flex min-w-5 items-center justify-center rounded-full bg-brand px-1 text-[11px] font-bold text-white">
+            {alerts.length}
+          </span>
+        )}
       </button>
       {open && (
-        <div className="absolute right-0 z-40 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-xl">
-          <p className="mb-1 font-bold text-slate-900">{t('header.alerts')}</p>
-          {t('header.noAlerts')}
+        <div className="absolute right-0 z-40 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600 shadow-xl">
+          <p className="mb-2 px-1 font-bold text-slate-900">{t('alerts.title')}</p>
+          {alerts.length === 0 ? (
+            <p className="px-1 pb-1">{t('header.noAlerts')}</p>
+          ) : (
+            <ul className="space-y-1">
+              {alerts.map((alert) => (
+                <li key={alert.ticketId}>
+                  <Link
+                    href={`/waiter?table=${alert.tableId}`}
+                    onClick={close}
+                    className="flex min-h-12 items-center justify-between gap-2 rounded-xl px-3 hover:bg-green-50"
+                  >
+                    <span className="font-semibold text-slate-900">
+                      {t('alerts.foodReady', { table: alert.tableName, station: alert.stationName })}
+                    </span>
+                    <span className="shrink-0 text-xs text-slate-500">
+                      {t('alerts.ago', { n: minutesSince(alert.readyAt, now) })}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>

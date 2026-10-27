@@ -49,8 +49,10 @@ export class DemoStore {
     this.data = loadData() ?? createSeed();
     this.session = readJson<DemoSessionState>(() => window.sessionStorage, SESSION_KEY);
     this.channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(CHANNEL_NAME);
-    this.channel?.addEventListener('message', () => {
-      this.data = loadData() ?? createSeed();
+    // The message carries the data itself: another tab's localStorage can still be old when it arrives.
+    this.channel?.addEventListener('message', (event: MessageEvent<DemoData>) => {
+      if (event.data?.version !== DEMO_DATA_VERSION) return;
+      this.data = event.data;
       this.emit();
     });
   }
@@ -59,14 +61,18 @@ export class DemoStore {
     return this.data;
   }
 
-  /** Change business data, save it and tell this tab and the other tabs. */
-  update(change: (draft: DemoData) => void): void {
+  /**
+   * Change business data like one database transaction: the change works on a copy, and the copy is
+   * kept only if the change does not throw. Then it is saved and this tab and the other tabs are told.
+   */
+  update<T>(change: (draft: DemoData) => T): T {
     const draft = structuredClone(this.data);
-    change(draft);
+    const result = change(draft);
     this.data = draft;
     writeJson(() => window.localStorage, DATA_KEY, draft);
-    this.channel?.postMessage('changed');
+    this.channel?.postMessage(draft);
     this.emit();
+    return result;
   }
 
   reset(): void {
@@ -76,7 +82,7 @@ export class DemoStore {
     } catch {
       // ignore blocked storage
     }
-    this.channel?.postMessage('changed');
+    this.channel?.postMessage(this.data);
     this.emit();
   }
 

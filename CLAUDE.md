@@ -35,7 +35,8 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 5. Show progress: run the app and share screenshots of every new screen. `pnpm --filter
    @restaurant-saas/restaurant-os screenshots` drives the installed Microsoft Edge through
    `playwright-core` (no browser download) while `pnpm dev` runs. Add new screens to
-   `apps/restaurant-os/scripts/screenshots.mjs`.
+   `apps/restaurant-os/scripts/screenshots.mjs`. `pnpm --filter @restaurant-saas/restaurant-os walkthrough` clicks
+   through Test A steps 1–5 and the void check with two tabs (waiter phone, kitchen tablet).
 6. Report with the template in MASTER_PROMPT.md §15.4, in Roman Urdu.
 7. If something is unclear, ask one short question with a recommended answer. Never connect a
    paid service without explaining the cost and getting approval.

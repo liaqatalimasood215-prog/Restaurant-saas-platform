@@ -242,6 +242,42 @@ export interface TableBoardEntry {
   table: DiningTable;
   status: TableStatus;
   order: Order | null;
+  waiterName: string | null;
+}
+
+/** Areas and the live table board of one branch. */
+export interface FloorPlan {
+  areas: Area[];
+  tables: TableBoardEntry[];
+}
+
+/** Everything a staff order screen needs to show the menu. */
+export interface MenuSnapshot {
+  categories: MenuCategory[];
+  items: MenuItem[];
+  modifierGroups: ModifierGroup[];
+  stations: KitchenStation[];
+}
+
+/** One ticket on a Kitchen Display, with what the kitchen needs to read from 2 metres. */
+export interface KitchenTicketView {
+  ticket: KitchenTicket;
+  orderType: OrderType;
+  orderStatus: OrderStatus;
+  dailyNumber: number;
+  tableName: string | null;
+  waiterName: string | null;
+  items: OrderItem[];
+}
+
+/** "Food ready" alert for floor staff: a READY ticket of a dine-in order that is not served yet. */
+export interface ReadyAlert {
+  ticketId: Uuid;
+  orderId: Uuid;
+  tableId: Uuid;
+  tableName: string;
+  stationName: string;
+  readyAt: IsoDateTime;
 }
 
 /** An item the waiter or cashier adds; the server looks up every price itself. */
