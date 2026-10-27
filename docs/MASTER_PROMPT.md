@@ -1,8 +1,8 @@
 # Lala Restaurant OS — Master Developer Prompt & Requirements
 
-**Version:** 2.0 · **Date:** 2026-10-26 · **Owner:** Liaqat Ali
-**Status:** Approved direction — UI first (owner decision 2026-10-26). Next: Phase 1 after the
-owner approves the documents. Development order and gates: `PROJECT_RULES.md` §15.
+**Version:** 2.1 · **Date:** 2026-10-27 · **Owner:** Liaqat Ali
+**Status:** Approved baseline (owner, 2026-10-27) — UI first. Current: Phase 1 (Restaurant OS UI
+prototype). Development order and gates: `PROJECT_RULES.md` §15.
 
 > **Yeh document kya hai? (Roman Urdu)**
 >
@@ -129,7 +129,7 @@ payment; restaurants stay open after midnight.
 ### 3.1 One monorepo
 
 ```
-restaurant-saas/                (repository folder of Lala Restaurant OS)
+restaurant-saas-platform/       (repository folder of Lala Restaurant OS)
 ├── CLAUDE.md                   entry point loaded by Claude Code every session
 ├── PROJECT_RULES.md            rules, development order, statuses, decision log
 ├── README.md                   feature status table + progress log
@@ -155,11 +155,12 @@ on the waiter's phone or the kitchen tablet.
 
 | Page inside Restaurant OS | Manages / previews | Separate real app |
 |---|---|---|
-| Online App | Product online ON/OFF, online orders ON/OFF, link, QR code, live preview of the Customer App | `apps/customer` |
-| Riders | Add/disable riders, assignments, cash to settle, preview of the Rider App | `apps/rider` |
+| Online App | Product online ON/OFF, online orders ON/OFF, link, QR code, live preview of the Customer App, Open Full App button | `apps/customer` |
+| Riders | Add/disable riders, assignments, cash to settle, preview of the Rider App, Open Full App button | `apps/rider` |
 
 From Phase 5, a change on these pages shows in the real app within 2 seconds, because both use the
-same backend and database.
+same backend and database. Until the real app exists (Customer App: Phase 2, Rider App: Phase 3),
+the preview and the Open Full App button are clearly labelled PLACEHOLDERS.
 
 ### 3.3 Architecture rules
 
@@ -175,15 +176,12 @@ same backend and database.
   `packages/shared`; numbers from the browser are display-only.
 - One modular NestJS application (modules per feature). No microservices.
 
-### 3.4 Current state of the code (2026-10-26)
+### 3.4 Current state of the code
 
-| Part | Status |
-|---|---|
-| `CLAUDE.md`, `PROJECT_RULES.md` v2.0, this file v2.0, `docs/AI_MANAGER_PLAN.md` | Written |
-| Monorepo files (pnpm workspace, Turborepo, `.gitignore`) | Written |
-| `packages/shared` | NOT CONNECTED — logic verified by 14 unit tests, but it models the **delivery path and 4 roles only**. Extend at the start of Phase 1 (§4, §6, five statuses, new sidebar) with tests. |
-| `backend/api/prisma/schema.prisma` | Draft for the delivery path only, not validated. Extend in Phase 4 (§9). |
-| All three apps, NestJS backend | Not started. Package downloads were blocked in the earlier chat session (BLOCKED there); Claude Code with the GitHub repo should not have this problem. |
+The live status of every part is in `README.md`. Phase 1 started on 2026-10-27 on the owner's
+computer (`C:\Users\ADMIN\Projects\restaurant-saas-platform`, local Git, not pushed). Package
+downloads work there. Keep the repository in a short folder path: Windows cannot create files with
+paths longer than 260 characters, which breaks `node_modules`.
 
 ### 3.5 UI first without rebuilding (Phases 1–3)
 
@@ -208,7 +206,8 @@ screen → hooks (useTables, useOrders …) → ApiClient interface (src/lib/api
 ## 4. Roles and permissions
 
 Roles: **OWNER, MANAGER, CASHIER, WAITER, KITCHEN, RIDER.** Platform admins are a separate type of
-user (Phase 9).
+user (Phase 9). Further staff roles (e.g. Admin, Inventory Staff, Finance Staff) are a future idea
+and need an explicit update of this matrix first (§16 #17).
 
 - The Owner works across all branches of their restaurant; everyone else belongs to one branch.
 - Kitchen users are linked to one or more stations (or all stations).
@@ -298,14 +297,16 @@ the daily order number) → **Picked up**.
 ### 5.5 Online App page — Pilot
 
 Product Online ON/OFF, Online orders ON/OFF, delivery fee, minimum order, default prep time,
-customer link, QR code, Open website, live preview of the Customer App. From Phase 5, changes show
-in the Customer App within 2 seconds, and the server enforces them.
+customer link, QR code, live preview of the Customer App and an **Open Full App** button. From
+Phase 5, changes show in the Customer App within 2 seconds, and the server enforces them. In
+Phase 1 the preview and the button are PLACEHOLDERS (the Customer App is built in Phase 2).
 
 ### 5.6 Riders page — Pilot
 
 The Owner or Manager adds a rider (name, phone, password), sets Active/Disabled, sees each rider's
-current deliveries and cash to settle, and can open a preview of the Rider App. No public rider
-signup.
+current deliveries and cash to settle, and sees a preview of the Rider App with an **Open Full App**
+button. No public rider signup. In Phases 1–2 the preview and the button are PLACEHOLDERS (the
+Rider App is built in Phase 3).
 
 ### 5.7 End of day
 
@@ -358,7 +359,9 @@ TAKEAWAY  PLACED → ACCEPTED → PREPARING → READY → PICKED_UP
 
 `NEW → PREPARING → READY → SERVED` (SERVED is used for dine-in only).
 
-- Undo: READY → PREPARING within 2 minutes (for mistakes).
+- Undo: READY → PREPARING within 2 minutes (for mistakes). If a delivery or takeaway order is
+  already READY, the undo moves the order back to PREPARING automatically. Undo is not possible
+  after a rider is assigned or the order is picked up.
 - "Auto-ready" stations (e.g. bottled drinks) create tickets that are READY at once.
 - Delivery/takeaway tickets leave the screen when the order is OUT_FOR_DELIVERY or PICKED_UP.
 - Every ticket shows a timer; it turns orange after `warn_minutes` and red after `late_minutes`
@@ -428,6 +431,19 @@ Layout: left sidebar on tablet/desktop, bottom navigation on phones; header with
 connection dot (green/red) and alerts bell. Sections outside the current phase show "Coming Soon"
 (PLACEHOLDER).
 
+Navigation (owner, 2026-10-27):
+
+- The sidebar stays visible on tablet and desktop. Each sidebar feature opens its own screen; the
+  main workspace shows only the selected feature (never several features on one screen).
+- Sidebar order: Tables, Waiter Orders, Kitchen / KDS, POS / New Bill, Online Orders, Orders, Menu,
+  Online App, Riders, Staff, Today's Summary, Settings. Below them a "Coming Soon" group: Dashboard,
+  Customers, Finance & Reports, Inventory & Suppliers, Payroll, AI Manager (PLACEHOLDER, with
+  their phase).
+- Tables is the default home for Owner and Manager (Waiter → Tables, Kitchen → Kitchen / KDS,
+  Cashier → POS / New Bill).
+- The owner's design pictures are a visual reference (brand red, white cards, spacing, sidebar)
+  and show the future vision; they never expand the current phase. Menu photos come in P7.
+
 | Module | Phase | Requirements |
 |---|---|---|
 | Login | Pilot | Phone + password, redirect by role, rate-limited, clear errors (DEMO role switcher in Phases 1–3) |
@@ -476,6 +492,8 @@ connection dot (green/red) and alerts bell. Sections outside the current phase s
 - Buttons: **Picked up – On the way** → **Delivered** (confirm cash collected).
 - Alert on a new assignment (sound + vibration; web push in P7).
 - Today: deliveries done, cash collected, cash settled.
+- Availability status (online/offline), requested by the owner on 2026-10-27: scope decided before
+  Phase 3 (§16 #16).
 - Later (P11): GPS live location, rider applications with owner approval, shared delivery pool.
 
 ### 7.4 Platform Admin — P9
@@ -489,6 +507,27 @@ requires two-step verification.
 
 Follow `docs/AI_MANAGER_PLAN.md`: read-only first, then drafts with human approval, then limited
 automation. Facts and recommendations are labelled; the AI never changes stock, payments or rules.
+
+### 7.6 White-label branding and publishing — future direction (owner, 2026-10-27)
+
+Every restaurant gets its own branded customer experience from the **shared** codebase, backend and
+database — never a copied application per restaurant.
+
+| What | Phase |
+|---|---|
+| Restaurant name, logo, brand colours, website title, contact details, opening hours | P7 (branding), stored per restaurant in the one database |
+| PWA name and icons per restaurant | P7, from the same Customer App deployment (`<domain>/<restaurant-slug>/<branch-slug>`) |
+| Custom domain per restaurant (e.g. `azizpizza.com` — an example, not a registered site) | P9, optional, mapped to the same deployment |
+| Menu and prices | Already per restaurant (Pilot) |
+
+Publishing stages (separate from the numbered development phases):
+
+- **Stage A — websites and PWAs:** branded Customer Websites/PWAs, authenticated Restaurant OS and
+  authenticated Rider PWA, after the Phase 6 gate. Private data stays behind login.
+- **Stage B — Android apps (P11):** separately branded customer apps (own application ID, name,
+  icon and Google Play listing) built from shared code with configurable builds. Before any work:
+  review current store policies (including repetitive-content rules), approval requirements,
+  developer-account costs and maintenance. Google Play approval is never promised.
 
 ## 8. Money, billing and receipts (trusted pricing engine)
 
@@ -983,6 +1022,9 @@ decision in `PROJECT_RULES.md` §20.
 | 13 | How often does the internet drop at the restaurant? | Rarely → full offline operation stays in P11 |
 | 14 | Payroll rules (monthly salary, daily wage, advances) | Decided in Phase 8 |
 | 15 | "Master Prompt Version 4" mentioned by the owner | Only v1.0 existed in the Project; v2.0 merges the owner's latest points — share v4 if it exists elsewhere |
+| 16 | Rider availability status (online/offline): who sees it, does it block assignment? | Decide before Phase 3 |
+| 17 | Extra staff roles (Admin, Inventory Staff, Finance Staff) | Not in the permission model; decide before the phase that needs them |
+| 18 | Separately branded Android apps per restaurant (Publishing Stage B) | Evaluated in P11 after a Google Play policy and cost review; no approval is guaranteed |
 
 ## 17. Ready-to-use Claude Code prompts (copy and paste)
 
@@ -1074,3 +1116,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 |---|---|
 | 2026-10-26 | v1.0 created from the owner's requirements template, `PROJECT_RULES.md` and `docs/AI_MANAGER_PLAN.md`: dine-in core, kitchen stations, billing, roles, Phases 0–7. |
 | 2026-10-26 | v2.0: owner's UI-first order (Phases 0–11, gates in PROJECT_RULES.md §15); demo adapter (§3.5); five statuses; Customer/Rider App previews in Restaurant OS; refunds; payroll moved to P8; offline behaviour (Phase 6) vs full offline operation (P11); Claude Code prompts (§17). |
+| 2026-10-27 | v2.1: owner approved the baseline and the Phase 1 plan; Restaurant OS navigation (§7.1); Open Full App buttons (§5.5, §5.6); white-label branding and publishing stages (§7.6); kitchen Undo on READY delivery/takeaway orders (§6.4); open decisions #16–#18; repository folder `restaurant-saas-platform`. |

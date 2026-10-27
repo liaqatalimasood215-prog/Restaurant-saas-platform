@@ -48,8 +48,8 @@ Every AI answer is labelled per line:
 | Purchase orders + goods received | Delivery tracking, price differences | No |
 | Rider cash collection / payment records | Cash summary | No |
 | Tips recording | Tips in daily report | No |
-| Reservations / special-day markers | Forecast inputs | No (dine-in is later) |
-| MANAGER role | Approvals by manager | Planned for the pilot, not built yet |
+| Reservations / special-day markers | Forecast inputs | No (reservations are P11; special-day markers come with the AI Manager) |
+| MANAGER role | Approvals by manager | In the six-role model (2026-10-26); built through Phases 1–4 |
 | Sales history: ~8 weeks of real orders | Weekday forecasts | No — until then forecasts show LOW confidence |
 
 ## 3. New tables (all with `restaurant_id` + `branch_id`, UUID ids, money in paisa)
@@ -118,7 +118,7 @@ price vs quote, last quote date. Shown only after a minimum number of orders; ot
 
 ## 5. Permissions
 
-- AI Manager visible to OWNER (and MANAGER when that role exists).
+- AI Manager visible to OWNER and MANAGER.
 - Money (sales totals, costs, cash, tips) only for OWNER, and MANAGER if the owner allows.
 - AI tools run **as the logged-in user**: the AI can never see more than that user can.
 - The AI can never: change stock, approve stock counts, mark payments verified, approve its own

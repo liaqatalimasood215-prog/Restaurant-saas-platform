@@ -10,7 +10,7 @@
 >   live sync → security aur pilot.
 > - Jo cheez asli nahi, us pe saaf label lagega: **DEMO / PROTOTYPE**. Koi jhoota "ho gaya" nahi.
 
-**Version:** 2.0 · **Last updated:** 2026-10-26 · **Owner:** Liaqat Ali
+**Version:** 2.1 · **Last updated:** 2026-10-27 · **Owner:** Liaqat Ali
 
 ---
 
@@ -48,7 +48,7 @@
 ## 3. Repository structure
 
 ```
-restaurant-saas/                 (repository folder of Lala Restaurant OS)
+restaurant-saas-platform/        (repository folder of Lala Restaurant OS)
 ├── CLAUDE.md
 ├── PROJECT_RULES.md
 ├── README.md                    feature status table + progress log
@@ -70,11 +70,24 @@ Development ports: restaurant-os `3000`, customer `3001`, rider `3002`, api `400
 
 | Page in Restaurant OS | What it does | Separate real app |
 |---|---|---|
-| Online App | Product online ON/OFF, online orders ON/OFF, link, QR code, **live preview of the Customer App** | `apps/customer` |
-| Riders | Add/disable riders, assignments, cash to settle, **preview of the Rider App** | `apps/rider` |
+| Online App | Product online ON/OFF, online orders ON/OFF, link, QR code, **live preview of the Customer App**, **Open Full App** button | `apps/customer` |
+| Riders | Add/disable riders, assignments, cash to settle, **preview of the Rider App**, **Open Full App** button | `apps/rider` |
 
 These pages manage and preview the real apps; they never replace them. The real apps stay separate
-and are deployed separately.
+and are deployed separately. Until an app exists (Customer App: Phase 2, Rider App: Phase 3), its
+preview and its Open Full App button are clearly labelled PLACEHOLDERS.
+
+### Restaurant OS navigation (owner, 2026-10-27)
+
+- The left sidebar stays visible on tablet and desktop. Each sidebar feature opens its own screen;
+  the main workspace shows only the selected feature. Phones use a bottom navigation bar with the
+  same sections.
+- Sidebar order: Tables, Waiter Orders, Kitchen / KDS, POS / New Bill, Online Orders, Orders, Menu,
+  Online App, Riders, Staff, Today's Summary, Settings — then a "Coming Soon" group (Dashboard and
+  the later modules) marked PLACEHOLDER.
+- Tables is the default home for Owner and Manager.
+- The owner's design pictures are a visual reference (colours, cards, spacing, navigation) and show
+  the future product vision. They never expand the current phase.
 
 ## 4. Technology (approved)
 
@@ -371,3 +384,13 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-26 | Offline: behaviour tested in Phase 6; full offline operation in Phase 11 unless the owner moves it | Active |
 | 2026-10-26 | PROJECT_RULES.md v2.0: duplicate and pointer sections removed; `CLAUDE.md` added for Claude Code | Active |
 | 2026-10-26 | The owner's prompt mentions "Master Prompt Version 4"; only v1.0 existed in the Project, so v2.0 merges the owner's latest points | Note — share v4 if it exists elsewhere |
+| 2026-10-27 | Owner approves PROJECT_RULES.md v2.0 and MASTER_PROMPT.md v2.0 as the baseline (Phase 0 gate) | Active |
+| 2026-10-27 | Owner approves the Phase 1 plan ("ok start"); Phase 1 starts on branch `phase-1/restaurant-os-ui` | Active |
+| 2026-10-27 | Repository folder and future private GitHub repository: `restaurant-saas-platform`. Product name stays Lala Restaurant OS; package names stay `@restaurant-saas/*` | Active |
+| 2026-10-27 | Local Git started with an unchanged baseline commit of the ZIP; nothing is pushed until the owner approves GitHub | Active |
+| 2026-10-27 | Restaurant OS navigation (§3): sidebar always visible on tablet/desktop, one feature per screen, bottom navigation on phones, Tables as home, Dashboard and later modules under "Coming Soon" | Active |
+| 2026-10-27 | Online App and Riders pages get an Open Full App button; previews and the button are PLACEHOLDERS until Phases 2 and 3 | Active |
+| 2026-10-27 | Design pictures are a visual reference only; menu photos stay in Phase 7 | Active |
+| 2026-10-27 | White-label branding per restaurant is the confirmed future direction (MASTER_PROMPT.md §7.6): shared code and deployment; branding P7, custom domains P9, separately branded Android apps are Publishing Stage B (P11) after a store-policy review | Active (future) |
+| 2026-10-27 | Extra roles (Admin, Inventory Staff, Finance Staff) are a future idea; they need an explicit update of the permission model first | Idea — not scheduled |
+| 2026-10-27 | Rider availability status (online/offline) requested by the owner; decide its scope before Phase 3 | Open — MASTER_PROMPT.md §16 |
