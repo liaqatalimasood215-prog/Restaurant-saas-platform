@@ -215,7 +215,7 @@ and need an explicit update of this matrix first (§16 #17).
 - A disabled user cannot log in, and their existing sessions stop working immediately (checked on
   every request).
 - Each role sees only its own sections. Home screen by role: Waiter → Tables, Kitchen → Kitchen
-  Display, Cashier → POS, Owner/Manager → Tables (live).
+  Display, Cashier → POS, Owner/Manager → POS / New Bill (owner, 2026-10-28).
 
 | Action | Owner | Manager | Cashier | Waiter | Kitchen | Rider |
 |---|---|---|---|---|---|---|
@@ -440,8 +440,8 @@ Navigation (owner, 2026-10-27):
   Below them a "Coming Soon" group: Dashboard,
   Customers, Finance & Reports, Inventory & Suppliers, Payroll, AI Manager (PLACEHOLDER, with
   their phase).
-- Tables is the default home for Owner and Manager (Waiter → Tables, Kitchen → Kitchen / KDS,
-  Cashier → POS / New Bill).
+- POS / New Bill is the default home for Owner and Manager (owner, 2026-10-28). Cashier → POS /
+  New Bill, Waiter → Tables, Kitchen → Kitchen / KDS.
 - The owner's design pictures are a visual reference (brand red, white cards, spacing, sidebar)
   and show the future vision; they never expand the current phase. Menu photos come in P7.
 
@@ -1119,3 +1119,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-26 | v2.0: owner's UI-first order (Phases 0–11, gates in PROJECT_RULES.md §15); demo adapter (§3.5); five statuses; Customer/Rider App previews in Restaurant OS; refunds; payroll moved to P8; offline behaviour (Phase 6) vs full offline operation (P11); Claude Code prompts (§17). |
 | 2026-10-27 | v2.1: owner approved the baseline and the Phase 1 plan; Restaurant OS navigation (§7.1); Open Full App buttons (§5.5, §5.6); white-label branding and publishing stages (§7.6); kitchen Undo on READY delivery/takeaway orders (§6.4); open decisions #16–#18; repository folder `restaurant-saas-platform`. |
 | 2026-10-27 | v2.1 update after Preview 1: sidebar starts with POS / New Bill, Tables, Orders, Online Orders; long DEMO strip removed (badges stay). |
+| 2026-10-28 | Owner and Manager home screen: POS / New Bill (§4, §7.1). |

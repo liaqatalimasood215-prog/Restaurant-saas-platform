@@ -111,9 +111,9 @@ test('each role sees only its own sections', () => {
   assert.deepEqual(sectionsForRole('RIDER'), []);
 });
 
-test('every role lands on a home section it is allowed to see; Owner and Manager start at Tables', () => {
-  assert.equal(HOME_SECTION.OWNER, 'tables');
-  assert.equal(HOME_SECTION.MANAGER, 'tables');
+test('every role lands on a home section it is allowed to see; Owner and Manager start at POS (owner 2026-10-28)', () => {
+  assert.equal(HOME_SECTION.OWNER, 'pos');
+  assert.equal(HOME_SECTION.MANAGER, 'pos');
   assert.equal(HOME_SECTION.CASHIER, 'pos');
   assert.equal(HOME_SECTION.KITCHEN, 'kitchen');
   for (const [role, key] of Object.entries(HOME_SECTION)) {

@@ -88,7 +88,8 @@ preview and its Open Full App button are clearly labelled PLACEHOLDERS.
 - No long DEMO notice strip. DEMO stays visible through the badge next to every screen title
   (DEMO / PROTOTYPE or PLACEHOLDER), the DEMO label on the role switcher and the restaurant name
   "Aziz Pizza — DEMO" in the header.
-- Tables is the default home for Owner and Manager.
+- POS / New Bill is the default home for Owner and Manager (owner, 2026-10-28; Cashier → POS,
+  Waiter → Tables, Kitchen → Kitchen / KDS).
 - The owner's design pictures are a visual reference (colours, cards, spacing, navigation) and show
   the future product vision. They never expand the current phase.
 
@@ -399,3 +400,4 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-27 | Rider availability status (online/offline) requested by the owner; decide its scope before Phase 3 | Open — MASTER_PROMPT.md §16 |
 | 2026-10-27 | Preview 1 feedback (owner): sidebar starts with the most-used sections — POS / New Bill, Tables, Orders, Online Orders (§3). The build order of the previews does not change | Active (replaces the sidebar order in the navigation row above) |
 | 2026-10-27 | Preview 1 feedback (owner): the long DEMO notice strip is removed; the DEMO / PROTOTYPE badge on every screen title and the DEMO role-switcher label stay (§16) | Active |
+| 2026-10-28 | Owner and Manager start at POS / New Bill instead of Tables (owner, after Preview 1) | Active (replaces "Tables as home" in the navigation row above) |

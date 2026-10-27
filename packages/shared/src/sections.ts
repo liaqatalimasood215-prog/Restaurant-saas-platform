@@ -99,10 +99,10 @@ export function sectionsForRole(role: StaffRole, ctx: PermissionContext = {}): O
   return OS_SECTIONS.filter((s) => canSeeSection(s, role, ctx));
 }
 
-/** Home screen by role (MASTER_PROMPT.md §4). Riders have no Restaurant OS home. */
+/** Home screen by role (MASTER_PROMPT.md §4; owner 2026-10-28: Owner and Manager start at POS). Riders have no Restaurant OS home. */
 export const HOME_SECTION: Record<OsRole, OsSectionKey> = {
-  OWNER: 'tables',
-  MANAGER: 'tables',
+  OWNER: 'pos',
+  MANAGER: 'pos',
   CASHIER: 'pos',
   WAITER: 'tables',
   KITCHEN: 'kitchen',

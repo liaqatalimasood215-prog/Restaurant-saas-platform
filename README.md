@@ -69,6 +69,7 @@ not in the pricing engine yet — add it with tests when the owner confirms the 
 | 2026-10-27 | Tooling: turbo, pnpm lockfile, build-script allowlist; `packages/shared` extended to the approved rules | 55 unit tests pass; `pnpm test`, `pnpm typecheck` pass at the root |
 | 2026-10-27 | Phase 1 · Preview 1: `apps/restaurant-os` layout and navigation, DEMO role switcher, ApiClient + DemoAdapter, placeholders | `pnpm typecheck`, `pnpm lint`, `pnpm build` pass; 13 screenshots (phone, tablet, desktop); waiting for owner review |
 | 2026-10-28 | Preview 1 feedback: sidebar starts with POS / New Bill, Tables, Orders, Online Orders; long DEMO strip removed (screen-title and role-switcher DEMO badges stay) | 55 tests, `pnpm typecheck`, `pnpm lint` pass; screenshots retaken; waiting for owner review |
+| 2026-10-28 | Owner and Manager now open on POS / New Bill (owner decision) | 55 tests, typecheck, lint pass |
 
 ## Commands
 
