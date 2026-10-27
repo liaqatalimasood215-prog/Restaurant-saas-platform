@@ -1,0 +1,15 @@
+{
+  "name": "restaurant-saas",
+  "private": true,
+  "description": "Multi-restaurant SaaS: Restaurant OS, Customer App, Rider App — one backend, one database",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
+  }
+}

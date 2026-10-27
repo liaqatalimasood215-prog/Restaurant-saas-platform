@@ -1,0 +1,274 @@
+// Restaurant SaaS — ONE database for every app (Restaurant OS, Customer App, Rider App).
+// Roman Urdu: Har business table mein restaurant_id hai, aur branch wali tables mein branch_id bhi,
+// taa ke ek restaurant ka data kabhi doosre ke saath na mile.
+//
+// Rules (see PROJECT_RULES.md):
+// - IDs are UUIDs.
+// - Money is stored in PAISA (whole numbers).
+// - Never edit the production database by hand; change this file and create a Prisma migration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum RestaurantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum StaffRole {
+  OWNER
+  CASHIER
+  KITCHEN
+  RIDER
+}
+
+enum OrderStatus {
+  PLACED
+  ACCEPTED
+  PREPARING
+  READY
+  RIDER_ASSIGNED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  REJECTED
+  CANCELLED
+}
+
+enum OrderChannel {
+  ONLINE
+  POS
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+}
+
+model Restaurant {
+  id        String           @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String           @unique
+  status    RestaurantStatus @default(ACTIVE)
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  branches       Branch[]
+  staff          StaffUser[]
+  menuCategories MenuCategory[]
+  menuItems      MenuItem[]
+  customers      Customer[]
+  orders         Order[]
+
+  @@map("restaurants")
+}
+
+model Branch {
+  id                  String   @id @default(uuid()) @db.Uuid
+  restaurantId        String   @map("restaurant_id") @db.Uuid
+  name                String
+  slug                String
+  phone               String?
+  address             String?
+  /// Owner's "Online Orders ON/OFF" switch. When false, the server refuses new online orders.
+  onlineOrdersEnabled Boolean  @default(true) @map("online_orders_enabled")
+  /// Paisa
+  deliveryFee         Int      @default(0) @map("delivery_fee")
+  /// Last order number used in this branch (orders get 1, 2, 3 ... per branch)
+  orderCounter        Int      @default(0) @map("order_counter")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  staff      StaffUser[]
+  menuItems  MenuItem[]
+  orders     Order[]
+
+  @@unique([restaurantId, slug])
+  @@index([restaurantId])
+  @@map("branches")
+}
+
+model StaffUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  restaurantId String    @map("restaurant_id") @db.Uuid
+  /// null = all branches (OWNER only)
+  branchId     String?   @map("branch_id") @db.Uuid
+  name         String
+  /// Login id inside one restaurant
+  phone        String
+  passwordHash String    @map("password_hash")
+  role         StaffRole
+  /// Disabled users cannot log in; checked on every request
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  restaurant     Restaurant           @relation(fields: [restaurantId], references: [id])
+  branch         Branch?              @relation(fields: [branchId], references: [id])
+  assignedOrders Order[]              @relation("OrderRider")
+  statusChanges  OrderStatusHistory[]
+
+  @@unique([restaurantId, phone])
+  @@index([restaurantId, branchId, role])
+  @@map("staff_users")
+}
+
+model MenuCategory {
+  id           String   @id @default(uuid()) @db.Uuid
+  restaurantId String   @map("restaurant_id") @db.Uuid
+  /// null = all branches
+  branchId     String?  @map("branch_id") @db.Uuid
+  name         String
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  items      MenuItem[]
+
+  @@index([restaurantId])
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  restaurantId String   @map("restaurant_id") @db.Uuid
+  /// null = all branches
+  branchId     String?  @map("branch_id") @db.Uuid
+  categoryId   String   @map("category_id") @db.Uuid
+  name         String
+  description  String?
+  /// Paisa
+  price        Int
+  /// In stock / can be sold (POS + online)
+  isAvailable  Boolean  @default(true) @map("is_available")
+  /// Owner's "Online ON/OFF" switch — shown on the customer website/app
+  isOnline     Boolean  @default(true) @map("is_online")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant   @relation(fields: [restaurantId], references: [id])
+  branch     Branch?      @relation(fields: [branchId], references: [id])
+  category   MenuCategory @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+
+  @@index([restaurantId, categoryId])
+  @@map("menu_items")
+}
+
+model Customer {
+  id           String   @id @default(uuid()) @db.Uuid
+  restaurantId String   @map("restaurant_id") @db.Uuid
+  name         String
+  phone        String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  orders     Order[]
+
+  /// Same phone can be a customer of many restaurants — kept separately per restaurant
+  @@unique([restaurantId, phone])
+  @@map("customers")
+}
+
+model Order {
+  id              String        @id @default(uuid()) @db.Uuid
+  restaurantId    String        @map("restaurant_id") @db.Uuid
+  branchId        String        @map("branch_id") @db.Uuid
+  /// 1, 2, 3 ... per branch (shown to staff and customer)
+  orderNumber     Int           @map("order_number")
+  /// Long random secret used in the customer tracking link (not guessable)
+  trackingToken   String        @unique @map("tracking_token")
+  status          OrderStatus   @default(PLACED)
+  channel         OrderChannel  @default(ONLINE)
+  customerId      String?       @map("customer_id") @db.Uuid
+  /// Copies at order time (customer details may change later)
+  customerName    String        @map("customer_name")
+  customerPhone   String        @map("customer_phone")
+  deliveryAddress String        @map("delivery_address")
+  note            String?
+  /// Paisa
+  subtotal        Int
+  /// Paisa
+  deliveryFee     Int           @map("delivery_fee")
+  /// Paisa
+  total           Int
+  /// Customer food payment (NOT subscription billing)
+  paymentMethod   PaymentMethod @default(CASH_ON_DELIVERY) @map("payment_method")
+  paymentStatus   PaymentStatus @default(UNPAID) @map("payment_status")
+  riderId         String?       @map("rider_id") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  restaurant Restaurant           @relation(fields: [restaurantId], references: [id])
+  branch     Branch               @relation(fields: [branchId], references: [id])
+  customer   Customer?            @relation(fields: [customerId], references: [id])
+  rider      StaffUser?           @relation("OrderRider", fields: [riderId], references: [id])
+  items      OrderItem[]
+  history    OrderStatusHistory[]
+
+  @@unique([branchId, orderNumber])
+  @@index([restaurantId, branchId, status])
+  @@index([riderId, status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String    @id @default(uuid()) @db.Uuid
+  restaurantId String    @map("restaurant_id") @db.Uuid
+  branchId     String    @map("branch_id") @db.Uuid
+  orderId      String    @map("order_id") @db.Uuid
+  menuItemId   String?   @map("menu_item_id") @db.Uuid
+  /// Copy of the item name and price at order time
+  name         String
+  /// Paisa
+  unitPrice    Int       @map("unit_price")
+  quantity     Int
+  /// Paisa
+  lineTotal    Int       @map("line_total")
+  note         String?
+
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([restaurantId, branchId])
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id           String       @id @default(uuid()) @db.Uuid
+  restaurantId String       @map("restaurant_id") @db.Uuid
+  branchId     String       @map("branch_id") @db.Uuid
+  orderId      String       @map("order_id") @db.Uuid
+  /// null when the order was just created
+  fromStatus   OrderStatus? @map("from_status")
+  toStatus     OrderStatus  @map("to_status")
+  /// null = changed by the customer (placing the order)
+  changedById  String?      @map("changed_by_id") @db.Uuid
+  changedAt    DateTime     @default(now()) @map("changed_at")
+
+  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedBy StaffUser? @relation(fields: [changedById], references: [id])
+
+  @@index([orderId])
+  @@index([restaurantId, branchId])
+  @@map("order_status_history")
+}
+
+// LATER (not Phase 1), kept SEPARATE from customer food payments:
+//   subscription_plans, restaurant_subscriptions, platform_invoices  (restaurant → platform)
+//   order_payments                                                    (customer → restaurant)
