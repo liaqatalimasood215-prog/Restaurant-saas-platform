@@ -8,12 +8,12 @@ import type { OsRole, StaffRole } from './roles';
  * Roman Urdu: Sidebar ki list — har role ko sirf apne hisse nazar aate hain.
  */
 export const OS_SECTION_KEYS = [
+  'pos',
   'tables',
+  'orders',
+  'online-orders',
   'waiter',
   'kitchen',
-  'pos',
-  'online-orders',
-  'orders',
   'menu',
   'online-app',
   'riders',
@@ -65,12 +65,13 @@ function comingSoon(
 }
 
 export const OS_SECTIONS: readonly OsSection[] = [
+  // Owner decision 2026-10-27: the most-used sections first — POS, Tables, Orders, Online Orders.
+  feature('pos', 'POS / New Bill', COUNTER),
   feature('tables', 'Tables', FLOOR),
+  feature('orders', 'Orders', COUNTER),
+  feature('online-orders', 'Online Orders', COUNTER),
   feature('waiter', 'Waiter Orders', FLOOR),
   feature('kitchen', 'Kitchen / KDS', ['OWNER', 'MANAGER', 'KITCHEN']),
-  feature('pos', 'POS / New Bill', COUNTER),
-  feature('online-orders', 'Online Orders', COUNTER),
-  feature('orders', 'Orders', COUNTER),
   feature('menu', 'Menu', MANAGEMENT),
   feature('online-app', 'Online App', MANAGEMENT),
   feature('riders', 'Riders', MANAGEMENT),

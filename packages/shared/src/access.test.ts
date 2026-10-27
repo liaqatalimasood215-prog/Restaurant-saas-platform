@@ -56,17 +56,17 @@ test('managers manage staff, but not Owner or Manager accounts', () => {
   assert.equal(canManageStaffAccount('CASHIER', 'WAITER'), false);
 });
 
-test('sidebar order matches the owner navigation decision (2026-10-27)', () => {
+test('sidebar order matches the owner decision: most-used sections first (2026-10-27)', () => {
   const features = OS_SECTIONS.filter((s) => s.group === 'FEATURES');
   assert.deepEqual(
     features.map((s) => s.label),
     [
+      'POS / New Bill',
       'Tables',
+      'Orders',
+      'Online Orders',
       'Waiter Orders',
       'Kitchen / KDS',
-      'POS / New Bill',
-      'Online Orders',
-      'Orders',
       'Menu',
       'Online App',
       'Riders',
@@ -102,7 +102,7 @@ test('each role sees only its own sections', () => {
       .map((s) => s.key);
   assert.deepEqual(keys('WAITER'), ['tables', 'waiter']);
   assert.deepEqual(keys('KITCHEN'), ['kitchen']);
-  assert.deepEqual(keys('CASHIER'), ['tables', 'waiter', 'pos', 'online-orders', 'orders']);
+  assert.deepEqual(keys('CASHIER'), ['pos', 'tables', 'orders', 'online-orders', 'waiter']);
   assert.ok(!keys('MANAGER').includes('summary'));
   assert.ok(keys('MANAGER', { managerCanSeeMoneyReports: true }).includes('summary'));
   assert.ok(!keys('MANAGER').includes('settings'));

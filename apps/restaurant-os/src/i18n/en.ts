@@ -17,7 +17,6 @@ export const en = {
     BLOCKED: 'BLOCKED',
   },
   demo: {
-    strip: 'Sample data for Aziz Pizza — DEMO. Not connected to a backend. Nothing here is a real order or payment.',
     sync: 'DEMO sync — not real-time',
     reset: 'Reset demo data',
     resetConfirmTitle: 'Reset demo data?',
@@ -69,7 +68,7 @@ export const en = {
   roleSwitcher: {
     open: 'Switch role (DEMO)',
     title: 'DEMO role switcher',
-    note: 'Not a real login. Phone + password login and real permissions come in Phase 4.',
+    note: 'Not a real login. Sample data only — nothing here is a real order or payment. Phone + password login and real permissions come in Phase 4.',
     tools: 'DEMO tools',
     simulateError: 'Simulate connection error',
     simulateErrorHint: 'Shows the error screens. Nothing is really offline.',

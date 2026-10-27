@@ -6,7 +6,6 @@ import { ErrorState, LoadingState } from '@/components/ui/states';
 import { RiderNotice } from '@/screens/rider-notice';
 import { useSession } from '@/lib/session';
 import { BottomNav } from './bottom-nav';
-import { DemoStrip } from './demo-strip';
 import { Header } from './header';
 import { Sidebar } from './sidebar';
 
@@ -27,7 +26,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-dvh bg-surface text-slate-900">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <DemoStrip />
         <Header />
         <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 pb-28 pt-5 md:px-6 md:pb-8">
           {content}

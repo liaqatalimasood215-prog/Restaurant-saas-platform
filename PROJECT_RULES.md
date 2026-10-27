@@ -82,9 +82,12 @@ preview and its Open Full App button are clearly labelled PLACEHOLDERS.
 - The left sidebar stays visible on tablet and desktop. Each sidebar feature opens its own screen;
   the main workspace shows only the selected feature. Phones use a bottom navigation bar with the
   same sections.
-- Sidebar order: Tables, Waiter Orders, Kitchen / KDS, POS / New Bill, Online Orders, Orders, Menu,
-  Online App, Riders, Staff, Today's Summary, Settings — then a "Coming Soon" group (Dashboard and
-  the later modules) marked PLACEHOLDER.
+- Sidebar order, most-used first (owner, after Preview 1): POS / New Bill, Tables, Orders, Online
+  Orders, Waiter Orders, Kitchen / KDS, Menu, Online App, Riders, Staff, Today's Summary, Settings —
+  then a "Coming Soon" group (Dashboard and the later modules) marked PLACEHOLDER.
+- No long DEMO notice strip. DEMO stays visible through the badge next to every screen title
+  (DEMO / PROTOTYPE or PLACEHOLDER), the DEMO label on the role switcher and the restaurant name
+  "Aziz Pizza — DEMO" in the header.
 - Tables is the default home for Owner and Manager.
 - The owner's design pictures are a visual reference (colours, cards, spacing, navigation) and show
   the future product vision. They never expand the current phase.
@@ -394,3 +397,5 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-27 | White-label branding per restaurant is the confirmed future direction (MASTER_PROMPT.md §7.6): shared code and deployment; branding P7, custom domains P9, separately branded Android apps are Publishing Stage B (P11) after a store-policy review | Active (future) |
 | 2026-10-27 | Extra roles (Admin, Inventory Staff, Finance Staff) are a future idea; they need an explicit update of the permission model first | Idea — not scheduled |
 | 2026-10-27 | Rider availability status (online/offline) requested by the owner; decide its scope before Phase 3 | Open — MASTER_PROMPT.md §16 |
+| 2026-10-27 | Preview 1 feedback (owner): sidebar starts with the most-used sections — POS / New Bill, Tables, Orders, Online Orders (§3). The build order of the previews does not change | Active (replaces the sidebar order in the navigation row above) |
+| 2026-10-27 | Preview 1 feedback (owner): the long DEMO notice strip is removed; the DEMO / PROTOTYPE badge on every screen title and the DEMO role-switcher label stay (§16) | Active |

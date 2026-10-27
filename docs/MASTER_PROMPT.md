@@ -435,8 +435,9 @@ Navigation (owner, 2026-10-27):
 
 - The sidebar stays visible on tablet and desktop. Each sidebar feature opens its own screen; the
   main workspace shows only the selected feature (never several features on one screen).
-- Sidebar order: Tables, Waiter Orders, Kitchen / KDS, POS / New Bill, Online Orders, Orders, Menu,
-  Online App, Riders, Staff, Today's Summary, Settings. Below them a "Coming Soon" group: Dashboard,
+- Sidebar order, most-used first (owner, after Preview 1): POS / New Bill, Tables, Orders, Online
+  Orders, Waiter Orders, Kitchen / KDS, Menu, Online App, Riders, Staff, Today's Summary, Settings.
+  Below them a "Coming Soon" group: Dashboard,
   Customers, Finance & Reports, Inventory & Suppliers, Payroll, AI Manager (PLACEHOLDER, with
   their phase).
 - Tables is the default home for Owner and Manager (Waiter → Tables, Kitchen → Kitchen / KDS,
@@ -1117,3 +1118,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-26 | v1.0 created from the owner's requirements template, `PROJECT_RULES.md` and `docs/AI_MANAGER_PLAN.md`: dine-in core, kitchen stations, billing, roles, Phases 0–7. |
 | 2026-10-26 | v2.0: owner's UI-first order (Phases 0–11, gates in PROJECT_RULES.md §15); demo adapter (§3.5); five statuses; Customer/Rider App previews in Restaurant OS; refunds; payroll moved to P8; offline behaviour (Phase 6) vs full offline operation (P11); Claude Code prompts (§17). |
 | 2026-10-27 | v2.1: owner approved the baseline and the Phase 1 plan; Restaurant OS navigation (§7.1); Open Full App buttons (§5.5, §5.6); white-label branding and publishing stages (§7.6); kitchen Undo on READY delivery/takeaway orders (§6.4); open decisions #16–#18; repository folder `restaurant-saas-platform`. |
+| 2026-10-27 | v2.1 update after Preview 1: sidebar starts with POS / New Bill, Tables, Orders, Online Orders; long DEMO strip removed (badges stay). |
