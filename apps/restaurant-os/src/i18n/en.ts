@@ -423,6 +423,8 @@ export const en = {
     accepted: 'Bill request accepted — the waiter has been told.',
     findTable: 'Find a bill by table number',
     findTablePlaceholder: 'e.g. 1',
+    findTableShort: 'Find bill: table no.',
+    runningBills: 'Running bills',
     tableNotFound: 'There is no table {table}.',
     tableFree: '{table} has no running bill.',
     openBills: 'Running table bills',

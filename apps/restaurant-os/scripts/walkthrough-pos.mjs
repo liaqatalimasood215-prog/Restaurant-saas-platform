@@ -84,6 +84,7 @@ assert.equal(await bill(cashier).getByRole('button', { name: 'Discount' }).count
 ok('the cashier has no Discount button');
 
 const owner = await openAs(USER.owner, '/pos', DESKTOP);
+await owner.getByRole('button', { name: /^Running bills/ }).click();
 await owner.getByRole('button', { name: /^T3/ }).click();
 await waitText(owner, 'T3 · Order #1');
 await bill(owner).getByRole('button', { name: 'Discount' }).click();
@@ -140,13 +141,16 @@ await bill(cashier).getByLabel('Customer name', { exact: true }).fill('Hina Shei
 await bill(cashier).getByLabel('Phone', { exact: true }).fill('0312-5556667');
 await pick(cashier, 'Zinger Burger', { quantity: 2 });
 await bill(cashier).getByRole('button', { name: 'Hold' }).click();
+await cashier.getByRole('button', { name: /^Running bills/ }).click();
 await cashier.getByRole('button', { name: /^Hina Sheikh · Takeaway/ }).click();
 await grandTotal(cashier, 'Rs. 900');
 ok('bill held and reopened with customer and 2 × Zinger Burger (Rs. 900)');
 await shot(cashier, '04-desktop-cashier-held-bill');
 await bill(cashier).getByRole('button', { name: 'Send to kitchen' }).click();
 await waitText(cashier, 'Takeaway · Order #2');
+await cashier.getByRole('button', { name: /^Running bills/ }).click();
 assert.equal(await cashier.getByRole('button', { name: /^Hina Sheikh · Takeaway/ }).count(), 0, 'held bill removed after sending');
+await cashier.keyboard.press('Escape');
 await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
 await cashier.getByRole('dialog').getByRole('button', { name: 'Pay later (pending)' }).click();
 await waitText(bill(cashier), 'Payment pending');
