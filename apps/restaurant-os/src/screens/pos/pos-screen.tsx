@@ -19,12 +19,6 @@ import { CurrentBill } from './current-bill';
 import { newDraft, type Draft } from './draft';
 import { MenuPanel } from './menu-panel';
 
-/** "1", "t1", "T1" → "T1" */
-function normalizeTable(input: string): string {
-  const value = input.trim().toUpperCase();
-  return /^\d+$/.test(value) ? `T${value}` : value;
-}
-
 type OpenEntry = TableBoardEntry & { order: NonNullable<TableBoardEntry['order']> };
 
 /**
@@ -44,9 +38,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
   const toast = useToast();
   const [draft, setDraftState] = useState<Draft>(() => newDraft());
   const [picking, setPicking] = useState<{ item: MenuItem; line: CartLine | null } | null>(null);
-  const [search, setSearch] = useState('');
   const [productQuery, setProductQuery] = useState('');
-  const [searchError, setSearchError] = useState<string | null>(null);
   const [showBills, setShowBills] = useState(false);
   const [initialTable, setInitialTable] = useState(tableId);
 
@@ -77,23 +69,6 @@ export function PosScreen({ tableId }: { tableId?: string }) {
     setInitialTable(undefined);
     if (entry) openTable(entry);
   }
-
-  const findTable = async () => {
-    const name = normalizeTable(search);
-    // Ask for the latest bills: the waiter may have sent the order a moment ago.
-    let latest = tables;
-    try {
-      latest = (await getApi().getFloorPlan()).tables;
-    } catch {
-      // fall back to what is on screen
-    }
-    const entry = latest.find((e) => e.table.name.toUpperCase() === name);
-    if (!entry) return setSearchError(t('pos.tableNotFound', { table: name || '—' }));
-    if (!entry.order) return setSearchError(t('pos.tableFree', { table: entry.table.name }));
-    setSearchError(null);
-    setSearch('');
-    openTable(entry);
-  };
 
   const unpaidCounter = counter.data.filter(
     (v: OrderView) =>
@@ -133,36 +108,6 @@ export function PosScreen({ tableId }: { tableId?: string }) {
           className="w-full bg-transparent text-sm"
         />
       </label>
-      <div className="relative">
-        <div className="flex">
-          <label htmlFor="pos-table" className="sr-only">
-            {t('pos.findTable')}
-          </label>
-          <input
-            id="pos-table"
-            value={search}
-            onChange={(e) => (setSearch(e.target.value), setSearchError(null))}
-            onKeyDown={(e) => e.key === 'Enter' && void findTable()}
-            placeholder={t('pos.findTableShort')}
-            inputMode="numeric"
-            className="min-h-11 w-36 rounded-l-xl border border-r-0 border-slate-300 bg-white px-3 text-sm font-bold xl:w-44"
-          />
-          <button
-            type="button"
-            onClick={findTable}
-            aria-label={t('pos.findTable')}
-            className="flex min-h-11 items-center justify-center rounded-r-xl bg-navy px-3 text-white hover:bg-slate-800"
-          >
-            <Search className="size-5" aria-hidden />
-          </button>
-        </div>
-        {searchError && (
-          <p role="alert" className="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-red-200 bg-white p-2 text-xs font-semibold text-red-700 shadow-md">
-            {searchError}
-          </p>
-        )}
-      </div>
-
       <div className="relative" onKeyDown={(e) => e.key === 'Escape' && setShowBills(false)}>
         <button
           type="button"

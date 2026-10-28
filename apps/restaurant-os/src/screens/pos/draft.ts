@@ -25,7 +25,7 @@ export interface Draft {
   discount: DiscountChoice | null;
 }
 
-export function newDraft(type: OrderType = 'DINE_IN'): Draft {
+export function newDraft(type: OrderType = 'TAKEAWAY'): Draft {
   return {
     type,
     tableId: null,

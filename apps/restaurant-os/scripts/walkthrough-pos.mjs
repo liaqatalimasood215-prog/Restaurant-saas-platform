@@ -2,8 +2,8 @@
 // Flow A — the cashier makes new bills (dine-in, takeaway), edits items, holds and reopens a bill,
 // sends to the kitchen, adds items to the running bill, gets a discount from the Owner (on a running
 // bill and on a new bill), takes split and pending payments, uses Bill Now, prints and completes.
-// Flow B — a waiter's table order is found by table number at the POS, the cashier calls the table's
-// waiter, and the bill is paid there.
+// Flow B — a waiter's table order is opened from the Table box at the POS, the cashier calls the table's
+// waiter, and the bill is paid there. Then many tables at once, and a quick sale (product + Bill Now).
 // Usage: start the app (pnpm dev), then: pnpm --filter @restaurant-saas/restaurant-os walkthrough:pos
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -41,7 +41,12 @@ const shot = async (page, name) => {
 const waitText = (scope, text, timeout = 6_000) => scope.getByText(text).first().waitFor({ timeout });
 const ok = (message) => console.log(`  ✓ ${message}`);
 const bill = (page) => page.locator('main [data-pos-bill]');
-const grandTotal = (page, total) => bill(page).locator('dt:text-is("Total") + dd', { hasText: total }).waitFor({ timeout: 6_000 });
+// The customer box of a Takeaway bill is folded ("Customer (optional)"): open it before typing.
+const openCustomer = async (page) => {
+  const folded = bill(page).getByRole('button', { name: /^Customer \(optional\)/ });
+  if (await folded.count()) await folded.click();
+};
+const grandTotal =(page, total) => bill(page).locator('dt:text-is("Total") + dd', { hasText: total }).waitFor({ timeout: 6_000 });
 
 async function pick(page, product, { size, addOns = [], quantity = 1 } = {}) {
   await page.getByRole('button', { name: new RegExp(`^${product}`) }).first().click();
@@ -138,6 +143,7 @@ ok('Close keeps the bill; "Yes, clear bill" empties it (nothing was sent to the 
 
 console.log('Flow A — takeaway: new customer, hold, reopen, send, pay later, then pay and hand over');
 await bill(cashier).getByRole('radio', { name: 'Takeaway' }).click();
+await openCustomer(cashier);
 await bill(cashier).getByLabel('Customer name', { exact: true }).fill('Hina Sheikh');
 await bill(cashier).getByLabel('Phone', { exact: true }).fill('0312-5556667');
 await pick(cashier, 'Zinger Burger', { quantity: 2 });
@@ -172,6 +178,7 @@ ok('Burger Chef ready → paid Online/Wallet (invoice #2) → completed (picked 
 console.log('Flow A — the customer is found again by phone');
 await bill(cashier).getByRole('button', { name: 'Complete — start a new bill' }).click();
 await bill(cashier).getByRole('radio', { name: 'Takeaway' }).click();
+await openCustomer(cashier);
 await bill(cashier).getByRole('searchbox', { name: 'Find customer: name or phone' }).fill('Hina');
 await bill(cashier).getByRole('searchbox', { name: 'Find customer: name or phone' }).press('Enter');
 await bill(cashier).getByRole('button', { name: /^Hina Sheikh · 0312-5556667/ }).click();
@@ -187,6 +194,7 @@ await cashier.getByRole('dialog').getByRole('button', { name: 'Yes, clear bill' 
 await owner.bringToFront();
 await owner.getByRole('button', { name: 'New bill', exact: true }).click();
 await bill(owner).getByRole('radio', { name: 'Takeaway' }).click();
+await openCustomer(owner);
 await bill(owner).getByLabel('Customer name', { exact: true }).fill('Hina Sheikh');
 await bill(owner).getByLabel('Phone', { exact: true }).fill('0312-5556667');
 await pick(owner, 'Wings');
@@ -219,8 +227,8 @@ await waiter.getByRole('tab', { name: /^Order/ }).click();
 await waiter.getByRole('button', { name: 'Send to kitchen' }).click();
 await waiter.getByText(/sent to the kitchen/).first().waitFor();
 await cashier.bringToFront();
-await cashier.locator('#pos-table').fill('5');
-await cashier.keyboard.press('Enter');
+await bill(cashier).getByRole('radio', { name: /^Table/ }).click();
+await cashier.getByRole('dialog').getByRole('button', { name: /^T5 —/ }).click();
 await waitText(cashier, 'T5 · Order #4');
 await grandTotal(cashier, 'Rs. 4,200');
 const t5 = await bill(cashier).innerText();
@@ -285,5 +293,21 @@ await tables.bringToFront();
 for (const n of [409, 410]) await tables.locator(`a[href*="${id(n)}"]`).filter({ hasText: 'Free' }).waitFor({ timeout: 6_000 });
 ok('the held item came back on T9 (Rs. 1,000, one Bill Now) → invoice #6; T9 and T10 are both Free on the Tables board');
 
+console.log('Quick sale — a customer buys a burger: no table, no customer details, just product + Bill Now');
+await cashier.bringToFront();
+await cashier.getByRole('button', { name: 'New bill', exact: true }).click();
+await bill(cashier).getByRole('radio', { name: 'Takeaway', checked: true }).waitFor();
+assert.equal(await cashier.getByText('Find table no.').count(), 0, 'the table search box is gone');
+await pick(cashier, 'Beef Burger');
+await grandTotal(cashier, 'Rs. 550');
+await bill(cashier).getByRole('button', { name: 'Bill Now' }).click();
+dialog = cashier.getByRole('dialog');
+await waitText(dialog, 'Rs. 550');
+await shot(cashier, '09-desktop-cashier-quick-sale');
+await dialog.getByRole('button', { name: 'Record payment' }).click();
+await waitText(cashier, 'Paid · Invoice #7');
+await waitText(bill(cashier), 'Takeaway · Order #7');
+ok('a new bill starts as Takeaway; Beef Burger + Bill Now with no table and no customer → order #7 paid, invoice #7');
+
 await browser.close();
-console.log('POS walkthrough passed: Flow A (dine-in, takeaway, hold, discounts, split / pending payment, Bill Now) and Flow B (Call Waiter, payment) and many tables at once.');
+console.log('POS walkthrough passed: Flow A (dine-in, takeaway, hold, discounts, split / pending payment, Bill Now) and Flow B (Call Waiter, payment), many tables at once and a quick sale.');

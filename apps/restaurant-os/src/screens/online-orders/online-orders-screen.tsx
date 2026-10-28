@@ -214,7 +214,7 @@ export function OnlineOrdersScreen() {
                   {done.map(({ order }) => (
                     <li key={order.id} className="flex items-center justify-between gap-2">
                       <span className="font-bold">#{order.dailyNumber}</span>
-                      <span className="truncate text-slate-600">{order.customerName}</span>
+                      <span className="truncate text-slate-600">{order.customerName || t('pos.walkIn')}</span>
                       <Badge tone={ORDER_TONES[order.status]}>{t(`orderStatus.${order.status}`)}</Badge>
                       <span className="tabular-nums">{formatPaisa(order.totals.total)}</span>
                     </li>

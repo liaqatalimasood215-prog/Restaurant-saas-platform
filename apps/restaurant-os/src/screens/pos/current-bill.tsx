@@ -386,7 +386,7 @@ export function CurrentBill({
                 value={draft.customer}
                 onChange={(customer) => setDraft((d) => ({ ...d, customer }))}
                 withAddress={draft.type === 'DELIVERY'}
-                optional={false}
+                optional={draft.type === 'TAKEAWAY'}
               />
             </section>
           )}

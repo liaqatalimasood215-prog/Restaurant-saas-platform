@@ -889,8 +889,12 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const repeated = data.idempotency[input.idempotencyKey];
         if (repeated) return this.findOrder(data, repeated);
         if (input.items.length === 0) throw new ApiError('VALIDATION', 'Add at least one item.');
-        if (input.customerName.trim().length < 2) throw new ApiError('VALIDATION', 'Enter the customer name.');
-        if (!PHONE_PATTERN.test(input.customerPhone.trim())) throw new ApiError('VALIDATION', 'Phone must look like 0300-1234567.');
+        // A counter sale (takeaway) needs no customer; a delivery needs name, phone and address.
+        const name = input.customerName.trim();
+        const phone = input.customerPhone.trim();
+        const walkIn = input.type === 'TAKEAWAY';
+        if ((!walkIn || name) && name.length < 2) throw new ApiError('VALIDATION', 'Enter the customer name.');
+        if ((!walkIn || phone) && !PHONE_PATTERN.test(phone)) throw new ApiError('VALIDATION', 'Phone must look like 0300-1234567.');
         if (input.type === 'DELIVERY' && input.customerAddress.trim().length < 5) {
           throw new ApiError('VALIDATION', 'Enter the delivery address.');
         }
@@ -900,8 +904,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
             type: input.type,
             channel: input.channel,
             status: initialStatus(input.type, input.channel),
-            customerName: input.customerName.trim(),
-            customerPhone: input.customerPhone.trim(),
+            customerName: name || null,
+            customerPhone: phone || null,
             customerAddress: input.type === 'DELIVERY' ? input.customerAddress.trim() : null,
             note: input.note.trim().slice(0, 200),
           },

@@ -84,7 +84,7 @@ export function OrderCard({
         </div>
 
         <div className="text-sm">
-          <p className="font-bold text-slate-900">{order.customerName}</p>
+          <p className="font-bold text-slate-900">{order.customerName || t('pos.walkIn')}</p>
           {order.customerPhone && (
             <a href={`tel:${order.customerPhone}`} className="flex items-center gap-1 font-semibold text-brand">
               <Phone className="size-4" aria-hidden />

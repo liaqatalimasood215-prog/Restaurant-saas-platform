@@ -48,7 +48,7 @@ export function notificationBody(n: StaffNotification): string {
     case 'ONLINE_ORDER':
       return t('alerts.onlineOrderBody', { type: t(`orderType.${n.orderType}`), total: formatPaisa(n.total), name: n.customerName });
     case 'COUNTER_READY':
-      return n.orderType === 'DELIVERY' ? t('alerts.assignRider', { name: n.customerName }) : t('alerts.readyForPickup', { name: n.customerName });
+      return n.orderType === 'DELIVERY' ? t('alerts.assignRider', { name: n.customerName || t('pos.walkIn') }) : t('alerts.readyForPickup', { name: n.customerName || t('pos.walkIn') });
   }
 }
 

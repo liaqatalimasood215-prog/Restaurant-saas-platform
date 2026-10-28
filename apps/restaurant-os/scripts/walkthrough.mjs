@@ -203,8 +203,8 @@ await shot(serviceWaiter, '08-phone-service-waiter-bill-accepted');
 
 console.log('9. Cashier finds Table 5, prints the pre-bill, records payment, prints the paid receipt (Test A steps 5–6)');
 await cashier.bringToFront();
-await cashier.locator('#pos-table').fill('5');
-await cashier.keyboard.press('Enter');
+await cashier.getByRole('button', { name: /^Running bills/ }).click();
+await cashier.getByRole('button', { name: /^T5 / }).click();
 await waitText(cashier, 'T5 · Order #1');
 const bill = await cashier.locator('main').innerText();
 for (const line of ['2 × Classic Pizza', '4 × Zinger Burger', '2 × Loaded Fries', '2 × Alfredo Pasta', '4 × Cold Drink', 'Rs. 5,900']) {
