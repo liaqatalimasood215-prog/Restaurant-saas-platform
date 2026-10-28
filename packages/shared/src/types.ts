@@ -203,6 +203,12 @@ export interface OrderDiscount {
   givenBy: Uuid;
 }
 
+/** A discount the Owner/Manager chose on a bill before it was sent (saved with the new order). */
+export interface DiscountChoice {
+  input: DiscountInput;
+  reason: string;
+}
+
 /** A waiter asked for the bill; the cashier accepts it (the waiter sees the acknowledgement). */
 export interface BillRequest {
   requestedBy: Uuid;
@@ -305,6 +311,8 @@ export interface NotificationItem {
  *   (or, without one, the Super Waiter who took the order) and for Owner/Manager.
  * - BILL_REQUESTED: a table asked for the bill, for Cashier/Owner/Manager until accepted.
  * - BILL_ACCEPTED: the cashier accepted, for the waiter who asked, until the bill is paid.
+ * - WAITER_CALLED: the cashier pressed "Call Waiter" for a table, for the Service Waiter of that table
+ *   (or, without one, the Super Waiter of the order), for 15 minutes.
  */
 export type StaffNotification =
   | {
@@ -319,17 +327,24 @@ export type StaffNotification =
     }
   | { kind: 'BILL_REQUESTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; total: Paisa; requestedByName: string; at: IsoDateTime }
   | { kind: 'BILL_ACCEPTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; acceptedByName: string; at: IsoDateTime }
+  | { kind: 'WAITER_CALLED'; id: string; tableId: Uuid; tableName: string; calledByName: string; at: IsoDateTime }
   /** A customer order waiting for Accept / Reject (repeating alarm until answered) */
   | { kind: 'ONLINE_ORDER'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; total: Paisa; customerName: string; at: IsoDateTime }
   /** A delivery or takeaway order is READY: assign a rider or hand it over */
   | { kind: 'COUNTER_READY'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; customerName: string; at: IsoDateTime };
 
+/** The cashier called the waiter of a table from the POS ("Call Waiter"). */
+export interface WaiterCall extends BranchScoped {
+  id: Uuid;
+  tableId: Uuid;
+  calledBy: Uuid;
+  calledAt: IsoDateTime;
+}
+
 /** A bill the cashier put on hold before sending it to the kitchen (not an order yet). */
 export interface HeldBill extends BranchScoped {
   id: Uuid;
   type: OrderType;
-  /** Takeaway ordered by phone (channel PHONE) */
-  phoneOrder: boolean;
   tableId: Uuid | null;
   guests: number | null;
   customerName: string;
@@ -337,6 +352,8 @@ export interface HeldBill extends BranchScoped {
   customerAddress: string;
   note: string;
   items: DraftItemInput[];
+  /** Discount the Owner/Manager chose before the bill was held */
+  discount: DiscountChoice | null;
   heldBy: Uuid;
   heldAt: IsoDateTime;
 }

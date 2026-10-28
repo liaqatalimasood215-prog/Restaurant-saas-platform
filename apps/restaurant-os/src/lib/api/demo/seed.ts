@@ -14,13 +14,14 @@ import {
   type Restaurant,
   type RiderCashSettlement,
   type StaffUser,
+  type WaiterCall,
 } from '@restaurant-saas/shared';
 
 /**
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 6;
+export const DEMO_DATA_VERSION = 7;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -50,6 +51,7 @@ export interface DemoData {
   invoiceCounter: number;
   riderSettlements: RiderCashSettlement[];
   heldBills: HeldBill[];
+  waiterCalls: WaiterCall[];
 }
 
 const scoped = { restaurantId: RESTAURANT_ID, branchId: BRANCH_ID };
@@ -266,5 +268,6 @@ export function createSeed(): DemoData {
     invoiceCounter: 0,
     riderSettlements: [],
     heldBills: [],
+    waiterCalls: [],
   };
 }

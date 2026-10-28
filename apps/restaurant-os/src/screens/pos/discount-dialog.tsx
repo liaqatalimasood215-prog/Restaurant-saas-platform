@@ -1,18 +1,33 @@
 'use client';
 
 import { useState } from 'react';
-import { BPS_PER_PERCENT, formatPaisa, rupeesToPaisa, type DiscountInput, type Order } from '@restaurant-saas/shared';
+import { BPS_PER_PERCENT, formatPaisa, rupeesToPaisa, type DiscountChoice, type DiscountInput } from '@restaurant-saas/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { t } from '@/i18n';
-import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
-/** Discount (Owner/Manager only, MASTER_PROMPT.md §8): % or fixed amount, always with a reason. */
-export function DiscountDialog({ order, onClose, onDone }: { order: Order; onClose: () => void; onDone: (order: Order) => void }) {
-  const [kind, setKind] = useState<'PERCENT' | 'FIXED'>('PERCENT');
-  const [value, setValue] = useState('');
-  const [reason, setReason] = useState('');
+/**
+ * Discount (Owner/Manager only, MASTER_PROMPT.md §8): % or fixed amount, always with a reason.
+ * Works for a running order and for a new bill before it is sent (the caller saves it).
+ */
+export function DiscountDialog({
+  subtotal,
+  current,
+  onApply,
+  onClose,
+}: {
+  subtotal: number;
+  current: DiscountChoice | null;
+  /** null removes the discount; throws with a message when it cannot be saved */
+  onApply: (discount: DiscountInput | null, reason: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [kind, setKind] = useState<'PERCENT' | 'FIXED'>(current?.input.kind ?? 'PERCENT');
+  const [value, setValue] = useState(
+    !current ? '' : current.input.kind === 'PERCENT' ? String(current.input.bps / BPS_PER_PERCENT) : String(current.input.amount / 100),
+  );
+  const [reason, setReason] = useState(current?.reason ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -20,7 +35,7 @@ export function DiscountDialog({ order, onClose, onDone }: { order: Order; onClo
     setBusy(true);
     setError(null);
     try {
-      onDone(await getApi().applyDiscount(order.id, discount, reason));
+      await onApply(discount, reason.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : t('states.errorBody'));
       setBusy(false);
@@ -47,7 +62,7 @@ export function DiscountDialog({ order, onClose, onDone }: { order: Order; onClo
       title={t('pos.discountTitle')}
       footer={
         <>
-          {order.discount && (
+          {current && (
             <Button variant="ghost" className="mr-auto text-red-700" disabled={busy} onClick={() => apply(null)}>
               {t('pos.removeDiscount')}
             </Button>
@@ -61,7 +76,7 @@ export function DiscountDialog({ order, onClose, onDone }: { order: Order; onClo
         </>
       }
     >
-      <p className="mb-3">{t('pos.discountOn', { subtotal: formatPaisa(order.totals.itemsSubtotal) })}</p>
+      <p className="mb-3">{t('pos.discountOn', { subtotal: formatPaisa(subtotal) })}</p>
       <div className="mb-3 grid grid-cols-2 gap-2">
         {(['PERCENT', 'FIXED'] as const).map((k) => (
           <button

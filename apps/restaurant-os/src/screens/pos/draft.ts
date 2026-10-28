@@ -1,4 +1,4 @@
-import type { OrderType } from '@restaurant-saas/shared';
+import type { DiscountChoice, OrderType } from '@restaurant-saas/shared';
 import type { CartLine } from '../waiter/cart';
 import type { CustomerValue } from './customer-fields';
 
@@ -8,8 +8,6 @@ import type { CustomerValue } from './customer-fields';
  */
 export interface Draft {
   type: OrderType;
-  /** "Phone Call": a takeaway the customer ordered by phone (order channel PHONE) */
-  phoneOrder: boolean;
   tableId: string | null;
   guests: number;
   customer: CustomerValue;
@@ -23,12 +21,13 @@ export interface Draft {
   sendKey: string;
   /** "Bill Now" on a new bill: open the payment as soon as the new order is loaded */
   payNow: boolean;
+  /** Owner/Manager discount chosen before sending; saved with the new order */
+  discount: DiscountChoice | null;
 }
 
-export function newDraft(type: OrderType = 'DINE_IN', phoneOrder = false): Draft {
+export function newDraft(type: OrderType = 'DINE_IN'): Draft {
   return {
     type,
-    phoneOrder: type === 'TAKEAWAY' && phoneOrder,
     tableId: null,
     guests: 1,
     customer: { name: '', phone: '', address: '' },
@@ -38,5 +37,6 @@ export function newDraft(type: OrderType = 'DINE_IN', phoneOrder = false): Draft
     heldId: null,
     sendKey: crypto.randomUUID(),
     payNow: false,
+    discount: null,
   };
 }

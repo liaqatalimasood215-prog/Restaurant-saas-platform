@@ -4,13 +4,13 @@ import { useEffect, useRef, useState, type ButtonHTMLAttributes } from 'react';
 import Link from 'next/link';
 import {
   Armchair,
+  BellRing,
   CheckCircle2,
   ChefHat,
   Info,
   Pause,
   Pencil,
   Percent,
-  Phone,
   Printer,
   ReceiptText,
   ShoppingBag,
@@ -24,6 +24,8 @@ import {
   can,
   formatPaisa,
   formatQuantity,
+  type BillTotals,
+  type DiscountInput,
   type DraftItemInput,
   type MenuSnapshot,
   type Order,
@@ -50,14 +52,14 @@ import { PrintDialog } from './print-dialog';
 import { ProductArt } from './product-art';
 import type { PrintKind } from './printable-bill';
 
-/** The four order buttons. "Phone Call" is a takeaway ordered by phone (order channel PHONE). */
-const ORDER_OPTIONS: { key: string; type: OrderType; phone: boolean; label: MessageKey; icon: typeof Phone }[] = [
-  { key: 'DINE_IN', type: 'DINE_IN', phone: false, label: 'orderType.DINE_IN', icon: UtensilsCrossed },
-  { key: 'TAKEAWAY', type: 'TAKEAWAY', phone: false, label: 'orderType.TAKEAWAY', icon: ShoppingBag },
-  { key: 'DELIVERY', type: 'DELIVERY', phone: false, label: 'orderType.DELIVERY', icon: Truck },
-  { key: 'PHONE', type: 'TAKEAWAY', phone: true, label: 'pos.typePhone', icon: Phone },
+type Icon = typeof ChefHat;
+
+/** The order type buttons; "Call Waiter" sits next to them (owner's reference design). */
+const ORDER_OPTIONS: { type: OrderType; label: MessageKey; icon: Icon }[] = [
+  { type: 'DINE_IN', label: 'orderType.DINE_IN', icon: UtensilsCrossed },
+  { type: 'TAKEAWAY', label: 'orderType.TAKEAWAY', icon: ShoppingBag },
+  { type: 'DELIVERY', label: 'orderType.DELIVERY', icon: Truck },
 ];
-const optionKey = (type: OrderType, phone: boolean) => (type === 'TAKEAWAY' && phone ? 'PHONE' : type);
 const FINISHED = ['PAID', 'PICKED_UP', 'DELIVERED'];
 
 const toDraftItem = (l: CartLine): DraftItemInput => ({
@@ -69,9 +71,10 @@ const toDraftItem = (l: CartLine): DraftItemInput => ({
 });
 
 /**
- * The order panel on the right of the POS (owner's reference design 2026-10-29): order type, table and
- * customer, the items, totals, and two big actions — Send to Kitchen and Bill Now. A sent bill is the
- * SAME order record as Waiter, Kitchen, Tables and Orders.
+ * The order panel on the right of the POS (owner's reference design 2026-10-29): order type and Call
+ * Waiter, table and customer, the items, totals, and two big actions — Send to Kitchen and Bill Now. A
+ * sent bill is the SAME order record as Waiter, Kitchen, Tables and Orders. The Owner/Manager can give
+ * a discount on a new bill too; it is saved together with the new order.
  * On tablet and desktop it fills the screen height: the upper part scrolls, totals and actions never
  * do. A product that was just added (or got one more) scrolls into view and flashes.
  */
@@ -105,6 +108,7 @@ export function CurrentBill({
   const [print, setPrint] = useState<PrintKind | null>(null);
   const [clearing, setClearing] = useState(false);
   const scrollArea = useRef<HTMLDivElement>(null);
+  const tableSelect = useRef<HTMLSelectElement>(null);
   const previousCart = useRef(draft.cart);
 
   useEffect(() => {
@@ -127,18 +131,31 @@ export function CurrentBill({
   const locked = draft.orderId !== null;
   const table = tables.find((e) => e.table.id === draft.tableId);
   const canAddItems = !order || (order.type === 'DINE_IN' && ['OPEN', 'BILL_REQUESTED'].includes(order.status));
-  const estimate = calculateBill({
-    orderType: draft.type,
-    lines: views.map((v) => ({ unitPrice: v.unitPrice, quantity: v.line.quantity })),
-    deliveryFee: branch.deliveryFee,
-    settings: { tax: branch.tax, serviceChargeBps: branch.serviceChargeBps, roundToRupee: branch.roundToRupee },
-  });
+  const estimateWith = (discount: DiscountInput | null): BillTotals =>
+    calculateBill({
+      orderType: draft.type,
+      lines: views.map((v) => ({ unitPrice: v.unitPrice, quantity: v.line.quantity })),
+      discount,
+      deliveryFee: branch.deliveryFee,
+      settings: { tax: branch.tax, serviceChargeBps: branch.serviceChargeBps, roundToRupee: branch.roundToRupee },
+    });
+  // A fixed discount can become bigger than the items after a removal: show it, never crash.
+  let discountTooBig = false;
+  let estimate: BillTotals;
+  try {
+    estimate = estimateWith(order ? null : (draft.discount?.input ?? null));
+  } catch {
+    discountTooBig = true;
+    estimate = estimateWith(null);
+  }
   const due = order ? Math.max(0, order.totals.total - order.paidTotal) : 0;
   const paymentState = !order ? null : due === 0 && order.paidTotal > 0 ? 'PAID' : order.paidTotal > 0 ? 'PARTLY' : 'PENDING';
   const payable = order && !['REJECTED', 'CANCELLED'].includes(order.status) && (order.type !== 'DINE_IN' || ['OPEN', 'BILL_REQUESTED'].includes(order.status));
   const placeLabel = order?.type === 'DINE_IN' ? (table?.table.name ?? '') : t(`orderType.${draft.type}`);
-  const selected = order ? optionKey(order.type, order.channel === 'PHONE') : optionKey(draft.type, draft.phoneOrder);
+  const selected = order ? order.type : draft.type;
   const canPay = can(role, 'payment.record');
+  const canDiscount = can(role, 'order.discount');
+  const callTableId = order?.tableId ?? (draft.type === 'DINE_IN' ? draft.tableId : null);
   /** Pieces count one each; a kg item counts as one line */
   const countItems = (lines: { quantity: number; unit: string }[]) => lines.reduce((n, l) => n + (l.unit === 'piece' ? l.quantity : 1), 0);
   const itemCount = order
@@ -167,30 +184,38 @@ export function CurrentBill({
 
   /** Send the new items to the kitchen (a new order, or the next round of the running table bill). */
   const send = async (payNow: boolean): Promise<Order | null> => {
+    if (draft.type === 'DINE_IN' && !draft.tableId) {
+      setError(t('pos.chooseTableFirst'));
+      tableSelect.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      tableSelect.current?.focus();
+      return null;
+    }
     let sent: Order | null = null;
     await run(async () => {
+      if (discountTooBig) throw new Error(t('pos.discountValue'));
       const items = draft.cart.map(toDraftItem);
       let result: Order;
       if (draft.type === 'DINE_IN') {
-        if (!draft.tableId) throw new Error(t('pos.chooseTableFirst'));
         result = await getApi().sendRound({
-          tableId: draft.tableId,
+          tableId: draft.tableId as string,
           guests: order?.guests ?? draft.guests,
           items,
           idempotencyKey: draft.sendKey,
           customerName: draft.customer.name,
           customerPhone: draft.customer.phone,
+          discount: order ? null : draft.discount,
         });
       } else {
         result = await getApi().createCounterOrder({
           type: draft.type,
-          channel: draft.type === 'DELIVERY' || draft.phoneOrder ? 'PHONE' : 'POS',
+          channel: draft.type === 'DELIVERY' ? 'PHONE' : 'POS',
           customerName: draft.customer.name,
           customerPhone: draft.customer.phone,
           customerAddress: draft.customer.address,
           note: draft.note,
           items,
           idempotencyKey: draft.sendKey,
+          discount: draft.discount,
         });
       }
       if (draft.heldId) await getApi().deleteHeldBill(draft.heldId);
@@ -202,6 +227,7 @@ export function CurrentBill({
         heldId: null,
         sendKey: crypto.randomUUID(),
         payNow: payNow && result.id !== d.orderId,
+        discount: null,
       }));
       toast.show({ tone: 'success', title: t('pos.sentToKitchen', { n: result.dailyNumber }) });
     });
@@ -221,7 +247,6 @@ export function CurrentBill({
       await getApi().holdBill({
         id: draft.heldId,
         type: draft.type,
-        phoneOrder: draft.phoneOrder,
         tableId: draft.tableId,
         guests: draft.guests,
         customerName: draft.customer.name,
@@ -229,18 +254,39 @@ export function CurrentBill({
         customerAddress: draft.customer.address,
         note: draft.note,
         items: draft.cart.map(toDraftItem),
+        discount: draft.discount,
       });
       toast.show({ tone: 'success', title: t('pos.held') });
       onNewBill();
     });
 
+  const callWaiter = (tableId: string) =>
+    run(async () => {
+      const called = await getApi().callWaiter(tableId);
+      toast.show({ tone: 'success', title: t('pos.waiterCalled', { table: called.tableName }), body: called.waiterNames.join(', ') });
+    });
+
+  /** Discount on the running order (server) or on the new bill (saved with it when sent). */
+  const saveDiscount = async (discount: DiscountInput | null, reason: string) => {
+    if (order) {
+      await getApi().applyDiscount(order.id, discount, reason);
+    } else {
+      if (discount) estimateWith(discount); // throws when the discount is more than the items
+      setDraft((d) => ({ ...d, discount: discount ? { input: discount, reason } : null }));
+    }
+    setDiscounting(false);
+    toast.show({ tone: 'success', title: discount ? t('pos.discountApplied') : t('pos.discountRemoved') });
+  };
+
   const finished = order && FINISHED.includes(order.status);
   const handOver = order?.type === 'TAKEAWAY' && order.status === 'READY';
   const sectionTitle = 'text-sm font-bold text-slate-900';
+  const typeButton =
+    'flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border text-xs font-bold transition disabled:cursor-not-allowed short:min-h-11 short:flex-row short:gap-1.5';
 
   return (
     <div data-pos-bill className="flex flex-col gap-3 lg:min-h-0 short:gap-2">
-      {/* Order type */}
+      {/* Order type and Call Waiter */}
       <Card className="shrink-0 p-3 short:p-2.5">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 short:mb-1">
           <h2 className="text-base font-bold text-slate-900 short:text-sm">{t('pos.orderType')}</h2>
@@ -254,31 +300,44 @@ export function CurrentBill({
             )}
           </span>
         </div>
-        <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label={t('pos.orderType')}>
-          {ORDER_OPTIONS.map((option) => {
-            const active = selected === option.key;
-            const Icon = option.icon;
-            return (
-              <button
-                key={option.key}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                disabled={locked}
-                onClick={() =>
-                  setDraft((d) => ({ ...d, type: option.type, phoneOrder: option.phone, tableId: option.type === 'DINE_IN' ? d.tableId : null }))
-                }
-                className={cn(
-                  'flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border text-xs font-bold transition disabled:cursor-not-allowed short:min-h-11 short:flex-row short:gap-1.5',
-                  active ? 'border-brand bg-brand text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
-                  locked && !active && 'opacity-50',
-                )}
-              >
-                <Icon className="size-6 shrink-0 short:size-4" aria-hidden />
-                {t(option.label)}
-              </button>
-            );
-          })}
+        <div className="grid grid-cols-4 gap-2">
+          <div className="contents" role="radiogroup" aria-label={t('pos.orderType')}>
+            {ORDER_OPTIONS.map((option) => {
+              const active = selected === option.type;
+              const OptionIcon = option.icon;
+              return (
+                <button
+                  key={option.type}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  disabled={locked}
+                  onClick={() => setDraft((d) => ({ ...d, type: option.type, tableId: option.type === 'DINE_IN' ? d.tableId : null }))}
+                  className={cn(
+                    typeButton,
+                    active ? 'border-brand bg-brand text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+                    locked && !active && 'opacity-50',
+                  )}
+                >
+                  <OptionIcon className="size-6 shrink-0 short:size-4" aria-hidden />
+                  {t(option.label)}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            disabled={busy || !callTableId || !can(role, 'bill.accept')}
+            title={callTableId ? undefined : t('pos.callWaiterNeedsTable')}
+            onClick={() => callTableId && void callWaiter(callTableId)}
+            className={cn(
+              typeButton,
+              'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:border-slate-200 disabled:bg-white disabled:text-slate-400',
+            )}
+          >
+            <BellRing className="size-6 shrink-0 short:size-4" aria-hidden />
+            {t('pos.callWaiter')}
+          </button>
         </div>
       </Card>
 
@@ -286,22 +345,24 @@ export function CurrentBill({
       <Card className="flex flex-col lg:min-h-0 lg:flex-1">
         <div ref={scrollArea} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 short:space-y-2 short:p-2.5">
           <section className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className={sectionTitle}>
-                {draft.type === 'DINE_IN' ? t('pos.tableAndCustomer') : draft.type === 'DELIVERY' ? t('pos.customerAndDelivery') : t('pos.customer')}
-              </h3>
-              {draft.type === 'DINE_IN' && !order && <span className={cn(sectionTitle, 'w-34')}>{t('waiter.guests')}</span>}
-            </div>
+            {draft.type !== 'TAKEAWAY' && (
+              <div className="flex items-center justify-between">
+                <h3 className={sectionTitle}>{draft.type === 'DINE_IN' ? t('pos.tableAndCustomer') : t('pos.customerAndDelivery')}</h3>
+                {draft.type === 'DINE_IN' && !order && <span className={cn(sectionTitle, 'w-34')}>{t('waiter.guests')}</span>}
+              </div>
+            )}
             {draft.type === 'DINE_IN' && (
               <div className="flex items-center gap-2">
                 <label className="relative min-w-0 flex-1">
                   <span className="sr-only">{t('pos.table')}</span>
                   <Armchair className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-slate-500" aria-hidden />
                   <select
+                    ref={tableSelect}
                     value={draft.tableId ?? ''}
                     disabled={locked}
                     onChange={(e) => {
                       const entry = tables.find((x) => x.table.id === e.target.value);
+                      setError(null);
                       setDraft((d) => ({ ...d, tableId: e.target.value || null, orderId: entry?.order?.id ?? null }));
                     }}
                     className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 font-bold short:min-h-10"
@@ -377,7 +438,7 @@ export function CurrentBill({
                   {views.length > 0 && <span className="text-slate-500"> ({views.length})</span>}
                 </h3>
                 {views.length > 0 && (
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-0.5">
                     <button
                       type="button"
                       disabled={busy}
@@ -387,6 +448,17 @@ export function CurrentBill({
                       <Pause className="size-4" aria-hidden />
                       {t('pos.hold')}
                     </button>
+                    {!order && canDiscount && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setDiscounting(true)}
+                        className="flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                      >
+                        <Percent className="size-4" aria-hidden />
+                        {t('pos.discount')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={busy}
@@ -473,17 +545,19 @@ export function CurrentBill({
               ) : (
                 <>
                   <Row label={itemCount === 1 ? t('pos.subtotalOneItem') : t('pos.subtotalItems', { n: itemCount })} amount={estimate.itemsSubtotal} />
+                  {draft.discount && estimate.discount > 0 && <Row label={`${t('pos.discount')} (${draft.discount.reason})`} amount={-estimate.discount} />}
                   <Row label={t('pos.taxAndService')} amount={estimate.tax + estimate.serviceCharge} />
                   {views.length > 0 && estimate.deliveryFee > 0 && <Row label={t('pos.deliveryCharge')} amount={estimate.deliveryFee} />}
+                  {views.length > 0 && estimate.rounding !== 0 && <Row label={t('pos.rounding')} amount={estimate.rounding} />}
                   <Row label={t('pos.total')} amount={views.length > 0 ? estimate.total : 0} strong />
                 </>
               )}
             </dl>
           </div>
-          {!order && (
+          {!order && !canDiscount && (
             <p className="flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-medium leading-snug text-amber-900">
               <Info className="mt-px size-3.5 shrink-0" aria-hidden />
-              {t('pos.discountAfterSend')}
+              {t('pos.discountOwnerOnly')}
             </p>
           )}
 
@@ -493,6 +567,7 @@ export function CurrentBill({
             </p>
           )}
 
+          {!order && discountTooBig && <p className="text-xs font-semibold text-red-700">{t('pos.discountValue')}</p>}
           {order && (
             <div className="flex flex-wrap gap-2">
               {payable && (
@@ -500,7 +575,7 @@ export function CurrentBill({
                   {t('pos.printBill')}
                 </SmallAction>
               )}
-              {payable && due > 0 && can(role, 'order.discount') && (
+              {payable && due > 0 && canDiscount && (
                 <SmallAction icon={Percent} disabled={busy} onClick={() => setDiscounting(true)}>
                   {t('pos.discount')}
                 </SmallAction>
@@ -574,7 +649,7 @@ export function CurrentBill({
               <Button
                 onClick={() => {
                   // Only unsent items go; anything already sent stays on the shared order.
-                  setDraft((d) => (d.orderId ? { ...d, cart: [] } : newDraft(d.type, d.phoneOrder)));
+                  setDraft((d) => (d.orderId ? { ...d, cart: [] } : newDraft(d.type)));
                   setClearing(false);
                 }}
               >
@@ -605,14 +680,12 @@ export function CurrentBill({
           }}
         />
       )}
-      {discounting && order && (
+      {discounting && (
         <DiscountDialog
-          order={order}
+          subtotal={order ? order.totals.itemsSubtotal : estimate.itemsSubtotal}
+          current={order ? order.discount : draft.discount}
+          onApply={saveDiscount}
           onClose={() => setDiscounting(false)}
-          onDone={() => {
-            setDiscounting(false);
-            toast.show({ tone: 'success', title: t('pos.discountApplied') });
-          }}
         />
       )}
       {print && order && (
@@ -634,27 +707,27 @@ function Row({ label, amount, strong = false }: { label: string; amount: number;
   );
 }
 
-function BigAction({ icon: Icon, children, ...rest }: { icon: typeof Phone } & ButtonHTMLAttributes<HTMLButtonElement>) {
+function BigAction({ icon: ActionIcon, children, ...rest }: { icon: Icon } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
       className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-brand px-2 text-base font-bold text-white shadow-sm hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-brand/40 short:min-h-11"
       {...rest}
     >
-      <Icon className="size-5 shrink-0" aria-hidden />
+      <ActionIcon className="size-5 shrink-0" aria-hidden />
       <span className="leading-tight">{children}</span>
     </button>
   );
 }
 
-function SmallAction({ icon: Icon, children, ...rest }: { icon: typeof Phone } & ButtonHTMLAttributes<HTMLButtonElement>) {
+function SmallAction({ icon: ActionIcon, children, ...rest }: { icon: Icon } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
       className="flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
       {...rest}
     >
-      <Icon className="size-4 shrink-0" aria-hidden />
+      <ActionIcon className="size-4 shrink-0" aria-hidden />
       {children}
     </button>
   );

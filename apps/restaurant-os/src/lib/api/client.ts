@@ -1,6 +1,7 @@
 import type {
   Branch,
   CustomerSummary,
+  DiscountChoice,
   DiscountInput,
   HeldBill,
   DraftItemInput,
@@ -58,14 +59,14 @@ export interface SendRoundInput {
   /** Optional customer for a dine-in bill made at the POS */
   customerName?: string;
   customerPhone?: string;
+  /** Discount chosen before sending (Owner/Manager only; checked by the server) */
+  discount?: DiscountChoice | null;
 }
 
 export interface HeldBillInput {
   /** Empty for a new held bill */
   id: Uuid | null;
   type: OrderType;
-  /** Takeaway ordered by phone (POS "Phone Call") */
-  phoneOrder: boolean;
   tableId: Uuid | null;
   guests: number | null;
   customerName: string;
@@ -73,6 +74,7 @@ export interface HeldBillInput {
   customerAddress: string;
   note: string;
   items: DraftItemInput[];
+  discount: DiscountChoice | null;
 }
 
 export interface RecordPaymentInput {
@@ -101,6 +103,8 @@ export interface CounterOrderInput {
   note: string;
   items: DraftItemInput[];
   idempotencyKey: string;
+  /** Discount chosen before sending (Owner/Manager only; checked by the server) */
+  discount?: DiscountChoice | null;
 }
 
 export interface OrderFilter {
@@ -140,6 +144,8 @@ export interface ApiClient {
   requestBill(orderId: Uuid): Promise<Order>;
   /** Cashier accepts the request; the waiter who asked sees the acknowledgement. */
   acceptBillRequest(orderId: Uuid): Promise<Order>;
+  /** POS "Call Waiter": the waiter of the table gets an alert. Returns who was called. */
+  callWaiter(tableId: Uuid): Promise<{ tableName: string; waiterNames: string[] }>;
   /** Owner/Manager: % or fixed discount with a reason; null removes it. */
   applyDiscount(orderId: Uuid, discount: DiscountInput | null, reason: string): Promise<Order>;
   /** POS "Hold": an unsent bill is kept and can be reopened later. */

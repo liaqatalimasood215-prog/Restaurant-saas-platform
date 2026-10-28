@@ -212,7 +212,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
                   <p className={listTitle}>{t('pos.runningCounter')}</p>
                   <div className="flex flex-wrap gap-2">
                     {unpaidCounter.map(({ order }) => (
-                      <button key={order.id} type="button" onClick={() => choose({ ...newDraft(order.type, order.channel === 'PHONE'), orderId: order.id })} className={chip(draft.orderId === order.id)}>
+                      <button key={order.id} type="button" onClick={() => choose({ ...newDraft(order.type), orderId: order.id })} className={chip(draft.orderId === order.id)}>
                         #{order.dailyNumber} · {t(`orderType.${order.type}`)}
                         <span className="tabular-nums">{formatPaisa(order.totals.total - order.paidTotal)}</span>
                       </button>
@@ -235,7 +235,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
                           type="button"
                           onClick={() =>
                             choose({
-                              ...newDraft(h.type, h.phoneOrder),
+                              ...newDraft(h.type),
                               tableId: h.tableId,
                               guests: h.guests ?? 1,
                               orderId: entry?.order?.id ?? null,
@@ -243,11 +243,12 @@ export function PosScreen({ tableId }: { tableId?: string }) {
                               note: h.note,
                               cart: h.items.map((i) => ({ ...i, key: crypto.randomUUID() })),
                               heldId: h.id,
+                              discount: h.discount,
                             })
                           }
                           className={chip(draft.heldId === h.id)}
                         >
-                          {entry?.table.name ?? (h.customerName || t(`orderType.${h.type}`))} · {h.phoneOrder ? t('pos.typePhone') : t(`orderType.${h.type}`)} ·{' '}
+                          {entry?.table.name ?? (h.customerName || t(`orderType.${h.type}`))} · {t(`orderType.${h.type}`)} ·{' '}
                           {t('pos.itemCount', { n: h.items.length })}
                         </button>
                       );

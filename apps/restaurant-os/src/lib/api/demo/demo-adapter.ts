@@ -19,6 +19,7 @@ import {
   unitPriceFor,
   type Branch,
   type CustomerSummary,
+  type DiscountChoice,
   type DiscountInput,
   type DraftItemInput,
   type HeldBill,
@@ -397,6 +398,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         addKitchenTickets(data, target, lines, roundNo, now);
         target.items.push(...lines);
         recalculate(target, data.branch);
+        if (input.discount) this.giveDiscount(data, this.require(data, 'order.discount'), target, input.discount);
         data.idempotency[input.idempotencyKey] = target.id;
         return target;
       }),
@@ -513,6 +515,35 @@ export class DemoAdapter implements ApiClient, DemoControls {
     );
   }
 
+  callWaiter(tableId: string): Promise<{ tableName: string; waiterNames: string[] }> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'bill.accept');
+        const table = data.tables.find((t) => t.id === tableId && t.isActive);
+        if (!table) throw new ApiError('NOT_FOUND', 'Table not found.');
+        const waiters = this.waitersCalledFor(data, table.id);
+        if (waiters.length === 0) throw new ApiError('VALIDATION', `No waiter works on ${table.name}.`);
+        const now = nowIso();
+        // A double tap within 10 seconds is one call.
+        const recent = data.waiterCalls.find((c) => c.tableId === table.id && Date.parse(now) - Date.parse(c.calledAt) < 10_000);
+        if (!recent) {
+          data.waiterCalls.push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, tableId: table.id, calledBy: user.id, calledAt: now });
+        }
+        return { tableName: table.name, waiterNames: waiters.map((w) => w.name) };
+      }),
+    );
+  }
+
+  /** The Service Waiters of the table; without one, the Super Waiter of its order (or of the table). */
+  private waitersCalledFor(data: DemoData, tableId: string): StaffUser[] {
+    const active = data.staff.filter((s) => s.isActive);
+    const service = active.filter((s) => s.role === 'SERVICE_WAITER' && worksOnTable(s, tableId));
+    if (service.length > 0) return service;
+    const order = data.orders.find((o) => o.tableId === tableId && OPEN_DINE_IN.includes(o.status));
+    const orderWaiter = active.find((s) => s.id === order?.waiterId && s.role === 'WAITER');
+    return orderWaiter ? [orderWaiter] : active.filter((s) => s.role === 'WAITER' && worksOnTable(s, tableId));
+  }
+
   printPreBill(orderId: string): Promise<Order> {
     return this.request(() =>
       this.store.update((data) => {
@@ -626,26 +657,29 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (!open || isFullyPaid(order.totals.total, order.paidTotal) && order.paidTotal > 0) {
           throw new ApiError('CONFLICT', 'This bill is already paid or closed.');
         }
-        if (discount && !reason.trim()) throw ruleError('REASON_REQUIRED');
-        const previous = order.discount;
-        order.discount = discount ? { input: discount, reason: reason.trim(), givenBy: user.id } : null;
-        try {
+        if (discount) this.giveDiscount(data, user, order, { input: discount, reason });
+        else {
+          order.discount = null;
           recalculate(order, data.branch);
-        } catch (err) {
-          order.discount = previous;
-          throw new ApiError('VALIDATION', err instanceof Error ? err.message : 'Invalid discount.');
+          order.history.push({ fromStatus: order.status, toStatus: order.status, changedBy: user.id, reason: 'Discount removed', changedAt: nowIso() });
         }
-        if (order.totals.total < order.paidTotal) throw new ApiError('VALIDATION', 'The discount is more than what is still due.');
-        order.history.push({
-          fromStatus: order.status,
-          toStatus: order.status,
-          changedBy: user.id,
-          reason: discount ? `Discount: ${reason.trim()}` : 'Discount removed',
-          changedAt: nowIso(),
-        });
         return order;
       }),
     );
+  }
+
+  /** Owner/Manager discount with a reason; recalculates the bill and writes a history row. */
+  private giveDiscount(data: DemoData, user: StaffUser, order: Order, choice: DiscountChoice): void {
+    const reason = choice.reason.trim();
+    if (!reason) throw ruleError('REASON_REQUIRED');
+    order.discount = { input: choice.input, reason, givenBy: user.id };
+    try {
+      recalculate(order, data.branch);
+    } catch (err) {
+      throw new ApiError('VALIDATION', err instanceof Error ? err.message : 'Invalid discount.');
+    }
+    if (order.totals.total < order.paidTotal) throw new ApiError('VALIDATION', 'The discount is more than what is still due.');
+    order.history.push({ fromStatus: order.status, toStatus: order.status, changedBy: user.id, reason: `Discount: ${reason}`, changedAt: nowIso() });
   }
 
   listHeldBills(): Promise<HeldBill[]> {
@@ -661,10 +695,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
       this.store.update((data) => {
         const user = this.require(data, 'table.order');
         if (input.items.length === 0) throw new ApiError('VALIDATION', 'Add at least one item before holding the bill.');
+        if (input.discount) this.require(data, 'order.discount');
         const existing = input.id ? data.heldBills.find((h) => h.id === input.id) : null;
         const fields = {
           type: input.type,
-          phoneOrder: input.type === 'TAKEAWAY' && input.phoneOrder,
           tableId: input.type === 'DINE_IN' ? input.tableId : null,
           guests: input.guests,
           customerName: input.customerName.trim(),
@@ -672,6 +706,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           customerAddress: input.customerAddress.trim(),
           note: input.note.trim(),
           items: input.items,
+          discount: input.discount,
           heldBy: user.id,
           heldAt: nowIso(),
         };
@@ -878,6 +913,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         recalculate(order, data.branch);
         applyAutomaticSteps(order);
         data.orders.push(order);
+        if (input.discount) this.giveDiscount(data, this.require(data, 'order.discount'), order, input.discount);
         data.idempotency[input.idempotencyKey] = order.id;
         return order;
       }),
@@ -1201,6 +1237,20 @@ export class DemoAdapter implements ApiClient, DemoControls {
             at: request.acceptedAt,
           });
         }
+      }
+      // "Call Waiter" from the POS: shown to the called waiters for 15 minutes.
+      const since = Date.now() - 15 * 60_000;
+      for (const call of data.waiterCalls) {
+        if (Date.parse(call.calledAt) < since) continue;
+        if (!this.waitersCalledFor(data, call.tableId).some((w) => w.id === user.id)) continue;
+        list.push({
+          kind: 'WAITER_CALLED',
+          id: `call:${call.id}`,
+          tableId: call.tableId,
+          tableName: this.tableName(data, call.tableId),
+          calledByName: this.staffName(data, call.calledBy) ?? '',
+          at: call.calledAt,
+        });
       }
       return list.sort((a, b) => a.at.localeCompare(b.at));
     });

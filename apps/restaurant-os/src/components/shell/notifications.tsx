@@ -26,6 +26,8 @@ export function notificationTitle(n: StaffNotification): string {
       return t('alerts.billRequested', { table: n.tableName });
     case 'BILL_ACCEPTED':
       return t('alerts.billAccepted', { table: n.tableName });
+    case 'WAITER_CALLED':
+      return t('alerts.waiterCalled', { table: n.tableName });
     case 'ONLINE_ORDER':
       return t('alerts.onlineOrder', { n: n.dailyNumber });
     case 'COUNTER_READY':
@@ -41,6 +43,8 @@ export function notificationBody(n: StaffNotification): string {
       return t('alerts.billRequestedBody', { total: formatPaisa(n.total), name: n.requestedByName });
     case 'BILL_ACCEPTED':
       return t('alerts.billAcceptedBody', { name: n.acceptedByName });
+    case 'WAITER_CALLED':
+      return t('alerts.waiterCalledBody', { name: n.calledByName });
     case 'ONLINE_ORDER':
       return t('alerts.onlineOrderBody', { type: t(`orderType.${n.orderType}`), total: formatPaisa(n.total), name: n.customerName });
     case 'COUNTER_READY':
@@ -62,7 +66,7 @@ export function notificationLink(n: StaffNotification): string {
 
 /**
  * Staff notifications: food ready (Service Waiter), bill requested (Cashier), bill accepted (the
- * waiter who asked). New ones show a message with sound and vibration. Phase 1: DEMO sync between
+ * waiter who asked), "Call Waiter" from the POS (the waiter of the table). New ones show a message with sound and vibration. Phase 1: DEMO sync between
  * tabs of one browser; between phones this needs the backend and live sync (Phases 4–5).
  */
 export function NotificationsProvider({ children }: { children: ReactNode }) {
@@ -100,7 +104,7 @@ function NotificationsWatcher({ onChange }: { onChange: (list: StaffNotification
     const fresh = data.filter((n) => !seen.current?.has(n.id));
     for (const n of fresh) {
       seen.current.add(n.id);
-      toast.show({ tone: n.kind === 'BILL_REQUESTED' || n.kind === 'ONLINE_ORDER' ? 'info' : 'success', title: notificationTitle(n), body: notificationBody(n) });
+      toast.show({ tone: n.kind === 'BILL_REQUESTED' || n.kind === 'ONLINE_ORDER' || n.kind === 'WAITER_CALLED' ? 'info' : 'success', title: notificationTitle(n), body: notificationBody(n) });
     }
     if (fresh.length > 0) {
       playAlert();

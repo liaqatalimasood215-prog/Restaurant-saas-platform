@@ -618,7 +618,8 @@ never deleted.
 | `audit_logs` | actor_id, action, entity, entity_id, before, after, reason | Pilot |
 | `idempotency_keys` | key, user_id, route, response (kept 24 hours) | Pilot |
 | `customers` | name, phone (unique per restaurant), last_address | Pilot |
-| `held_bills` | type, phone_order, table_id, guests, customer copies, note, items (JSON drafts), held_by, held_at — POS bills on hold, not orders | Pilot |
+| `held_bills` | type, discount (JSON), table_id, guests, customer copies, note, items (JSON drafts), held_by, held_at — POS bills on hold, not orders | Pilot |
+| `waiter_calls` | table_id, called_by, called_at — POS "Call Waiter"; the table's waiter is alerted for 15 minutes | Pilot |
 | `rider_cash_settlements` | rider_id, amount, order ids, settled_by | Pilot |
 | Shifts, printers, customer accounts and addresses | — | P7 |
 | Payroll: salary settings, attendance, advances, payroll runs | — | P8 |
@@ -1144,3 +1145,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-28 | §6.3: auto-ready tickets do not make an order PREPARING (Preview 4). |
 | 2026-10-28 | §7.1 POS: full new-bill screen with Hold, discount, split and pending payment; §9 `held_bills`. |
 | 2026-10-29 | §7.1 POS: Phone Call order button (takeaway, channel PHONE) and Bill Now (send, then take payment); `held_bills.phone_order`. |
+| 2026-10-29 | §7.1 POS: Phone Call replaced by Call Waiter (`waiter_calls`, notification WAITER_CALLED); §8 Owner/Manager discount also on a new bill before sending (saved with the new order); `held_bills.discount` instead of `phone_order`. |
