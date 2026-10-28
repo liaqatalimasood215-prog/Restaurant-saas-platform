@@ -16,7 +16,6 @@ import {
   ShoppingBag,
   Trash2,
   Truck,
-  Users,
 } from 'lucide-react';
 import {
   calculateBill,
@@ -350,28 +349,19 @@ export function CurrentBill({
         <div ref={scrollArea} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 short:space-y-2 short:p-2.5">
           <section className="space-y-2">
             {draft.type !== 'TAKEAWAY' && (
-              <div className="flex items-center justify-between">
-                <h3 className={sectionTitle}>{draft.type === 'DINE_IN' ? t('pos.tableAndCustomer') : t('pos.customerAndDelivery')}</h3>
-                {draft.type === 'DINE_IN' && !order && <span className={cn(sectionTitle, 'w-34')}>{t('waiter.guests')}</span>}
-              </div>
+              <h3 className={sectionTitle}>{draft.type === 'DINE_IN' ? t('pos.tableAndCustomer') : t('pos.customerAndDelivery')}</h3>
             )}
             {draft.type === 'DINE_IN' && (
-              <div className="flex items-center gap-2">
-                <span className="flex min-w-0 flex-1 items-center gap-2">
-                  {table && (
-                    <>
-                      <Armchair className="size-5 shrink-0 text-slate-500" aria-hidden />
-                      <span className="text-xl font-black text-slate-900">{table.table.name}</span>
-                    </>
-                  )}
-                </span>
-                {!order && (
-                  <span className="flex shrink-0 items-center gap-1">
-                    <Users className="size-5 text-slate-500" aria-hidden />
-                    <QuantityStepper size="sm" value={draft.guests} onChange={(n) => setDraft((d) => ({ ...d, guests: n }))} label={t('waiter.guests')} />
-                  </span>
-                )}
-              </div>
+              <button
+                type="button"
+                disabled={locked}
+                onClick={() => setPickingTable(true)}
+                className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-left text-sm font-bold text-slate-900 hover:bg-slate-50 disabled:cursor-default disabled:hover:bg-white short:min-h-10"
+              >
+                <Armchair className="size-4 shrink-0 text-slate-500" aria-hidden />
+                {t('pos.table')}
+                <span className={cn('ml-auto text-lg font-black', !table && 'text-slate-400')}>{table ? table.table.name : '—'}</span>
+              </button>
             )}
             {!order ? (
               <CustomerFields

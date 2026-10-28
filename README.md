@@ -93,6 +93,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-29 | Owner feedback: the 4th button is **Call Waiter** (not a phone order): the table's Service Waiter (or the order's Super Waiter) gets "Cashier calls you — T5". Owner/Manager can now give a discount on a new bill before Send to Kitchen / Bill Now (saved together with the new order; a held bill keeps it); the Cashier sees "Only the Owner or Manager can give a discount." Bill Now on dine-in without a table points to the table box. Demo data version 7 | 57 tests, typecheck, lint pass; all three walkthroughs pass (POS walkthrough adds discount on a new bill and Call Waiter); 1278×627 shows 4 items + totals + buttons |
 | 2026-10-29 | POS: the Dine-in button is labelled **Table** (owner); Orders, receipts and reports still say Dine-in | 57 tests, typecheck, lint pass; all three walkthroughs pass |
 | 2026-10-29 | POS: the table drop-down is removed; tapping **Table** opens a box with every table (green = free, red/amber = running bill with its amount). The chosen table shows at the top and next to Guests; Send / Bill Now without a table opens the box | 57 tests, typecheck, lint pass; all three walkthroughs pass |
+| 2026-10-29 | POS: the Guests counter is removed from the new bill; the Table and Customer rows are shown instead (Table row opens the table box; guests default to 1 for new dine-in orders; the Waiter screen still has Guests) | 57 tests, typecheck, lint pass; all three walkthroughs pass |
 
 ## Commands
 

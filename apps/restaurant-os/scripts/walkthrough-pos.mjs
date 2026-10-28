@@ -60,7 +60,6 @@ console.log('Flow A — dine-in bill made by the cashier');
 const cashier = await openAs(USER.cashier, '/pos', DESKTOP);
 await bill(cashier).getByRole('radio', { name: 'Table' }).click();
 await cashier.getByRole('dialog').getByRole('button', { name: 'T3 — Free' }).click();
-await bill(cashier).getByRole('button', { name: 'Guests +' }).click();
 await pick(cashier, 'Classic Pizza', { size: 'Large', addOns: ['Extra cheese'] });
 await pick(cashier, 'Cold Drink', { quantity: 2 });
 await bill(cashier).getByRole('button', { name: 'Edit Cold Drink' }).click();
