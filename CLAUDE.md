@@ -19,8 +19,9 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - Phase 0 approved by the owner on 2026-10-27.
 - **Phase 1 — Restaurant OS UI prototype** in progress on branch `phase-1/restaurant-os-ui`
   (PROJECT_RULES.md §15–§16, MASTER_PROMPT.md §12). Built: layout, Tables, Waiter (Super + Service
-  Waiter), Kitchen, POS dine-in billing, Staff, DEMO login, PWA, Online Orders, Orders. Next: Menu,
-  Online App, Riders, Summary, Settings (Preview 5), then discounts and refunds. Wait for the owner's
+  Waiter), Kitchen, POS / New Bill (Flow A new bills + Flow B waiter bills, hold, discount, split and
+  pending payment), Staff, DEMO login, PWA, Online Orders, Orders. Next: Menu, Online App, Riders,
+  Summary, Settings (Preview 5), then refunds. Wait for the owner's
   review after each preview.
 - Customer App (Phase 2) and Rider App (Phase 3) stay PLACEHOLDERS inside Restaurant OS.
 - Never start a phase until the owner says "shuru karo" or approves it. Never push, deploy or
