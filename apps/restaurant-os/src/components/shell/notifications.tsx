@@ -10,6 +10,7 @@ import { useSession } from '@/lib/session';
 import { playAlert, unlockSound, vibrate } from '@/lib/sound';
 
 const NotificationsContext = createContext<StaffNotification[]>([]);
+const ALARM_REPEAT_MS = 5000;
 
 export function itemsText(items: NotificationItem[]): string {
   return items
@@ -18,19 +19,45 @@ export function itemsText(items: NotificationItem[]): string {
 }
 
 export function notificationTitle(n: StaffNotification): string {
-  if (n.kind === 'FOOD_READY') return t('alerts.foodReady', { table: n.tableName, station: n.stationName });
-  if (n.kind === 'BILL_REQUESTED') return t('alerts.billRequested', { table: n.tableName });
-  return t('alerts.billAccepted', { table: n.tableName });
+  switch (n.kind) {
+    case 'FOOD_READY':
+      return t('alerts.foodReady', { table: n.tableName, station: n.stationName });
+    case 'BILL_REQUESTED':
+      return t('alerts.billRequested', { table: n.tableName });
+    case 'BILL_ACCEPTED':
+      return t('alerts.billAccepted', { table: n.tableName });
+    case 'ONLINE_ORDER':
+      return t('alerts.onlineOrder', { n: n.dailyNumber });
+    case 'COUNTER_READY':
+      return t('alerts.counterReady', { n: n.dailyNumber, type: t(`orderType.${n.orderType}`) });
+  }
 }
 
 export function notificationBody(n: StaffNotification): string {
-  if (n.kind === 'FOOD_READY') return itemsText(n.items);
-  if (n.kind === 'BILL_REQUESTED') return t('alerts.billRequestedBody', { total: formatPaisa(n.total), name: n.requestedByName });
-  return t('alerts.billAcceptedBody', { name: n.acceptedByName });
+  switch (n.kind) {
+    case 'FOOD_READY':
+      return itemsText(n.items);
+    case 'BILL_REQUESTED':
+      return t('alerts.billRequestedBody', { total: formatPaisa(n.total), name: n.requestedByName });
+    case 'BILL_ACCEPTED':
+      return t('alerts.billAcceptedBody', { name: n.acceptedByName });
+    case 'ONLINE_ORDER':
+      return t('alerts.onlineOrderBody', { type: t(`orderType.${n.orderType}`), total: formatPaisa(n.total), name: n.customerName });
+    case 'COUNTER_READY':
+      return n.orderType === 'DELIVERY' ? t('alerts.assignRider', { name: n.customerName }) : t('alerts.readyForPickup', { name: n.customerName });
+  }
 }
 
 export function notificationLink(n: StaffNotification): string {
-  return n.kind === 'BILL_REQUESTED' ? `/pos?table=${n.tableId}` : `/waiter?table=${n.tableId}`;
+  switch (n.kind) {
+    case 'BILL_REQUESTED':
+      return `/pos?table=${n.tableId}`;
+    case 'ONLINE_ORDER':
+    case 'COUNTER_READY':
+      return '/online-orders';
+    default:
+      return `/waiter?table=${n.tableId}`;
+  }
 }
 
 /**
@@ -73,13 +100,21 @@ function NotificationsWatcher({ onChange }: { onChange: (list: StaffNotification
     const fresh = data.filter((n) => !seen.current?.has(n.id));
     for (const n of fresh) {
       seen.current.add(n.id);
-      toast.show({ tone: n.kind === 'BILL_REQUESTED' ? 'info' : 'success', title: notificationTitle(n), body: notificationBody(n) });
+      toast.show({ tone: n.kind === 'BILL_REQUESTED' || n.kind === 'ONLINE_ORDER' ? 'info' : 'success', title: notificationTitle(n), body: notificationBody(n) });
     }
     if (fresh.length > 0) {
       playAlert();
       vibrate();
     }
   }, [data, onChange, toast]);
+
+  // A new online order rings again and again until someone accepts or rejects it (§5.2 step 2).
+  const waitingOnline = data?.some((n) => n.kind === 'ONLINE_ORDER') ?? false;
+  useEffect(() => {
+    if (!waitingOnline) return;
+    const id = setInterval(playAlert, ALARM_REPEAT_MS);
+    return () => clearInterval(id);
+  }, [waitingOnline]);
 
   return null;
 }

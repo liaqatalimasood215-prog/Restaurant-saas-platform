@@ -247,6 +247,10 @@ export interface Order extends BranchScoped {
   refundedTotal: Paisa;
   tipTotal: Paisa;
   billRequest: BillRequest | null;
+  /** Private customer tracking link token (delivery/takeaway); long and random */
+  trackingToken: string | null;
+  /** Rider cash settlement that included this order's cash on delivery */
+  cashSettlementId: Uuid | null;
   /** How often the paid receipt was printed; every print after the first is marked DUPLICATE */
   receiptPrints: number;
   history: StatusHistoryEntry[];
@@ -314,7 +318,37 @@ export type StaffNotification =
       at: IsoDateTime;
     }
   | { kind: 'BILL_REQUESTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; total: Paisa; requestedByName: string; at: IsoDateTime }
-  | { kind: 'BILL_ACCEPTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; acceptedByName: string; at: IsoDateTime };
+  | { kind: 'BILL_ACCEPTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; acceptedByName: string; at: IsoDateTime }
+  /** A customer order waiting for Accept / Reject (repeating alarm until answered) */
+  | { kind: 'ONLINE_ORDER'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; total: Paisa; customerName: string; at: IsoDateTime }
+  /** A delivery or takeaway order is READY: assign a rider or hand it over */
+  | { kind: 'COUNTER_READY'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; customerName: string; at: IsoDateTime };
+
+/** An order with the names a screen needs (waiter, rider, people in the timeline, payments). */
+export interface OrderView {
+  order: Order;
+  tableName: string | null;
+  /** Staff id → name for everyone the order mentions */
+  names: Record<Uuid, string>;
+}
+
+/** Cash a rider collected on delivery and has not handed to the cashier yet. */
+export interface RiderCashView {
+  rider: StaffUser;
+  /** Orders assigned and not delivered yet */
+  activeDeliveries: number;
+  cashToSettle: Paisa;
+  unsettledOrderIds: Uuid[];
+}
+
+export interface RiderCashSettlement extends BranchScoped {
+  id: Uuid;
+  riderId: Uuid;
+  amount: Paisa;
+  orderIds: Uuid[];
+  settledBy: Uuid;
+  settledAt: IsoDateTime;
+}
 
 /** An item the waiter or cashier adds; the server looks up every price itself. */
 export interface DraftItemInput {

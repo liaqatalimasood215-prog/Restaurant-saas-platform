@@ -2,7 +2,9 @@
 
 import { useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Bell, Search, Store } from 'lucide-react';
+import { can } from '@restaurant-saas/shared';
 import { t } from '@/i18n';
 import { minutesSince } from '@/lib/format';
 import { useNow } from '@/lib/hooks/use-now';
@@ -23,18 +25,7 @@ export function Header() {
         <Logo />
       </div>
 
-      <div className="hidden max-w-xl flex-1 md:block">
-        <label className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400">
-          <Search className="size-5 shrink-0" aria-hidden />
-          <input
-            type="search"
-            disabled
-            placeholder={t('header.search')}
-            aria-label={t('header.search')}
-            className="w-full bg-transparent text-sm placeholder:text-slate-400 disabled:cursor-not-allowed"
-          />
-        </label>
-      </div>
+      <div className="hidden max-w-xl flex-1 md:block">{session && can(session.user.role, 'order.manage') && <OrderSearch />}</div>
 
       <div className="ml-auto flex items-center gap-1 sm:gap-2">
         {session && (
@@ -51,6 +42,33 @@ export function Header() {
         <ProfileMenu />
       </div>
     </header>
+  );
+}
+
+/** Header search: opens Orders with the search filled in (order number, table, customer). */
+function OrderSearch() {
+  const router = useRouter();
+  const [value, setValue] = useState('');
+  return (
+    <form
+      role="search"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (value.trim()) router.push(`/orders?q=${encodeURIComponent(value.trim())}`);
+      }}
+    >
+      <label className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400 focus-within:border-brand">
+        <Search className="size-5 shrink-0" aria-hidden />
+        <input
+          type="search"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={t('header.search')}
+          aria-label={t('header.search')}
+          className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400"
+        />
+      </label>
+    </form>
   );
 }
 

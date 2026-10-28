@@ -10,6 +10,8 @@ import { useSession } from '@/lib/session';
 import { AppPreviewScreen } from './app-preview-screen';
 import { ComingSoonScreen } from './coming-soon-screen';
 import { KitchenScreen } from './kitchen/kitchen-screen';
+import { OnlineOrdersScreen } from './online-orders/online-orders-screen';
+import { OrdersScreen } from './orders/orders-screen';
 import { PosScreen } from './pos/pos-screen';
 import { StaffScreen } from './staff/staff-screen';
 import { TablesScreen } from './tables/tables-screen';
@@ -19,6 +21,8 @@ import { WaiterScreen } from './waiter/waiter-screen';
 /** Screen options passed in from the URL (e.g. /waiter?table=…). */
 export interface SectionOptions {
   tableId?: string;
+  /** Orders search from the header (/orders?q=…) */
+  query?: string;
 }
 
 function renderSection(section: OsSection, options: SectionOptions) {
@@ -27,6 +31,8 @@ function renderSection(section: OsSection, options: SectionOptions) {
   if (section.key === 'kitchen') return <KitchenScreen />;
   if (section.key === 'pos') return <PosScreen tableId={options.tableId} />;
   if (section.key === 'staff') return <StaffScreen />;
+  if (section.key === 'online-orders') return <OnlineOrdersScreen />;
+  if (section.key === 'orders') return <OrdersScreen key={options.query ?? ''} query={options.query} />;
   if (section.key === 'online-app') return <AppPreviewScreen section={section} app="customer" />;
   if (section.key === 'riders') return <AppPreviewScreen section={section} app="rider" />;
   if (section.group === 'COMING_SOON') return <ComingSoonScreen section={section} />;

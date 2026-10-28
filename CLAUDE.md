@@ -19,9 +19,9 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - Phase 0 approved by the owner on 2026-10-27.
 - **Phase 1 — Restaurant OS UI prototype** in progress on branch `phase-1/restaurant-os-ui`
   (PROJECT_RULES.md §15–§16, MASTER_PROMPT.md §12). Built: layout, Tables, Waiter (Super + Service
-  Waiter), Kitchen, POS dine-in billing, Staff, DEMO login, PWA. Next: Orders + Online Orders
-  (Preview 4), then Menu, Online App, Riders, Summary, Settings (Preview 5), POS takeaway/delivery,
-  discounts and refunds. Wait for the owner's review after each preview.
+  Waiter), Kitchen, POS dine-in billing, Staff, DEMO login, PWA, Online Orders, Orders. Next: Menu,
+  Online App, Riders, Summary, Settings (Preview 5), then discounts and refunds. Wait for the owner's
+  review after each preview.
 - Customer App (Phase 2) and Rider App (Phase 3) stay PLACEHOLDERS inside Restaurant OS.
 - Never start a phase until the owner says "shuru karo" or approves it. Never push, deploy or
   connect a paid service without the owner's approval.
@@ -37,7 +37,8 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
    @restaurant-saas/restaurant-os screenshots` drives the installed Microsoft Edge through
    `playwright-core` (no browser download) while `pnpm dev` runs. Add new screens to
    `apps/restaurant-os/scripts/screenshots.mjs`. `pnpm --filter @restaurant-saas/restaurant-os walkthrough` clicks
-   through the owner workflow and Test A steps 1–6 (each person in their own tab).
+   through the owner workflow and Test A steps 1–6 (each person in their own tab);
+   `walkthrough:online` covers Test D, takeaway, phone orders and the Orders timeline.
 6. Report with the template in MASTER_PROMPT.md §15.4, in Roman Urdu.
 7. If something is unclear, ask one short question with a recommended answer. Never connect a
    paid service without explaining the cost and getting approval.

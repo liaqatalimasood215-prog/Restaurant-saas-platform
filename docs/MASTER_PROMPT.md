@@ -363,6 +363,7 @@ TAKEAWAY  PLACED → ACCEPTED → PREPARING → READY → PICKED_UP
 
 - Orders created by staff (phone, counter) start at ACCEPTED.
 - ACCEPTED → PREPARING and PREPARING → READY are set **automatically** from the kitchen tickets.
+  PREPARING starts when a cook starts a ticket; auto-ready tickets (bottled drinks) do not count.
 - Delivery: cash on delivery is recorded when the rider marks Delivered, then settled by the
   cashier. Takeaway: paid at the counter before or after.
 - Refunds do not change the order status; they are separate money entries (§8).
@@ -1139,3 +1140,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-28 | Owner and Manager home screen: POS / New Bill (§4, §7.1). |
 | 2026-10-28 | §4, §5.1: Super Waiter and Service Waiter, assigned tables, chefs per station, bill request → accept → acknowledgement, cashier finds a bill by table number; §9: selling units and waiter tables. |
 | 2026-10-28 | §6.4: fully voided tickets ("do not cook", 2 minutes) and harmless repeated ticket presses (Preview 2). |
+| 2026-10-28 | §6.3: auto-ready tickets do not make an order PREPARING (Preview 4). |

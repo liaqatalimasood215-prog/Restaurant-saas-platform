@@ -121,18 +121,19 @@ function isDone(status: TicketStatus): boolean {
 
 /**
  * Automatic order steps for delivery/takeaway orders, derived from their tickets (§6.3):
- * PREPARING when the first ticket starts, READY when all tickets are ready,
+ * PREPARING when a cook starts the first ticket (auto-ready drinks do not count: they were never
+ * started), READY when all tickets are ready,
  * back to PREPARING when a ticket is undone while the order is READY.
  * Dine-in orders are not driven by tickets.
  */
 export function automaticOrderSteps(
   type: OrderType,
   current: OrderStatus,
-  tickets: readonly { status: TicketStatus }[],
+  tickets: readonly { status: TicketStatus; startedAt?: string | null }[],
 ): OrderStatus[] {
   if (type === 'DINE_IN' || tickets.length === 0) return [];
   const allDone = tickets.every((t) => isDone(t.status));
-  const anyStarted = tickets.some((t) => t.status !== 'NEW');
+  const anyStarted = tickets.some((t) => t.status === 'PREPARING' || (t.status !== 'NEW' && t.startedAt != null));
   if (current === 'ACCEPTED') {
     if (allDone) return ['PREPARING', 'READY'];
     return anyStarted ? ['PREPARING'] : [];

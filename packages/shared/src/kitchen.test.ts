@@ -113,6 +113,12 @@ test('delivery/takeaway order status follows the tickets automatically', () => {
     'PREPARING',
   ]);
   assert.deepEqual(automaticOrderSteps('DELIVERY', 'PLACED', [{ status: 'READY' }]), []);
+  // Auto-ready drinks are not "started": the order waits until a cook starts the pizza.
+  assert.deepEqual(automaticOrderSteps('DELIVERY', 'ACCEPTED', [{ status: 'READY', startedAt: null }, { status: 'NEW' }]), []);
+  assert.deepEqual(
+    automaticOrderSteps('DELIVERY', 'ACCEPTED', [{ status: 'READY', startedAt: null }, { status: 'PREPARING', startedAt: '2026-10-28T10:00:00Z' }]),
+    ['PREPARING'],
+  );
   assert.deepEqual(automaticOrderSteps('DINE_IN', 'OPEN', [{ status: 'READY' }]), []);
 });
 

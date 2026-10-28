@@ -11,6 +11,7 @@ import {
   checkPaymentAmount,
   checkTicketTransition,
   checkTransition,
+  initialStatus,
   isFullyPaid,
   splitRoundIntoTickets,
   summarizeMoney,
@@ -26,8 +27,11 @@ import {
   type Order,
   type OrderItem,
   type OrderStatus,
+  type OrderView,
   type PaymentEntry,
   type Permission,
+  type RiderCashSettlement,
+  type RiderCashView,
   type StaffNotification,
   type StaffUser,
   type TicketStatus,
@@ -37,7 +41,9 @@ import {
 import {
   ApiError,
   type ApiClient,
+  type CounterOrderInput,
   type DemoControls,
+  type OrderFilter,
   type RecordPaymentInput,
   type SendRoundInput,
   type Session,
@@ -117,6 +123,66 @@ function voidedTicketAt(order: Order, ticket: KitchenTicket): number | null {
   if (items.length === 0 || items.some((i) => !i.isVoid)) return null;
   return Math.max(...items.map((i) => (i.voidedAt ? Date.parse(i.voidedAt) : 0)));
 }
+
+/** Splits one round into kitchen tickets by station and links each item to its ticket. */
+function addKitchenTickets(data: DemoData, order: Order, items: OrderItem[], roundNo: number, now: string): void {
+  const stations = [...data.stations].sort((a, b) => a.sort - b.sort);
+  for (const draftTicket of splitRoundIntoTickets(items, stations)) {
+    const ticket: KitchenTicket = {
+      id: newId(),
+      restaurantId: order.restaurantId,
+      branchId: order.branchId,
+      orderId: order.id,
+      stationId: draftTicket.stationId,
+      roundNo,
+      status: draftTicket.initialStatus,
+      createdAt: now,
+      startedAt: null,
+      readyAt: draftTicket.initialStatus === 'READY' ? now : null,
+      servedAt: null,
+    };
+    order.tickets.push(ticket);
+    for (const item of draftTicket.items) item.ticketId = ticket.id;
+  }
+}
+
+/** Order steps that follow from the tickets (PREPARING / READY), ignoring fully voided tickets. */
+function applyAutomaticSteps(order: Order): void {
+  const cooking = order.tickets.filter((tk) => voidedTicketAt(order, tk) === null);
+  for (const step of automaticOrderSteps(order.type, order.status, cooking)) {
+    setStatus(order, step, null, 'Automatic (kitchen tickets)');
+  }
+}
+
+/** The next gap-free daily order number of the business day. */
+function nextDailyNumber(data: DemoData): { date: string; dailyNumber: number } {
+  const date = businessDate(new Date(), data.branch.timezone, data.branch.businessDayStart);
+  const dailyNumber = (data.dailyCounters[date] ?? 0) + 1;
+  data.dailyCounters[date] = dailyNumber;
+  return { date, dailyNumber };
+}
+
+/** Permanent, gap-free invoice number, given once when the order is fully paid. */
+function giveInvoiceNumber(data: DemoData, order: Order): void {
+  if (order.invoiceNumber !== null) return;
+  data.invoiceCounter += 1;
+  order.invoiceNumber = data.invoiceCounter;
+}
+
+/** A long random token for the private customer tracking link. */
+function trackingToken(): string {
+  return `${newId()}${newId()}`.replaceAll('-', '');
+}
+
+const ACTIVE_DELIVERY: readonly OrderStatus[] = ['RIDER_ASSIGNED', 'OUT_FOR_DELIVERY'];
+const CLOSED: readonly OrderStatus[] = ['PAID', 'DELIVERED', 'PICKED_UP', 'REJECTED', 'CANCELLED'];
+
+/** DEMO customers standing in for real Customer App orders (Phase 2). */
+const DEMO_CUSTOMERS = [
+  { name: 'Ayesha Khan', phone: '0301-1234567', address: 'House 12, Block B, Main Market, Lahore' },
+  { name: 'Hamza Saeed', phone: '0321-7654321', address: 'Flat 4, Gulberg III, Lahore' },
+  { name: 'Mariam Ali', phone: '0333-5550101', address: 'Street 7, Model Town, Lahore' },
+];
 
 function findTicket(data: DemoData, ticketId: string): { order: Order; ticket: KitchenTicket } {
   for (const order of data.orders) {
@@ -268,9 +334,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const now = nowIso();
         let order = data.orders.find((o) => o.tableId === table.id && OPEN_DINE_IN.includes(o.status));
         if (!order) {
-          const date = businessDate(new Date(), data.branch.timezone, data.branch.businessDayStart);
-          const dailyNumber = (data.dailyCounters[date] ?? 0) + 1;
-          data.dailyCounters[date] = dailyNumber;
+          const { date, dailyNumber } = nextDailyNumber(data);
           order = {
             id: newId(),
             restaurantId: data.restaurant.id,
@@ -303,6 +367,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
             refundedTotal: 0,
             tipTotal: 0,
             billRequest: null,
+            trackingToken: null,
+            cashSettlementId: null,
             receiptPrints: 0,
             history: [{ fromStatus: null, toStatus: 'OPEN', changedBy: user.id, reason: null, changedAt: now }],
             createdBy: user.id,
@@ -322,24 +388,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const target = order;
         const roundNo = Math.max(0, ...target.items.map((i) => i.roundNo)) + 1;
         const lines = input.items.map((draft) => this.priceDraft(data, draft, target, roundNo));
-        const stations = [...data.stations].sort((a, b) => a.sort - b.sort);
-        for (const draftTicket of splitRoundIntoTickets(lines, stations)) {
-          const ticket: KitchenTicket = {
-            id: newId(),
-            restaurantId: target.restaurantId,
-            branchId: target.branchId,
-            orderId: target.id,
-            stationId: draftTicket.stationId,
-            roundNo,
-            status: draftTicket.initialStatus,
-            createdAt: now,
-            startedAt: null,
-            readyAt: draftTicket.initialStatus === 'READY' ? now : null,
-            servedAt: null,
-          };
-          target.tickets.push(ticket);
-          for (const line of draftTicket.items) target.items.push({ ...line, ticketId: ticket.id });
-        }
+        addKitchenTickets(data, target, lines, roundNo, now);
+        target.items.push(...lines);
         recalculate(target, data.branch);
         data.idempotency[input.idempotencyKey] = target.id;
         return target;
@@ -486,7 +536,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (repeated) return this.findOrder(data, repeated);
 
         const order = this.findOrder(data, input.orderId);
-        if (!OPEN_DINE_IN.includes(order.status)) throw new ApiError('CONFLICT', 'This bill is already closed.');
+        const payable = order.type === 'DINE_IN' ? OPEN_DINE_IN.includes(order.status) : !['REJECTED', 'CANCELLED', 'PLACED'].includes(order.status);
+        if (!payable) throw new ApiError('CONFLICT', 'This bill is already closed.');
         const due = amountDue(order.totals.total, order.paidTotal);
         const check = checkPaymentAmount(input.amount, due);
         if (!check.ok) {
@@ -529,11 +580,13 @@ export class DemoAdapter implements ApiClient, DemoControls {
           order.billRequest.acceptedAt = nowIso();
         }
         if (isFullyPaid(order.totals.total, order.paidTotal)) {
-          const paid = checkTransition({ type: order.type, from: order.status, to: 'PAID', role: user.role, isFullyPaid: true });
-          if (!paid.ok) throw ruleError(paid.reason);
-          setStatus(order, 'PAID', user.id);
-          data.invoiceCounter += 1;
-          order.invoiceNumber = data.invoiceCounter;
+          // Dine-in closes as PAID; delivery and takeaway keep their own status (paid before or after).
+          if (order.type === 'DINE_IN') {
+            const paid = checkTransition({ type: order.type, from: order.status, to: 'PAID', role: user.role, isFullyPaid: true });
+            if (!paid.ok) throw ruleError(paid.reason);
+            setStatus(order, 'PAID', user.id);
+          }
+          giveInvoiceNumber(data, order);
         }
         data.idempotency[input.idempotencyKey] = order.id;
         return order;
@@ -546,9 +599,334 @@ export class DemoAdapter implements ApiClient, DemoControls {
       this.store.update((data) => {
         this.require(data, 'payment.record');
         const order = this.findOrder(data, orderId);
-        if (order.status !== 'PAID') throw new ApiError('CONFLICT', 'The receipt is printed after payment.');
+        if (order.invoiceNumber === null) throw new ApiError('CONFLICT', 'The receipt is printed after payment.');
         order.receiptPrints += 1;
         return order;
+      }),
+    );
+  }
+
+  // ── Orders list, online, phone and takeaway orders ─────────────────────────────────────────
+
+  private orderView(data: DemoData, order: Order): OrderView {
+    const ids = new Set<string>();
+    const add = (id: string | null | undefined) => id && ids.add(id);
+    add(order.waiterId);
+    add(order.riderId);
+    add(order.createdBy);
+    order.history.forEach((h) => add(h.changedBy));
+    order.payments.forEach((p) => add(p.receivedBy));
+    order.items.forEach((i) => add(i.voidedBy));
+    add(order.billRequest?.requestedBy);
+    add(order.billRequest?.acceptedBy);
+    add(order.discount?.givenBy);
+    const names: Record<string, string> = {};
+    for (const id of ids) names[id] = this.staffName(data, id) ?? '';
+    return { order, tableName: order.tableId ? this.tableName(data, order.tableId) : null, names };
+  }
+
+  listOrders(filter: OrderFilter): Promise<OrderView[]> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'order.manage');
+      const today = businessDate(new Date(), data.branch.timezone, data.branch.businessDayStart);
+      const query = filter.query.trim().toLowerCase().replace(/^#/, '');
+      return data.orders
+        .filter((o) => filter.scope === 'ALL' || o.businessDate === today)
+        .filter((o) => !filter.type || o.type === filter.type)
+        .filter((o) => !filter.status || o.status === filter.status)
+        .filter((o) => {
+          if (!query) return true;
+          const table = o.tableId ? this.tableName(data, o.tableId).toLowerCase() : '';
+          const digits = query.replace(/\D/g, '');
+          return (
+            String(o.dailyNumber) === query ||
+            String(o.invoiceNumber ?? '') === query ||
+            table === query ||
+            table === `t${query}` ||
+            (o.customerName ?? '').toLowerCase().includes(query) ||
+            // A phone search needs at least 4 digits, so "1" finds order #1, not every phone with a 1.
+            (digits.length >= 4 && (o.customerPhone ?? '').replace(/\D/g, '').includes(digits))
+          );
+        })
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((o) => this.orderView(data, o));
+    });
+  }
+
+  getOrderView(orderId: string): Promise<OrderView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'order.manage');
+      return this.orderView(data, this.findOrder(data, orderId));
+    });
+  }
+
+  listCounterOrders(): Promise<OrderView[]> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'order.manage');
+      const today = businessDate(new Date(), data.branch.timezone, data.branch.businessDayStart);
+      return data.orders
+        .filter((o) => o.type !== 'DINE_IN' && (!CLOSED.includes(o.status) || o.businessDate === today))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .map((o) => this.orderView(data, o));
+    });
+  }
+
+  findCustomer(phone: string): Promise<{ name: string; address: string } | null> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'order.manage');
+      const last = [...data.orders]
+        .filter((o) => o.customerPhone === phone.trim())
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      return last ? { name: last.customerName ?? '', address: last.customerAddress ?? '' } : null;
+    });
+  }
+
+  /** A new delivery or takeaway order record (no tickets yet). */
+  private newCounterOrder(
+    data: DemoData,
+    fields: Pick<Order, 'type' | 'channel' | 'status' | 'customerName' | 'customerPhone' | 'customerAddress' | 'note'>,
+    createdBy: string | null,
+  ): Order {
+    const { date, dailyNumber } = nextDailyNumber(data);
+    const now = nowIso();
+    const order: Order = {
+      id: newId(),
+      restaurantId: data.restaurant.id,
+      branchId: data.branch.id,
+      ...fields,
+      businessDate: date,
+      dailyNumber,
+      invoiceNumber: null,
+      tableId: null,
+      waiterId: null,
+      guests: null,
+      riderId: null,
+      prepMinutes: fields.status === 'ACCEPTED' ? data.branch.defaultPrepMinutes : null,
+      items: [],
+      tickets: [],
+      payments: [],
+      discount: null,
+      totals: calculateBill({ orderType: fields.type, lines: [], settings: { tax: data.branch.tax, serviceChargeBps: 0, roundToRupee: false } }),
+      paidTotal: 0,
+      refundedTotal: 0,
+      tipTotal: 0,
+      billRequest: null,
+      trackingToken: trackingToken(),
+      cashSettlementId: null,
+      receiptPrints: 0,
+      history: [
+        {
+          fromStatus: null,
+          toStatus: fields.status,
+          changedBy: createdBy,
+          reason: fields.channel === 'CUSTOMER_APP' ? 'Placed by the customer (DEMO)' : null,
+          changedAt: now,
+        },
+      ],
+      createdBy,
+      createdAt: now,
+    };
+    return order;
+  }
+
+  createCounterOrder(input: CounterOrderInput): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'order.manage');
+        const repeated = data.idempotency[input.idempotencyKey];
+        if (repeated) return this.findOrder(data, repeated);
+        if (input.items.length === 0) throw new ApiError('VALIDATION', 'Add at least one item.');
+        if (input.customerName.trim().length < 2) throw new ApiError('VALIDATION', 'Enter the customer name.');
+        if (!PHONE_PATTERN.test(input.customerPhone.trim())) throw new ApiError('VALIDATION', 'Phone must look like 0300-1234567.');
+        if (input.type === 'DELIVERY' && input.customerAddress.trim().length < 5) {
+          throw new ApiError('VALIDATION', 'Enter the delivery address.');
+        }
+        const order = this.newCounterOrder(
+          data,
+          {
+            type: input.type,
+            channel: input.channel,
+            status: initialStatus(input.type, input.channel),
+            customerName: input.customerName.trim(),
+            customerPhone: input.customerPhone.trim(),
+            customerAddress: input.type === 'DELIVERY' ? input.customerAddress.trim() : null,
+            note: input.note.trim().slice(0, 200),
+          },
+          user.id,
+        );
+        const lines = input.items.map((draft) => this.priceDraft(data, draft, order, 1));
+        addKitchenTickets(data, order, lines, 1, order.createdAt);
+        order.items.push(...lines);
+        recalculate(order, data.branch);
+        applyAutomaticSteps(order);
+        data.orders.push(order);
+        data.idempotency[input.idempotencyKey] = order.id;
+        return order;
+      }),
+    );
+  }
+
+  acceptOnlineOrder(orderId: string, prepMinutes: number): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'order.manage');
+        const order = this.findOrder(data, orderId);
+        if (order.status !== 'PLACED') return order; // already answered (double tap)
+        if (!Number.isInteger(prepMinutes) || prepMinutes < 5 || prepMinutes > 180) {
+          throw new ApiError('VALIDATION', 'Prep time must be between 5 and 180 minutes.');
+        }
+        const check = checkTransition({ type: order.type, from: 'PLACED', to: 'ACCEPTED', role: user.role });
+        if (!check.ok) throw ruleError(check.reason);
+        setStatus(order, 'ACCEPTED', user.id, `Prep time ${prepMinutes} min`);
+        order.prepMinutes = prepMinutes;
+        addKitchenTickets(data, order, order.items, 1, nowIso());
+        applyAutomaticSteps(order);
+        return order;
+      }),
+    );
+  }
+
+  rejectOnlineOrder(orderId: string, reason: string): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'order.manage');
+        const order = this.findOrder(data, orderId);
+        if (order.status === 'REJECTED') return order;
+        const check = checkTransition({ type: order.type, from: order.status, to: 'REJECTED', role: user.role, reason });
+        if (!check.ok) throw ruleError(check.reason);
+        setStatus(order, 'REJECTED', user.id, reason.trim());
+        return order;
+      }),
+    );
+  }
+
+  cancelOrder(orderId: string, reason: string): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'order.cancel');
+        const order = this.findOrder(data, orderId);
+        if (order.status === 'CANCELLED') return order;
+        const check = checkTransition({
+          type: order.type,
+          from: order.status,
+          to: 'CANCELLED',
+          role: user.role,
+          reason,
+          hasPayments: order.payments.length > 0,
+        });
+        if (!check.ok) throw ruleError(check.reason);
+        setStatus(order, 'CANCELLED', user.id, reason.trim());
+        return order;
+      }),
+    );
+  }
+
+  assignRider(orderId: string, riderId: string): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'order.manage');
+        const order = this.findOrder(data, orderId);
+        const rider = data.staff.find((s) => s.id === riderId && s.role === 'RIDER' && s.isActive);
+        if (!rider) throw new ApiError('VALIDATION', 'Choose an active rider.');
+        if (order.status === 'RIDER_ASSIGNED') {
+          // Change rider before pickup.
+          if (order.riderId !== rider.id) {
+            order.history.push({
+              fromStatus: order.status,
+              toStatus: order.status,
+              changedBy: user.id,
+              reason: `Rider changed to ${rider.name}`,
+              changedAt: nowIso(),
+            });
+            order.riderId = rider.id;
+          }
+          return order;
+        }
+        const check = checkTransition({ type: order.type, from: order.status, to: 'RIDER_ASSIGNED', role: user.role, riderId });
+        if (!check.ok) throw ruleError(check.reason);
+        order.riderId = rider.id;
+        setStatus(order, 'RIDER_ASSIGNED', user.id, rider.name);
+        return order;
+      }),
+    );
+  }
+
+  markPickedUp(orderId: string): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'order.manage');
+        const order = this.findOrder(data, orderId);
+        if (order.status === 'PICKED_UP') return order;
+        const check = checkTransition({ type: order.type, from: order.status, to: 'PICKED_UP', role: user.role });
+        if (!check.ok) throw ruleError(check.reason);
+        setStatus(order, 'PICKED_UP', user.id);
+        return order;
+      }),
+    );
+  }
+
+  /** Cash on delivery a rider collected and has not handed over yet. */
+  private riderCashOrders(data: DemoData, riderId: string): Order[] {
+    return data.orders.filter(
+      (o) =>
+        o.riderId === riderId &&
+        o.status === 'DELIVERED' &&
+        o.cashSettlementId === null &&
+        o.payments.some((p) => p.method === 'CASH' && p.receivedBy === riderId),
+    );
+  }
+
+  private riderCashAmount(orders: Order[], riderId: string): number {
+    return orders
+      .flatMap((o) => o.payments)
+      .filter((p) => p.kind === 'PAYMENT' && p.method === 'CASH' && p.receivedBy === riderId)
+      .reduce((sum, p) => sum + p.amount + p.tipAmount, 0);
+  }
+
+  listRiderCash(): Promise<RiderCashView[]> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'riderCash.settle');
+      return data.staff
+        .filter((s) => s.role === 'RIDER' && s.isActive)
+        .map((rider) => {
+          const unsettled = this.riderCashOrders(data, rider.id);
+          return {
+            rider,
+            activeDeliveries: data.orders.filter((o) => o.riderId === rider.id && ACTIVE_DELIVERY.includes(o.status)).length,
+            cashToSettle: this.riderCashAmount(unsettled, rider.id),
+            unsettledOrderIds: unsettled.map((o) => o.id),
+          };
+        });
+    });
+  }
+
+  settleRiderCash(riderId: string, idempotencyKey: string): Promise<RiderCashSettlement> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'riderCash.settle');
+        const repeated = data.riderSettlements.find((s) => s.id === data.idempotency[idempotencyKey]);
+        if (repeated) return repeated;
+        const orders = this.riderCashOrders(data, riderId);
+        if (orders.length === 0) throw new ApiError('VALIDATION', 'This rider has no cash to settle.');
+        const settlement: RiderCashSettlement = {
+          id: newId(),
+          restaurantId: data.restaurant.id,
+          branchId: data.branch.id,
+          riderId,
+          amount: this.riderCashAmount(orders, riderId),
+          orderIds: orders.map((o) => o.id),
+          settledBy: user.id,
+          settledAt: nowIso(),
+        };
+        orders.forEach((o) => (o.cashSettlementId = settlement.id));
+        data.riderSettlements.push(settlement);
+        data.idempotency[idempotencyKey] = settlement.id;
+        return settlement;
       }),
     );
   }
@@ -613,10 +991,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (to === 'SERVED') ticket.servedAt = now;
         ticket.status = to;
 
-        const cookingTickets = order.tickets.filter((tk) => voidedTicketAt(order, tk) === null);
-        for (const step of automaticOrderSteps(order.type, order.status, cookingTickets)) {
-          setStatus(order, step, null, 'Automatic (kitchen tickets)');
-        }
+        applyAutomaticSteps(order);
       }),
     );
   }
@@ -652,6 +1027,19 @@ export class DemoAdapter implements ApiClient, DemoControls {
       };
 
       const list: StaffNotification[] = [];
+      if (can(user.role, 'order.manage')) {
+        for (const order of data.orders) {
+          if (order.type === 'DINE_IN') continue;
+          const base = { orderId: order.id, dailyNumber: order.dailyNumber, orderType: order.type, customerName: order.customerName ?? '' };
+          if (order.status === 'PLACED') {
+            list.push({ kind: 'ONLINE_ORDER', id: `online:${order.id}`, total: order.totals.total, at: order.createdAt, ...base });
+          }
+          if (order.status === 'READY') {
+            const readyAt = order.history.findLast((h) => h.toStatus === 'READY')?.changedAt ?? order.createdAt;
+            list.push({ kind: 'COUNTER_READY', id: `counter-ready:${order.id}:${readyAt}`, at: readyAt, ...base });
+          }
+        }
+      }
       for (const order of data.orders) {
         const tableId = order.tableId;
         if (order.type !== 'DINE_IN' || !OPEN_DINE_IN.includes(order.status) || !tableId) continue;
@@ -790,6 +1178,83 @@ export class DemoAdapter implements ApiClient, DemoControls {
 
   demoLogin(userId: string): void {
     this.store.setSessionUserId(userId);
+  }
+
+  simulateCustomerOrder(type: 'DELIVERY' | 'TAKEAWAY'): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        // The server refuses checkout while online orders are OFF (MASTER_PROMPT.md §5.5).
+        if (!data.branch.onlineOrdersEnabled) throw new ApiError('CONFLICT', 'Not taking online orders right now.');
+        const count = data.orders.filter((o) => o.channel === 'CUSTOMER_APP').length;
+        const customer = DEMO_CUSTOMERS[count % DEMO_CUSTOMERS.length] ?? DEMO_CUSTOMERS[0]!;
+        const order = this.newCounterOrder(
+          data,
+          {
+            type,
+            channel: 'CUSTOMER_APP',
+            status: 'PLACED',
+            customerName: `${customer.name} (DEMO)`,
+            customerPhone: customer.phone,
+            customerAddress: type === 'DELIVERY' ? customer.address : null,
+            note: '',
+          },
+          null,
+        );
+        const item = (name: string) => data.items.find((i) => i.name === name);
+        const pizza = item('Classic Pizza');
+        const medium = pizza?.variants.find((v) => v.name === 'Medium');
+        const drafts: DraftItemInput[] = [
+          // Test D: Classic Pizza + Cold Drink, Cash on Delivery.
+          { menuItemId: pizza?.id ?? '', variantId: medium?.id ?? null, modifierIds: [], note: '', quantity: 1 },
+          { menuItemId: item('Cold Drink')?.id ?? '', variantId: null, modifierIds: [], note: '', quantity: 1 },
+        ];
+        if (count % 2 === 1) drafts.push({ menuItemId: item('Zinger Burger')?.id ?? '', variantId: null, modifierIds: [], note: 'No mayo', quantity: 2 });
+        order.items.push(...drafts.map((draft) => this.priceDraft(data, draft, order, 1)));
+        recalculate(order, data.branch);
+        data.orders.push(order);
+        return order;
+      }),
+    );
+  }
+
+  simulateRiderStep(orderId: string): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const order = this.findOrder(data, orderId);
+        const riderId = order.riderId;
+        if (!riderId) throw new ApiError('CONFLICT', 'No rider is assigned.');
+        const to: OrderStatus = order.status === 'RIDER_ASSIGNED' ? 'OUT_FOR_DELIVERY' : 'DELIVERED';
+        const check = checkTransition({ type: order.type, from: order.status, to, role: 'RIDER', isAssignedRider: true });
+        if (!check.ok) throw ruleError(check.reason);
+        setStatus(order, to, riderId, 'Rider App (DEMO)');
+        if (to === 'DELIVERED') {
+          // Cash on Delivery: the rider confirms the cash collected; the cashier settles it later.
+          const due = amountDue(order.totals.total, order.paidTotal);
+          if (due > 0) {
+            order.payments.push({
+              id: newId(),
+              restaurantId: order.restaurantId,
+              branchId: order.branchId,
+              orderId: order.id,
+              kind: 'PAYMENT',
+              method: 'CASH',
+              amount: due,
+              tipAmount: 0,
+              cashReceived: due,
+              changeGiven: 0,
+              reference: 'Cash on Delivery',
+              receivedBy: riderId,
+              relatedPaymentId: null,
+              reason: null,
+              createdAt: nowIso(),
+            });
+            recalculate(order, data.branch);
+            giveInvoiceNumber(data, order);
+          }
+        }
+        return order;
+      }),
+    );
   }
 
   isSimulatingFailure(): boolean {

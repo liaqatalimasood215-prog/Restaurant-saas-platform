@@ -11,6 +11,7 @@ import {
   type ModifierGroup,
   type Order,
   type Restaurant,
+  type RiderCashSettlement,
   type StaffUser,
 } from '@restaurant-saas/shared';
 
@@ -18,7 +19,7 @@ import {
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 3;
+export const DEMO_DATA_VERSION = 4;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -46,6 +47,7 @@ export interface DemoData {
   idempotency: Record<string, string>;
   /** Last invoice number of the branch (gap-free, given when an order is paid) */
   invoiceCounter: number;
+  riderSettlements: RiderCashSettlement[];
 }
 
 const scoped = { restaurantId: RESTAURANT_ID, branchId: BRANCH_ID };
@@ -258,5 +260,6 @@ export function createSeed(): DemoData {
     dailyCounters: {},
     idempotency: {},
     invoiceCounter: 0,
+    riderSettlements: [],
   };
 }

@@ -10,7 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",
     "screenshots": "node scripts/screenshots.mjs",
-    "walkthrough": "node scripts/walkthrough.mjs"
+    "walkthrough": "node scripts/walkthrough.mjs",
+    "walkthrough:online": "node scripts/walkthrough-online.mjs"
   },
   "dependencies": {
     "@restaurant-saas/shared": "workspace:*",

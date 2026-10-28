@@ -1,5 +1,6 @@
 import { SectionPage } from '@/screens/section-page';
 
-export default function Page() {
-  return <SectionPage sectionKey="orders" />;
+export default async function Page({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {
+  const { q } = await searchParams;
+  return <SectionPage sectionKey="orders" query={typeof q === 'string' ? q : undefined} />;
 }

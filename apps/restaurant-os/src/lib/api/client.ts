@@ -5,7 +5,12 @@ import type {
   KitchenTicketView,
   MenuSnapshot,
   Order,
+  OrderStatus,
+  OrderType,
+  OrderView,
   PaymentMethod,
+  RiderCashSettlement,
+  RiderCashView,
   Restaurant,
   StaffNotification,
   StaffRole,
@@ -64,6 +69,28 @@ export interface RecordPaymentInput {
   idempotencyKey: string;
 }
 
+/** A takeaway or phone delivery order typed in at the counter; it starts as ACCEPTED. */
+export interface CounterOrderInput {
+  type: Exclude<OrderType, 'DINE_IN'>;
+  channel: 'POS' | 'PHONE';
+  customerName: string;
+  customerPhone: string;
+  /** Delivery only */
+  customerAddress: string;
+  note: string;
+  items: DraftItemInput[];
+  idempotencyKey: string;
+}
+
+export interface OrderFilter {
+  /** TODAY = this business day */
+  scope: 'TODAY' | 'ALL';
+  type: OrderType | null;
+  status: OrderStatus | null;
+  /** Order number, table, customer name or phone */
+  query: string;
+}
+
 export interface StaffInput {
   /** Empty for a new account */
   id: Uuid | null;
@@ -99,6 +126,26 @@ export interface ApiClient {
   /** Counts receipt prints; every print after the first is marked DUPLICATE. */
   printReceipt(orderId: Uuid): Promise<Order>;
 
+  /** Orders list (today or all), newest first, with the names the screens need. */
+  listOrders(filter: OrderFilter): Promise<OrderView[]>;
+  getOrderView(orderId: Uuid): Promise<OrderView>;
+  /** Delivery and takeaway orders that are still running, plus today's finished ones. */
+  listCounterOrders(): Promise<OrderView[]>;
+  /** Previous name and address of a phone number, from earlier orders of this restaurant. */
+  findCustomer(phone: string): Promise<{ name: string; address: string } | null>;
+  createCounterOrder(input: CounterOrderInput): Promise<Order>;
+  /** PLACED → ACCEPTED with a prep time; the kitchen tickets are created now. */
+  acceptOnlineOrder(orderId: Uuid, prepMinutes: number): Promise<Order>;
+  rejectOnlineOrder(orderId: Uuid, reason: string): Promise<Order>;
+  cancelOrder(orderId: Uuid, reason: string): Promise<Order>;
+  /** READY → RIDER_ASSIGNED, or change the rider before pickup. */
+  assignRider(orderId: Uuid, riderId: Uuid): Promise<Order>;
+  /** Takeaway: READY → PICKED_UP at the counter. */
+  markPickedUp(orderId: Uuid): Promise<Order>;
+  listRiderCash(): Promise<RiderCashView[]>;
+  /** The cashier takes the rider's collected cash; one settlement per tap. */
+  settleRiderCash(riderId: Uuid, idempotencyKey: string): Promise<RiderCashSettlement>;
+
   /** Open kitchen tickets (New / Preparing / Ready) of the stations the user works on. */
   listKitchenTickets(): Promise<KitchenTicketView[]>;
   /** Start / Ready / Undo / Served, checked with the shared ticket rules. */
@@ -129,6 +176,10 @@ export interface DemoControls {
   /** Active staff accounts to pick on the DEMO login screen */
   listLoginAccounts(): StaffUser[];
   demoLogin(userId: Uuid): void;
+  /** Stands in for the Customer App (Phase 2): a customer places a delivery or pickup order. */
+  simulateCustomerOrder(type: Exclude<OrderType, 'DINE_IN'>): Promise<Order>;
+  /** Stands in for the Rider App (Phase 3): Picked up – On the way, then Delivered + cash collected. */
+  simulateRiderStep(orderId: Uuid): Promise<Order>;
   isSimulatingFailure(): boolean;
   setSimulatedFailure(on: boolean): void;
   resetData(): void;

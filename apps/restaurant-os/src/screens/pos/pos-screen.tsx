@@ -8,7 +8,6 @@ import { useNotifications } from '@/components/shell/notifications';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { t } from '@/i18n';
@@ -17,10 +16,10 @@ import { cn } from '@/lib/cn';
 import { clockTime, minutesSince } from '@/lib/format';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useNow } from '@/lib/hooks/use-now';
-import { useSession } from '@/lib/session';
 import { TABLE_TONES } from '@/lib/tones';
 import { PaymentDialog } from './payment-dialog';
-import { PrintableBill, type PrintKind } from './printable-bill';
+import { PrintDialog } from './print-dialog';
+import type { PrintKind } from './printable-bill';
 
 interface Selection {
   orderId: string;
@@ -197,7 +196,6 @@ export function PosScreen({ tableId }: { tableId?: string }) {
 }
 
 function BillPanel({ selection, onClose }: { selection: Selection; onClose: () => void }) {
-  const { data: session } = useSession();
   const { data: order, error, loading, reload } = useApiQuery(() => getApi().getOrder(selection.orderId), [selection.orderId]);
   const toast = useToast();
   const [paying, setPaying] = useState(false);
@@ -205,7 +203,7 @@ function BillPanel({ selection, onClose }: { selection: Selection; onClose: () =
   const [busy, setBusy] = useState(false);
 
   if (loading && !order) return <LoadingState />;
-  if (!order || !session) return <ErrorState message={error?.message} onRetry={reload} />;
+  if (!order) return <ErrorState message={error?.message} onRetry={reload} />;
 
   const due = Math.max(0, order.totals.total - order.paidTotal);
   const paid = order.status === 'PAID';
@@ -350,33 +348,13 @@ function BillPanel({ selection, onClose }: { selection: Selection; onClose: () =
         />
       )}
       {print && (
-        <Dialog
-          open
+        <PrintDialog
+          order={order}
+          kind={print}
+          placeLabel={selection.tableName}
+          waiterName={selection.waiterName}
           onClose={() => setPrint(null)}
-          title={print === 'PRE_BILL' ? t('print.preBillTitle') : t('print.receiptTitle')}
-          footer={
-            <>
-              <Button variant="secondary" onClick={() => setPrint(null)}>
-                {t('nav.close')}
-              </Button>
-              <Button onClick={() => window.print()}>
-                <Printer className="size-5" aria-hidden />
-                {t('print.print')}
-              </Button>
-            </>
-          }
-        >
-          <div className="print-area rounded-xl bg-slate-100 p-3">
-            <PrintableBill
-              order={order}
-              kind={print}
-              session={session}
-              tableName={selection.tableName}
-              waiterName={selection.waiterName}
-              cashierName={session.user.name}
-            />
-          </div>
-        </Dialog>
+        />
       )}
     </Card>
   );
