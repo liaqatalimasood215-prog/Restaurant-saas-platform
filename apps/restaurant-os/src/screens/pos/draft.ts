@@ -8,6 +8,8 @@ import type { CustomerValue } from './customer-fields';
  */
 export interface Draft {
   type: OrderType;
+  /** "Phone Call": a takeaway the customer ordered by phone (order channel PHONE) */
+  phoneOrder: boolean;
   tableId: string | null;
   guests: number;
   customer: CustomerValue;
@@ -19,11 +21,14 @@ export interface Draft {
   heldId: string | null;
   /** One key per send: a double tap never sends the same items twice */
   sendKey: string;
+  /** "Bill Now" on a new bill: open the payment as soon as the new order is loaded */
+  payNow: boolean;
 }
 
-export function newDraft(type: OrderType = 'DINE_IN'): Draft {
+export function newDraft(type: OrderType = 'DINE_IN', phoneOrder = false): Draft {
   return {
     type,
+    phoneOrder: type === 'TAKEAWAY' && phoneOrder,
     tableId: null,
     guests: 1,
     customer: { name: '', phone: '', address: '' },
@@ -32,5 +37,6 @@ export function newDraft(type: OrderType = 'DINE_IN'): Draft {
     orderId: null,
     heldId: null,
     sendKey: crypto.randomUUID(),
+    payNow: false,
   };
 }

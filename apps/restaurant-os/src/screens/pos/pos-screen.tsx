@@ -45,6 +45,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
   const [draft, setDraftState] = useState<Draft>(() => newDraft());
   const [picking, setPicking] = useState<{ item: MenuItem; line: CartLine | null } | null>(null);
   const [search, setSearch] = useState('');
+  const [productQuery, setProductQuery] = useState('');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [showBills, setShowBills] = useState(false);
   const [initialTable, setInitialTable] = useState(tableId);
@@ -121,6 +122,17 @@ export function PosScreen({ tableId }: { tableId?: string }) {
 
   const actions = (
     <div className="flex flex-wrap items-center gap-2">
+      <label className="flex min-h-11 w-36 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-2.5 xl:w-56 xl:gap-2 xl:px-3">
+        <Search className="size-4 shrink-0 text-slate-400 xl:size-5" aria-hidden />
+        <input
+          type="search"
+          value={productQuery}
+          onChange={(e) => setProductQuery(e.target.value)}
+          placeholder={t('pos.searchProducts')}
+          aria-label={t('pos.searchProducts')}
+          className="w-full bg-transparent text-sm"
+        />
+      </label>
       <div className="relative">
         <div className="flex">
           <label htmlFor="pos-table" className="sr-only">
@@ -133,7 +145,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
             onKeyDown={(e) => e.key === 'Enter' && void findTable()}
             placeholder={t('pos.findTableShort')}
             inputMode="numeric"
-            className="min-h-11 w-44 rounded-l-xl border border-r-0 border-slate-300 bg-white px-3 text-sm font-bold"
+            className="min-h-11 w-36 rounded-l-xl border border-r-0 border-slate-300 bg-white px-3 text-sm font-bold xl:w-44"
           />
           <button
             type="button"
@@ -162,7 +174,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
           )}
         >
           <ListOrdered className="size-5" aria-hidden />
-          {t('pos.runningBills')}
+          <span className="sr-only xl:not-sr-only">{t('pos.runningBills')}</span>
           <span className={cn('rounded-full px-2 text-xs tabular-nums', runningCount > 0 ? 'bg-brand text-white' : 'bg-slate-100 text-slate-500')}>{runningCount}</span>
           <ChevronDown className="size-4 text-slate-400" aria-hidden />
         </button>
@@ -200,7 +212,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
                   <p className={listTitle}>{t('pos.runningCounter')}</p>
                   <div className="flex flex-wrap gap-2">
                     {unpaidCounter.map(({ order }) => (
-                      <button key={order.id} type="button" onClick={() => choose({ ...newDraft(order.type), orderId: order.id })} className={chip(draft.orderId === order.id)}>
+                      <button key={order.id} type="button" onClick={() => choose({ ...newDraft(order.type, order.channel === 'PHONE'), orderId: order.id })} className={chip(draft.orderId === order.id)}>
                         #{order.dailyNumber} · {t(`orderType.${order.type}`)}
                         <span className="tabular-nums">{formatPaisa(order.totals.total - order.paidTotal)}</span>
                       </button>
@@ -223,7 +235,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
                           type="button"
                           onClick={() =>
                             choose({
-                              ...newDraft(h.type),
+                              ...newDraft(h.type, h.phoneOrder),
                               tableId: h.tableId,
                               guests: h.guests ?? 1,
                               orderId: entry?.order?.id ?? null,
@@ -235,7 +247,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
                           }
                           className={chip(draft.heldId === h.id)}
                         >
-                          {entry?.table.name ?? (h.customerName || t(`orderType.${h.type}`))} · {t(`orderType.${h.type}`)} ·{' '}
+                          {entry?.table.name ?? (h.customerName || t(`orderType.${h.type}`))} · {h.phoneOrder ? t('pos.typePhone') : t(`orderType.${h.type}`)} ·{' '}
                           {t('pos.itemCount', { n: h.items.length })}
                         </button>
                       );
@@ -263,7 +275,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
     // Tablet and desktop: exactly one screen high (below the 4rem header and the main padding), so
     // products scroll on their own and the bill's totals and actions are always visible.
     <div className="lg:flex lg:h-[calc(100dvh-6.5rem)] lg:flex-col lg:short:h-[calc(100dvh-5.5rem)]">
-      <ScreenHeader title={t('nav.pos')} status="DEMO_PROTOTYPE" description={t('pos.description')} compact actions={actions} />
+      <ScreenHeader title={t('nav.pos')} status="DEMO_PROTOTYPE" compact actions={actions} />
 
       {requests.length > 0 && (
         <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2 rounded-xl bg-amber-50 p-2">
@@ -296,7 +308,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
       )}
 
       <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_26rem] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_28rem]">
-        <MenuPanel menu={menu.data} onPick={(item) => setPicking({ item, line: null })} />
+        <MenuPanel menu={menu.data} query={productQuery} onPick={(item) => setPicking({ item, line: null })} />
         <CurrentBill
           key={`${draft.orderId ?? 'new'}-${draft.heldId ?? ''}`}
           draft={draft}

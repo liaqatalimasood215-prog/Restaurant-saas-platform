@@ -328,6 +328,8 @@ export type StaffNotification =
 export interface HeldBill extends BranchScoped {
   id: Uuid;
   type: OrderType;
+  /** Takeaway ordered by phone (channel PHONE) */
+  phoneOrder: boolean;
   tableId: Uuid | null;
   guests: number | null;
   customerName: string;

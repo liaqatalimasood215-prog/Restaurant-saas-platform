@@ -64,6 +64,8 @@ export interface HeldBillInput {
   /** Empty for a new held bill */
   id: Uuid | null;
   type: OrderType;
+  /** Takeaway ordered by phone (POS "Phone Call") */
+  phoneOrder: boolean;
   tableId: Uuid | null;
   guests: number | null;
   customerName: string;

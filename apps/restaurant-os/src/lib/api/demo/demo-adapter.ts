@@ -664,6 +664,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const existing = input.id ? data.heldBills.find((h) => h.id === input.id) : null;
         const fields = {
           type: input.type,
+          phoneOrder: input.type === 'TAKEAWAY' && input.phoneOrder,
           tableId: input.type === 'DINE_IN' ? input.tableId : null,
           guests: input.guests,
           customerName: input.customerName.trim(),

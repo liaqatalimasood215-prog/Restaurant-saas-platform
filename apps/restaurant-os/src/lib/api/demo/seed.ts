@@ -20,7 +20,7 @@ import {
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 5;
+export const DEMO_DATA_VERSION = 6;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -243,20 +243,22 @@ export function createSeed(): DemoData {
       item(1, 'Classic Pizza', CATEGORY.pizza, STATION.pizzaOven, 850, {
         variants: [variant(1, 'Small', 600, 1), variant(2, 'Medium', 850, 2), variant(3, 'Large', 1200, 3)],
         modifierGroupIds: [GROUP.pizzaExtras],
+        description: 'Cheese, tomato sauce',
       }),
       item(2, 'Fajita Pizza', CATEGORY.pizza, STATION.pizzaOven, 950, {
         variants: [variant(4, 'Small', 700, 1), variant(5, 'Medium', 950, 2), variant(6, 'Large', 1350, 3)],
         modifierGroupIds: [GROUP.pizzaExtras],
+        description: 'Chicken, capsicum, onion',
       }),
-      item(3, 'Zinger Burger', CATEGORY.burgers, STATION.grillFry, 450, { modifierGroupIds: [GROUP.burgerExtras] }),
-      item(4, 'Beef Burger', CATEGORY.burgers, STATION.grillFry, 550, { modifierGroupIds: [GROUP.burgerExtras] }),
-      item(10, 'Chicken Karahi', CATEGORY.chicken, STATION.chicken, 2600, { unit: 'kg', description: 'Price per kg' }),
-      item(11, 'Chicken Tikka', CATEGORY.chicken, STATION.chicken, 450),
-      item(5, 'Loaded Fries', CATEGORY.fries, STATION.grillFry, 350),
-      item(6, 'Wings', CATEGORY.fries, STATION.grillFry, 550),
-      item(7, 'Alfredo Pasta', CATEGORY.pasta, STATION.hotKitchen, 600),
+      item(3, 'Zinger Burger', CATEGORY.burgers, STATION.grillFry, 450, { modifierGroupIds: [GROUP.burgerExtras], description: 'Crispy chicken, lettuce' }),
+      item(4, 'Beef Burger', CATEGORY.burgers, STATION.grillFry, 550, { modifierGroupIds: [GROUP.burgerExtras], description: 'Beef patty, cheese' }),
+      item(10, 'Chicken Karahi', CATEGORY.chicken, STATION.chicken, 2600, { unit: 'kg', description: 'Spicy & traditional, per kg' }),
+      item(11, 'Chicken Tikka', CATEGORY.chicken, STATION.chicken, 450, { description: 'Grilled chicken pieces' }),
+      item(5, 'Loaded Fries', CATEGORY.fries, STATION.grillFry, 350, { description: 'Fries, cheese, sauce' }),
+      item(6, 'Wings', CATEGORY.fries, STATION.grillFry, 550, { description: 'Hot & crispy' }),
+      item(7, 'Alfredo Pasta', CATEGORY.pasta, STATION.hotKitchen, 600, { description: 'Creamy white sauce' }),
       item(8, 'Cold Drink', CATEGORY.drinks, STATION.drinks, 125, { description: 'Bottled, served chilled' }),
-      item(9, 'Mineral Water', CATEGORY.drinks, STATION.drinks, 80),
+      item(9, 'Mineral Water', CATEGORY.drinks, STATION.drinks, 80, { description: '500 ml bottle' }),
     ],
     orders: [],
     dailyCounters: {},

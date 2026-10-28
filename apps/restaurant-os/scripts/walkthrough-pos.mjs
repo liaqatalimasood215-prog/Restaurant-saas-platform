@@ -1,7 +1,7 @@
 // POS walkthrough (owner request 2026-10-28):
-// Flow A — the cashier makes new bills (dine-in and takeaway), edits items, holds and reopens a bill,
-// sends to the kitchen, adds items to the running bill, gets a discount from the Owner, takes split
-// and pending payments, prints and completes.
+// Flow A — the cashier makes new bills (dine-in, takeaway, phone call), edits items, holds and reopens a
+// bill, sends to the kitchen, adds items to the running bill, gets a discount from the Owner, takes
+// split and pending payments, uses Bill Now, prints and completes.
 // Flow B — a waiter's table order is found by table number at the POS and paid there.
 // Usage: start the app (pnpm dev), then: pnpm --filter @restaurant-saas/restaurant-os walkthrough:pos
 import assert from 'node:assert/strict';
@@ -40,7 +40,7 @@ const shot = async (page, name) => {
 const waitText = (scope, text, timeout = 6_000) => scope.getByText(text).first().waitFor({ timeout });
 const ok = (message) => console.log(`  ✓ ${message}`);
 const bill = (page) => page.locator('main [data-pos-bill]');
-const grandTotal = (page, total) => bill(page).locator('dt:has-text("Grand total") + dd', { hasText: total }).waitFor({ timeout: 6_000 });
+const grandTotal = (page, total) => bill(page).locator('dt:text-is("Total") + dd', { hasText: total }).waitFor({ timeout: 6_000 });
 
 async function pick(page, product, { size, addOns = [], quantity = 1 } = {}) {
   await page.getByRole('button', { name: new RegExp(`^${product}`) }).first().click();
@@ -101,7 +101,7 @@ await grandTotal(cashier, 'Rs. 1,868');
 await bill(cashier).getByRole('button', { name: 'Print Bill' }).click();
 await waitText(cashier.getByRole('dialog'), 'PRE-BILL — NOT A RECEIPT');
 await cashier.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
-await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
+await bill(cashier).getByRole('button', { name: 'Bill Now' }).click();
 dialog = cashier.getByRole('dialog');
 await dialog.getByRole('radio', { name: 'Card' }).click();
 await dialog.getByLabel('Amount (Rs.)').fill('1000');
@@ -109,7 +109,7 @@ await dialog.getByRole('button', { name: 'Record payment' }).click();
 await waitText(bill(cashier), 'Partly paid');
 await bill(cashier).locator('dt:has-text("Due") + dd', { hasText: 'Rs. 868' }).waitFor();
 ok('pre-bill printed; split payment: Rs. 1,000 by card → partly paid, Rs. 868 due');
-await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
+await bill(cashier).getByRole('button', { name: 'Bill Now' }).click();
 dialog = cashier.getByRole('dialog');
 await dialog.getByLabel('Cash received (Rs.)').fill('1000');
 await waitText(dialog, 'Rs. 132');
@@ -126,13 +126,13 @@ ok('Rs. 868 cash with Rs. 1,000 received → change Rs. 132 → Paid, invoice #1
 console.log('Flow A — Clear bill asks first and removes only unsent items');
 await pick(cashier, 'Loaded Fries');
 await grandTotal(cashier, 'Rs. 350');
-await bill(cashier).getByRole('button', { name: 'Clear bill' }).click();
+await bill(cashier).getByRole('button', { name: 'Clear all' }).click();
 await cashier.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
 await grandTotal(cashier, 'Rs. 350');
-await bill(cashier).getByRole('button', { name: 'Clear bill' }).click();
+await bill(cashier).getByRole('button', { name: 'Clear all' }).click();
 await cashier.getByRole('dialog').getByRole('button', { name: 'Yes, clear bill' }).click();
 await grandTotal(cashier, 'Rs. 0');
-assert.equal(await bill(cashier).getByRole('button', { name: 'Send to kitchen' }).count(), 0, 'nothing left to send');
+assert.ok(await bill(cashier).getByRole('button', { name: 'Send to Kitchen' }).isDisabled(), 'nothing left to send');
 ok('Close keeps the bill; "Yes, clear bill" empties it (nothing was sent to the kitchen)');
 
 console.log('Flow A — takeaway: new customer, hold, reopen, send, pay later, then pay and hand over');
@@ -151,7 +151,7 @@ await waitText(cashier, 'Takeaway · Order #2');
 await cashier.getByRole('button', { name: /^Running bills/ }).click();
 assert.equal(await cashier.getByRole('button', { name: /^Hina Sheikh · Takeaway/ }).count(), 0, 'held bill removed after sending');
 await cashier.keyboard.press('Escape');
-await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
+await bill(cashier).getByRole('button', { name: 'Bill Now' }).click();
 await cashier.getByRole('dialog').getByRole('button', { name: 'Pay later (pending)' }).click();
 await waitText(bill(cashier), 'Payment pending');
 ok('sent to the kitchen as order #2; held bill gone; payment left pending');
@@ -160,7 +160,7 @@ await waitText(burgerChef, 'Takeaway #2');
 await burgerChef.getByRole('button', { name: 'Start', exact: true }).click();
 await burgerChef.getByRole('button', { name: 'Ready', exact: true }).click();
 await cashier.bringToFront();
-await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
+await bill(cashier).getByRole('button', { name: 'Bill Now' }).click();
 await cashier.getByRole('dialog').getByRole('radio', { name: 'Online / Wallet' }).click();
 await cashier.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
 await waitText(cashier, 'Paid · Invoice #2');
@@ -177,6 +177,20 @@ await bill(cashier).getByRole('button', { name: /^Hina Sheikh · 0312-5556667/ }
 assert.equal(await bill(cashier).getByLabel('Phone', { exact: true }).inputValue(), '0312-5556667');
 ok('customer search "Hina" → Hina Sheikh filled in');
 
+console.log('Flow A — Phone Call: a takeaway ordered by phone, paid at once with Bill Now');
+await bill(cashier).getByRole('radio', { name: 'Phone Call' }).click();
+await pick(cashier, 'Wings');
+await grandTotal(cashier, 'Rs. 550');
+await bill(cashier).getByRole('button', { name: 'Bill Now' }).click();
+dialog = cashier.getByRole('dialog');
+await waitText(dialog, 'Rs. 550');
+await shot(cashier, '06-desktop-cashier-phone-call-bill-now');
+await dialog.getByRole('button', { name: 'Record payment' }).click();
+await waitText(cashier, 'Paid · Invoice #3');
+await waitText(bill(cashier), 'Takeaway · Order #3');
+await bill(cashier).getByRole('radio', { name: 'Phone Call', checked: true }).waitFor();
+ok('Phone Call for Hina Sheikh: Wings sent as order #3 (channel PHONE), Bill Now opened the payment → invoice #3');
+
 console.log('Flow B — waiter order paid at the POS');
 const waiter = await openAs(USER.superWaiter, `/waiter?table=${T5}`, PHONE);
 await waiter.getByRole('tab', { name: /^Order/ }).click();
@@ -191,19 +205,19 @@ await waiter.getByText(/sent to the kitchen/).first().waitFor();
 await cashier.bringToFront();
 await cashier.locator('#pos-table').fill('5');
 await cashier.keyboard.press('Enter');
-await waitText(cashier, 'T5 · Order #3');
+await waitText(cashier, 'T5 · Order #4');
 await grandTotal(cashier, 'Rs. 4,200');
 const t5 = await bill(cashier).innerText();
 assert.ok(t5.includes('2 × Classic Pizza') && t5.includes('4 × Zinger Burger') && t5.includes('2 × Loaded Fries'));
-ok('table 5 found by number: the same order #3 the waiter took, Rs. 4,200');
+ok('table 5 found by number: the same order #4 the waiter took, Rs. 4,200');
 await shot(cashier, '05-desktop-cashier-flow-b-table-5');
-await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
+await bill(cashier).getByRole('button', { name: 'Bill Now' }).click();
 await cashier.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
-await waitText(cashier, 'Paid · Invoice #3');
+await waitText(cashier, 'Paid · Invoice #4');
 const tables = await openAs(USER.owner, '/tables', DESKTOP);
 await waitText(tables, 'T5');
 assert.ok((await tables.locator(`a[href*="${T5}"]`).innerText()).includes('Free'));
-ok('paid at the POS → invoice #3 → T5 is Free on the Tables board');
+ok('paid at the POS → invoice #4 → T5 is Free on the Tables board');
 
 await browser.close();
-console.log('POS walkthrough passed: Flow A (dine-in, takeaway, hold, discount, split / pending payment) and Flow B.');
+console.log('POS walkthrough passed: Flow A (dine-in, takeaway, phone call, hold, discount, split / pending payment, Bill Now) and Flow B.');

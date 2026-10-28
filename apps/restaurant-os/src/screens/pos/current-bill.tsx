@@ -1,10 +1,25 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ButtonHTMLAttributes } from 'react';
 import Link from 'next/link';
-import { Bike, CheckCircle2, ChefHat, Info, Pause, Pencil, Percent, Printer, Send, ShoppingBag, Trash2, UtensilsCrossed, Wallet } from 'lucide-react';
 import {
-  ORDER_TYPES,
+  Armchair,
+  CheckCircle2,
+  ChefHat,
+  Info,
+  Pause,
+  Pencil,
+  Percent,
+  Phone,
+  Printer,
+  ReceiptText,
+  ShoppingBag,
+  Trash2,
+  Truck,
+  Users,
+  UtensilsCrossed,
+} from 'lucide-react';
+import {
   calculateBill,
   can,
   formatPaisa,
@@ -12,6 +27,7 @@ import {
   type DraftItemInput,
   type MenuSnapshot,
   type Order,
+  type OrderType,
   type TableBoardEntry,
 } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +36,7 @@ import { Card } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { useToast } from '@/components/ui/toast';
-import { t } from '@/i18n';
+import { t, type MessageKey } from '@/i18n';
 import { getApi, type Session } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
@@ -34,7 +50,15 @@ import { PrintDialog } from './print-dialog';
 import { ProductArt } from './product-art';
 import type { PrintKind } from './printable-bill';
 
-const TYPE_ICONS = { DINE_IN: UtensilsCrossed, DELIVERY: Bike, TAKEAWAY: ShoppingBag } as const;
+/** The four order buttons. "Phone Call" is a takeaway ordered by phone (order channel PHONE). */
+const ORDER_OPTIONS: { key: string; type: OrderType; phone: boolean; label: MessageKey; icon: typeof Phone }[] = [
+  { key: 'DINE_IN', type: 'DINE_IN', phone: false, label: 'orderType.DINE_IN', icon: UtensilsCrossed },
+  { key: 'TAKEAWAY', type: 'TAKEAWAY', phone: false, label: 'orderType.TAKEAWAY', icon: ShoppingBag },
+  { key: 'DELIVERY', type: 'DELIVERY', phone: false, label: 'orderType.DELIVERY', icon: Truck },
+  { key: 'PHONE', type: 'TAKEAWAY', phone: true, label: 'pos.typePhone', icon: Phone },
+];
+const optionKey = (type: OrderType, phone: boolean) => (type === 'TAKEAWAY' && phone ? 'PHONE' : type);
+const FINISHED = ['PAID', 'PICKED_UP', 'DELIVERED'];
 
 const toDraftItem = (l: CartLine): DraftItemInput => ({
   menuItemId: l.menuItemId,
@@ -45,11 +69,11 @@ const toDraftItem = (l: CartLine): DraftItemInput => ({
 });
 
 /**
- * The bill on the right of the POS: order type, table or customer, new items, the running order
- * (same record as Waiter, Kitchen, Tables and Orders), totals and every cashier action.
- * On tablet and desktop it fills the screen height: the upper part scrolls, totals and actions never do.
- * A product that was just added (or got one more) scrolls into view and flashes, so the cashier
- * always sees it, even on a short laptop screen.
+ * The order panel on the right of the POS (owner's reference design 2026-10-29): order type, table and
+ * customer, the items, totals, and two big actions — Send to Kitchen and Bill Now. A sent bill is the
+ * SAME order record as Waiter, Kitchen, Tables and Orders.
+ * On tablet and desktop it fills the screen height: the upper part scrolls, totals and actions never
+ * do. A product that was just added (or got one more) scrolls into view and flashes.
  */
 export function CurrentBill({
   draft,
@@ -75,7 +99,8 @@ export function CurrentBill({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [paying, setPaying] = useState(false);
+  /** The order the payment dialog is open for (fresh from Send, or the loaded order) */
+  const [payOrder, setPayOrder] = useState<Order | null>(null);
   const [discounting, setDiscounting] = useState(false);
   const [print, setPrint] = useState<PrintKind | null>(null);
   const [clearing, setClearing] = useState(false);
@@ -91,9 +116,9 @@ export function CurrentBill({
     row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     row.animate([{ backgroundColor: 'var(--color-brand-soft)' }, { backgroundColor: '#ffffff' }], { duration: 900, easing: 'ease-out' });
   }, [draft.cart]);
+
   const role = session.user.role;
   const { branch } = session;
-
   const views = draft.cart.map((l) => describeLine(l, menu)).filter((v) => v !== null);
   const categoryOf = (menuItemId: string) => {
     const item = menu.items.find((i) => i.id === menuItemId);
@@ -101,7 +126,7 @@ export function CurrentBill({
   };
   const locked = draft.orderId !== null;
   const table = tables.find((e) => e.table.id === draft.tableId);
-  const canAddItems = !order || order.type === 'DINE_IN' ? !order || ['OPEN', 'BILL_REQUESTED'].includes(order.status) : false;
+  const canAddItems = !order || (order.type === 'DINE_IN' && ['OPEN', 'BILL_REQUESTED'].includes(order.status));
   const estimate = calculateBill({
     orderType: draft.type,
     lines: views.map((v) => ({ unitPrice: v.unitPrice, quantity: v.line.quantity })),
@@ -112,6 +137,19 @@ export function CurrentBill({
   const paymentState = !order ? null : due === 0 && order.paidTotal > 0 ? 'PAID' : order.paidTotal > 0 ? 'PARTLY' : 'PENDING';
   const payable = order && !['REJECTED', 'CANCELLED'].includes(order.status) && (order.type !== 'DINE_IN' || ['OPEN', 'BILL_REQUESTED'].includes(order.status));
   const placeLabel = order?.type === 'DINE_IN' ? (table?.table.name ?? '') : t(`orderType.${draft.type}`);
+  const selected = order ? optionKey(order.type, order.channel === 'PHONE') : optionKey(draft.type, draft.phoneOrder);
+  const canPay = can(role, 'payment.record');
+  /** Pieces count one each; a kg item counts as one line */
+  const countItems = (lines: { quantity: number; unit: string }[]) => lines.reduce((n, l) => n + (l.unit === 'piece' ? l.quantity : 1), 0);
+  const itemCount = order
+    ? countItems(order.items.filter((i) => !i.isVoid)) + countItems(views.map((v) => ({ quantity: v.line.quantity, unit: v.unit })))
+    : countItems(views.map((v) => ({ quantity: v.line.quantity, unit: v.unit })));
+  // After "Bill Now" on a new bill the panel restarts with the new order; open the payment once it loads.
+  const paymentOrder = payOrder ?? (draft.payNow && order && payable && due > 0 ? order : null);
+  const closePayment = () => {
+    setPayOrder(null);
+    if (draft.payNow) setDraft((d) => ({ ...d, payNow: false }));
+  };
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -127,13 +165,15 @@ export function CurrentBill({
     }
   };
 
-  const send = () =>
-    run(async () => {
+  /** Send the new items to the kitchen (a new order, or the next round of the running table bill). */
+  const send = async (payNow: boolean): Promise<Order | null> => {
+    let sent: Order | null = null;
+    await run(async () => {
       const items = draft.cart.map(toDraftItem);
-      let sent: Order;
+      let result: Order;
       if (draft.type === 'DINE_IN') {
         if (!draft.tableId) throw new Error(t('pos.chooseTableFirst'));
-        sent = await getApi().sendRound({
+        result = await getApi().sendRound({
           tableId: draft.tableId,
           guests: order?.guests ?? draft.guests,
           items,
@@ -142,9 +182,9 @@ export function CurrentBill({
           customerPhone: draft.customer.phone,
         });
       } else {
-        sent = await getApi().createCounterOrder({
+        result = await getApi().createCounterOrder({
           type: draft.type,
-          channel: draft.type === 'DELIVERY' ? 'PHONE' : 'POS',
+          channel: draft.type === 'DELIVERY' || draft.phoneOrder ? 'PHONE' : 'POS',
           customerName: draft.customer.name,
           customerPhone: draft.customer.phone,
           customerAddress: draft.customer.address,
@@ -154,15 +194,34 @@ export function CurrentBill({
         });
       }
       if (draft.heldId) await getApi().deleteHeldBill(draft.heldId);
-      setDraft((d) => ({ ...d, cart: [], orderId: sent.id, heldId: null, sendKey: crypto.randomUUID() }));
-      toast.show({ tone: 'success', title: t('pos.sentToKitchen', { n: sent.dailyNumber }) });
+      sent = result;
+      setDraft((d) => ({
+        ...d,
+        cart: [],
+        orderId: result.id,
+        heldId: null,
+        sendKey: crypto.randomUUID(),
+        payNow: payNow && result.id !== d.orderId,
+      }));
+      toast.show({ tone: 'success', title: t('pos.sentToKitchen', { n: result.dailyNumber }) });
     });
+    return sent;
+  };
+
+  /** Bill Now: send what is new, then take the payment of the whole bill. */
+  const billNow = async () => {
+    if (views.length === 0) return setPayOrder(order ?? null);
+    const before = draft.orderId;
+    const sent = await send(true);
+    if (sent && sent.id === before) setPayOrder(sent);
+  };
 
   const hold = () =>
     run(async () => {
       await getApi().holdBill({
         id: draft.heldId,
         type: draft.type,
+        phoneOrder: draft.phoneOrder,
         tableId: draft.tableId,
         guests: draft.guests,
         customerName: draft.customer.name,
@@ -175,283 +234,332 @@ export function CurrentBill({
       onNewBill();
     });
 
-  return (
-    <Card data-pos-bill className="flex flex-col lg:min-h-0">
-      <div ref={scrollArea} className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 pb-2.5 pt-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-black text-slate-900">
-            {order ? `${placeLabel} · ${t('waiter.orderNumber', { n: order.dailyNumber })}` : draft.heldId ? t('pos.heldBill') : t('pos.newBill')}
-          </h2>
-          {order && <Badge tone={ORDER_TONES[order.status]}>{t(`orderStatus.${order.status}`)}</Badge>}
-        </div>
+  const finished = order && FINISHED.includes(order.status);
+  const handOver = order?.type === 'TAKEAWAY' && order.status === 'READY';
+  const sectionTitle = 'text-sm font-bold text-slate-900';
 
-        <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1" role="radiogroup" aria-label={t('pos.orderType')}>
-          {ORDER_TYPES.map((type) => {
-            const Icon = TYPE_ICONS[type];
+  return (
+    <div data-pos-bill className="flex flex-col gap-3 lg:min-h-0 short:gap-2">
+      {/* Order type */}
+      <Card className="shrink-0 p-3 short:p-2.5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 short:mb-1">
+          <h2 className="text-base font-bold text-slate-900 short:text-sm">{t('pos.orderType')}</h2>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-sm font-extrabold text-slate-900">
+              {order ? `${placeLabel} · ${t('waiter.orderNumber', { n: order.dailyNumber })}` : draft.heldId ? t('pos.heldBill') : t('pos.newBill')}
+            </span>
+            {order && <Badge tone={ORDER_TONES[order.status]}>{t(`orderStatus.${order.status}`)}</Badge>}
+            {paymentState && (
+              <Badge tone={paymentState === 'PAID' ? 'green' : paymentState === 'PARTLY' ? 'amber' : 'grey'}>{t(`pos.payment${paymentState}`)}</Badge>
+            )}
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label={t('pos.orderType')}>
+          {ORDER_OPTIONS.map((option) => {
+            const active = selected === option.key;
+            const Icon = option.icon;
             return (
               <button
-                key={type}
+                key={option.key}
                 type="button"
                 role="radio"
-                aria-checked={draft.type === type}
+                aria-checked={active}
                 disabled={locked}
-                onClick={() => setDraft((d) => ({ ...d, type, tableId: type === 'DINE_IN' ? d.tableId : null }))}
+                onClick={() =>
+                  setDraft((d) => ({ ...d, type: option.type, phoneOrder: option.phone, tableId: option.type === 'DINE_IN' ? d.tableId : null }))
+                }
                 className={cn(
-                  'flex min-h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-bold disabled:cursor-not-allowed',
-                  draft.type === type ? 'bg-brand text-white shadow' : 'text-slate-600 hover:bg-white',
+                  'flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border text-xs font-bold transition disabled:cursor-not-allowed short:min-h-11 short:flex-row short:gap-1.5',
+                  active ? 'border-brand bg-brand text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+                  locked && !active && 'opacity-50',
                 )}
               >
-                <Icon className="size-4 shrink-0" aria-hidden />
-                {t(`orderType.${type}`)}
+                <Icon className="size-6 shrink-0 short:size-4" aria-hidden />
+                {t(option.label)}
               </button>
             );
           })}
         </div>
+      </Card>
 
-        {draft.type === 'DINE_IN' && (
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="block min-w-40 flex-1">
-              <span className="mb-1 block text-xs font-bold text-slate-900">{t('pos.table')}</span>
-              <select
-                value={draft.tableId ?? ''}
-                disabled={locked}
-                onChange={(e) => {
-                  const entry = tables.find((x) => x.table.id === e.target.value);
-                  setDraft((d) => ({ ...d, tableId: e.target.value || null, orderId: entry?.order?.id ?? null }));
-                }}
-                className="min-h-10 w-full rounded-xl border border-slate-300 px-3 font-bold"
-              >
-                <option value="">{t('pos.chooseTableOption')}</option>
-                {tables.map((e) => (
-                  <option key={e.table.id} value={e.table.id}>
-                    {e.table.name} — {e.order ? `${t(`tableStatus.${e.status}`)} · ${formatPaisa(e.order.totals.total)}` : t('tableStatus.FREE')}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {!order && (
-              <div>
-                <span className="mb-1 block text-xs font-bold text-slate-900">{t('waiter.guests')}</span>
-                <QuantityStepper size="sm" value={draft.guests} onChange={(n) => setDraft((d) => ({ ...d, guests: n }))} label={t('waiter.guests')} />
+      {/* Table, customer, items, totals, actions */}
+      <Card className="flex flex-col lg:min-h-0 lg:flex-1">
+        <div ref={scrollArea} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 short:space-y-2 short:p-2.5">
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className={sectionTitle}>
+                {draft.type === 'DINE_IN' ? t('pos.tableAndCustomer') : draft.type === 'DELIVERY' ? t('pos.customerAndDelivery') : t('pos.customer')}
+              </h3>
+              {draft.type === 'DINE_IN' && !order && <span className={cn(sectionTitle, 'w-34')}>{t('waiter.guests')}</span>}
+            </div>
+            {draft.type === 'DINE_IN' && (
+              <div className="flex items-center gap-2">
+                <label className="relative min-w-0 flex-1">
+                  <span className="sr-only">{t('pos.table')}</span>
+                  <Armchair className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-slate-500" aria-hidden />
+                  <select
+                    value={draft.tableId ?? ''}
+                    disabled={locked}
+                    onChange={(e) => {
+                      const entry = tables.find((x) => x.table.id === e.target.value);
+                      setDraft((d) => ({ ...d, tableId: e.target.value || null, orderId: entry?.order?.id ?? null }));
+                    }}
+                    className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 font-bold short:min-h-10"
+                  >
+                    <option value="">{t('pos.chooseTableOption')}</option>
+                    {tables.map((e) => (
+                      <option key={e.table.id} value={e.table.id}>
+                        {e.table.name} — {e.order ? `${t(`tableStatus.${e.status}`)} · ${formatPaisa(e.order.totals.total)}` : t('tableStatus.FREE')}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {!order && (
+                  <span className="flex shrink-0 items-center gap-1">
+                    <Users className="size-5 text-slate-500" aria-hidden />
+                    <QuantityStepper size="sm" value={draft.guests} onChange={(n) => setDraft((d) => ({ ...d, guests: n }))} label={t('waiter.guests')} />
+                  </span>
+                )}
               </div>
             )}
-          </div>
-        )}
-
-        {!order ? (
-          <CustomerFields
-            value={draft.customer}
-            onChange={(customer) => setDraft((d) => ({ ...d, customer }))}
-            withAddress={draft.type === 'DELIVERY'}
-            optional={draft.type === 'DINE_IN'}
-          />
-        ) : (
-          order.customerName && (
-            <p className="text-sm text-slate-700">
-              <span className="font-bold">{order.customerName}</span>
-              {order.customerPhone && ` · ${order.customerPhone}`}
-              {order.customerAddress && ` · ${order.customerAddress}`}
-            </p>
-          )
-        )}
-
-        {order && (
-          <section>
-            <h3 className="mb-1 flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-500">
-              <ChefHat className="size-4" aria-hidden />
-              {t('pos.sentItems')}
-            </h3>
-            <ul className="divide-y divide-slate-100 text-sm">
-              {order.items.map((item) => {
-                const ticket = order.tickets.find((tk) => tk.id === item.ticketId);
-                return (
-                  <li key={item.id} className={cn('flex items-center justify-between gap-2 py-1.5', item.isVoid && 'text-slate-400 line-through')}>
-                    <span className="min-w-0">
-                      <span className="font-semibold">
-                        {formatQuantity(item.quantity, item.unit)} {item.name}
-                      </span>
-                      {item.variantName && ` (${item.variantName})`}
-                      {item.modifiers.map((m) => ` + ${m.name}`).join('')}
-                    </span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      {ticket && !item.isVoid && <Badge tone={TICKET_TONES[ticket.status]}>{t(`ticketStatus.${ticket.status}`)}</Badge>}
-                      <span className="tabular-nums">{formatPaisa(item.lineTotal)}</span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
-
-        {canAddItems && (
-          <section>
-            <h3 className="mb-1.5 text-sm font-bold text-slate-900">
-              {order ? t('pos.addItems') : t('pos.items')}
-              {views.length > 0 && <span className="text-slate-500"> ({views.length})</span>}
-            </h3>
-            {views.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500">{t('pos.tapProducts')}</p>
-            ) : (
-              <ul className="space-y-2">
-                {views.map((v) => (
-                  <li key={v.line.key} data-line={v.line.key} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 text-sm shadow-sm">
-                    <ProductArt name={v.name} categoryName={categoryOf(v.line.menuItemId)} className="size-11 shrink-0 rounded-lg" iconClassName="size-6" />
-                    <div className="min-w-0 flex-1">
-                      <span className="line-clamp-2 font-bold leading-tight text-slate-900">{v.name}</span>
-                      {v.details && <span className="block text-xs text-slate-600">{v.details}</span>}
-                      {v.line.note && <span className="block text-xs text-amber-700">“{v.line.note}”</span>}
-                      <span className="block text-xs font-semibold text-slate-700">
-                        {formatQuantity(v.line.quantity, v.unit)} · {formatPaisa(v.unitPrice * v.line.quantity)}
-                      </span>
-                    </div>
-                    <QuantityStepper
-                      size="sm"
-                      value={v.line.quantity}
-                      onChange={(n) => setDraft((d) => ({ ...d, cart: d.cart.map((l) => (l.key === v.line.key ? { ...l, quantity: n } : l)) }))}
-                      label={t('waiter.quantity')}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => onEditLine(v.line)}
-                      aria-label={t('pos.editItem', { name: v.name })}
-                      className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100"
-                    >
-                      <Pencil className="size-5" aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDraft((d) => ({ ...d, cart: d.cart.filter((l) => l.key !== v.line.key) }))}
-                      aria-label={t('waiter.remove', { name: v.name })}
-                      className="flex size-10 shrink-0 items-center justify-center rounded-xl text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="size-5" aria-hidden />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!order && draft.type !== 'DINE_IN' && (
-              <input
-                value={draft.note}
-                maxLength={200}
-                onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))}
-                placeholder={t('online.orderNote')}
-                aria-label={t('online.orderNote')}
-                className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm"
+            {!order ? (
+              <CustomerFields
+                value={draft.customer}
+                onChange={(customer) => setDraft((d) => ({ ...d, customer }))}
+                withAddress={draft.type === 'DELIVERY'}
+                optional={draft.type === 'DINE_IN'}
               />
+            ) : (
+              order.customerName && (
+                <p className="text-sm text-slate-700">
+                  <span className="font-bold">{order.customerName}</span>
+                  {order.customerPhone && ` · ${order.customerPhone}`}
+                  {order.customerAddress && ` · ${order.customerAddress}`}
+                </p>
+              )
             )}
           </section>
-        )}
-        {order && !canAddItems && order.type !== 'DINE_IN' && !['PICKED_UP', 'DELIVERED'].includes(order.status) && (
-          <p className="text-xs text-slate-500">{t('pos.counterNoAdd')}</p>
-        )}
-      </div>
 
-      <div className="shrink-0 space-y-2 border-t border-slate-200 px-3 pb-3 pt-2.5 short:space-y-1.5 short:pb-2 short:pt-2">
-        <dl className="space-y-0.5 text-sm text-slate-700">
-          {order ? (
-            <>
-              <Row label={t('pos.subtotal')} amount={order.totals.itemsSubtotal} />
-              {order.totals.discount > 0 && <Row label={`${t('pos.discount')} (${order.discount?.reason ?? ''})`} amount={-order.totals.discount} />}
-              {order.totals.serviceCharge > 0 && <Row label={t('pos.serviceCharge')} amount={order.totals.serviceCharge} />}
-              {order.totals.tax > 0 && <Row label={t('pos.tax')} amount={order.totals.tax} />}
-              {order.totals.deliveryFee > 0 && <Row label={t('pos.deliveryCharge')} amount={order.totals.deliveryFee} />}
-              {order.totals.rounding !== 0 && <Row label={t('pos.rounding')} amount={order.totals.rounding} />}
-              <Row label={t('pos.grandTotal')} amount={order.totals.total} strong />
-              {order.paidTotal > 0 && <Row label={t('pos.paidSoFar')} amount={order.paidTotal} />}
-              {due > 0 && <Row label={t('pos.due')} amount={due} />}
-              {views.length > 0 && <Row label={t('pos.newItemsTotal')} amount={estimate.itemsSubtotal} />}
-            </>
-          ) : (
-            <>
-              <Row label={t('pos.subtotal')} amount={estimate.itemsSubtotal} />
-              {estimate.serviceCharge > 0 && <Row label={t('pos.serviceCharge')} amount={estimate.serviceCharge} />}
-              {estimate.tax > 0 && <Row label={t('pos.tax')} amount={estimate.tax} />}
-              {views.length > 0 && estimate.deliveryFee > 0 && <Row label={t('pos.deliveryCharge')} amount={estimate.deliveryFee} />}
-              <Row label={t('pos.grandTotal')} amount={views.length > 0 ? estimate.total : 0} strong />
-              <p className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900 short:mt-1 short:py-1 short:text-[11px]">
-                <Info className="mt-px size-3.5 shrink-0" aria-hidden />
-                {t('pos.discountAfterSend')}
-              </p>
-            </>
+          {order && (
+            <section>
+              <h3 className={cn(sectionTitle, 'mb-1 flex items-center gap-1')}>
+                <ChefHat className="size-4" aria-hidden />
+                {t('pos.sentItems')}
+              </h3>
+              <ul className="divide-y divide-slate-100 text-sm">
+                {order.items.map((item) => {
+                  const ticket = order.tickets.find((tk) => tk.id === item.ticketId);
+                  return (
+                    <li key={item.id} className={cn('flex items-center justify-between gap-2 py-1.5', item.isVoid && 'text-slate-400 line-through')}>
+                      <span className="min-w-0">
+                        <span className="font-semibold">
+                          {formatQuantity(item.quantity, item.unit)} {item.name}
+                        </span>
+                        {item.variantName && ` (${item.variantName})`}
+                        {item.modifiers.map((m) => ` + ${m.name}`).join('')}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        {ticket && !item.isVoid && <Badge tone={TICKET_TONES[ticket.status]}>{t(`ticketStatus.${ticket.status}`)}</Badge>}
+                        <span className="tabular-nums">{formatPaisa(item.lineTotal)}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           )}
-        </dl>
-        {paymentState && (
-          <Badge tone={paymentState === 'PAID' ? 'green' : paymentState === 'PARTLY' ? 'amber' : 'grey'} className="text-sm">
-            {t(`pos.payment${paymentState}`)}
-          </Badge>
-        )}
 
-        {error && (
-          <p role="alert" className="font-semibold text-red-700">
-            {error}
-          </p>
-        )}
-
-        <div className="grid gap-2 sm:grid-cols-2">
-          {views.length > 0 && (
-            <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-2 sm:col-span-2">
-              <Button variant="secondary" disabled={busy} onClick={() => setClearing(true)} className="whitespace-nowrap px-3 text-red-700">
-                <Trash2 className="size-5" aria-hidden />
-                {t('pos.clearBill')}
-              </Button>
-              <Button variant="secondary" disabled={busy} onClick={hold} className="whitespace-nowrap px-3">
-                <Pause className="size-5" aria-hidden />
-                {t('pos.hold')}
-              </Button>
-              <Button disabled={busy} onClick={send} className="whitespace-nowrap px-3 text-base font-bold">
-                <Send className="size-5" aria-hidden />
-                {t('waiter.send')}
-              </Button>
-            </div>
+          {canAddItems && (
+            <section>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <h3 className={sectionTitle}>
+                  {order ? t('pos.addItems') : t('pos.items')}
+                  {views.length > 0 && <span className="text-slate-500"> ({views.length})</span>}
+                </h3>
+                {views.length > 0 && (
+                  <span className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={hold}
+                      className="flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                    >
+                      <Pause className="size-4" aria-hidden />
+                      {t('pos.hold')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setClearing(true)}
+                      className="flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-bold text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                      {t('pos.clearAll')}
+                    </button>
+                  </span>
+                )}
+              </div>
+              {views.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500">{t('pos.tapProducts')}</p>
+              ) : (
+                <ul className="space-y-2 short:space-y-1.5">
+                  {views.map((v) => (
+                    <li key={v.line.key} data-line={v.line.key} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 text-sm short:p-1">
+                      <ProductArt name={v.name} categoryName={categoryOf(v.line.menuItemId)} className="size-12 shrink-0 rounded-lg short:size-10" emojiClassName="text-2xl short:text-xl" />
+                      <div className="min-w-0 flex-1">
+                        <span className="line-clamp-2 font-bold leading-tight text-slate-900">{v.name}</span>
+                        {v.details && <span className="block truncate text-xs text-slate-600">{v.details}</span>}
+                        {v.line.note && <span className="block truncate text-xs text-amber-700">“{v.line.note}”</span>}
+                        <span className="block text-sm font-semibold leading-tight text-slate-600">{formatPaisa(v.unitPrice * v.line.quantity)}</span>
+                      </div>
+                      <QuantityStepper
+                        size="sm"
+                        value={v.line.quantity}
+                        onChange={(n) => setDraft((d) => ({ ...d, cart: d.cart.map((l) => (l.key === v.line.key ? { ...l, quantity: n } : l)) }))}
+                        label={t('waiter.quantity')}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onEditLine(v.line)}
+                        aria-label={t('pos.editItem', { name: v.name })}
+                        className="flex size-9 shrink-0 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100"
+                      >
+                        <Pencil className="size-5" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDraft((d) => ({ ...d, cart: d.cart.filter((l) => l.key !== v.line.key) }))}
+                        aria-label={t('waiter.remove', { name: v.name })}
+                        className="flex size-9 shrink-0 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="size-5" aria-hidden />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!order && draft.type !== 'DINE_IN' && (
+                <input
+                  value={draft.note}
+                  maxLength={200}
+                  onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))}
+                  placeholder={t('online.orderNote')}
+                  aria-label={t('online.orderNote')}
+                  className="mt-2 min-h-10 w-full rounded-xl border border-slate-300 px-3 text-sm"
+                />
+              )}
+            </section>
           )}
-          {order && payable && (
-            <Button variant="outline" disabled={busy} onClick={() => run(async () => { await getApi().printPreBill(order.id); setPrint('PRE_BILL'); })}>
-              <Printer className="size-5" aria-hidden />
-              {t('pos.printBill')}
-            </Button>
-          )}
-          {order && payable && due > 0 && can(role, 'order.discount') && (
-            <Button variant="secondary" disabled={busy} onClick={() => setDiscounting(true)}>
-              <Percent className="size-5" aria-hidden />
-              {t('pos.discount')}
-            </Button>
-          )}
-          {order && payable && due > 0 && can(role, 'payment.record') && (
-            <Button size="lg" disabled={busy} onClick={() => setPaying(true)} className="sm:col-span-2">
-              <Wallet className="size-5" aria-hidden />
-              {t('pos.takePayment', { due: formatPaisa(due) })}
-            </Button>
-          )}
-          {order && order.invoiceNumber !== null && (
-            <Button variant="outline" disabled={busy} onClick={() => run(async () => { const o = await getApi().printReceipt(order.id); setPrint(o.receiptPrints > 1 ? 'DUPLICATE' : 'RECEIPT'); })}>
-              <Printer className="size-5" aria-hidden />
-              {order.receiptPrints > 0 ? t('pos.reprintReceipt') : t('pos.printReceipt')}
-            </Button>
-          )}
-          {order?.type === 'TAKEAWAY' && order.status === 'READY' && (
-            <Button size="lg" disabled={busy} onClick={() => run(() => getApi().markPickedUp(order.id))}>
-              <CheckCircle2 className="size-5" aria-hidden />
-              {t('pos.completeHandOver')}
-            </Button>
-          )}
-          {order?.type === 'TAKEAWAY' && ['ACCEPTED', 'PREPARING'].includes(order.status) && (
-            <p className="text-sm text-slate-600 sm:col-span-2">{t('pos.kitchenStillCooking')}</p>
-          )}
-          {order?.type === 'DELIVERY' && order.status === 'READY' && (
-            <Link href="/online-orders" className="text-sm font-bold text-brand underline sm:col-span-2">
-              {t('pos.assignRiderLink')}
-            </Link>
-          )}
-          {order && (order.status === 'PAID' || order.status === 'PICKED_UP' || order.status === 'DELIVERED') && (
-            <Button size="lg" variant="secondary" onClick={onNewBill} className="sm:col-span-2">
-              <CheckCircle2 className="size-5" aria-hidden />
-              {t('pos.completeNewBill')}
-            </Button>
+          {order && !canAddItems && order.type !== 'DINE_IN' && !['PICKED_UP', 'DELIVERED'].includes(order.status) && (
+            <p className="text-xs text-slate-500">{t('pos.counterNoAdd')}</p>
           )}
         </div>
-      </div>
+
+        <div className="shrink-0 space-y-2 border-t border-slate-200 p-3 short:space-y-1.5 short:p-2.5">
+          <div className="rounded-xl bg-green-50 px-3 py-2 short:py-1.5">
+            <dl className="space-y-0.5 text-sm text-slate-700">
+              {order ? (
+                <>
+                  <Row label={itemCount === 1 ? t('pos.subtotalOneItem') : t('pos.subtotalItems', { n: itemCount })} amount={order.totals.itemsSubtotal} />
+                  {order.totals.discount > 0 && <Row label={`${t('pos.discount')} (${order.discount?.reason ?? ''})`} amount={-order.totals.discount} />}
+                  <Row label={t('pos.taxAndService')} amount={order.totals.tax + order.totals.serviceCharge} />
+                  {order.totals.deliveryFee > 0 && <Row label={t('pos.deliveryCharge')} amount={order.totals.deliveryFee} />}
+                  {order.totals.rounding !== 0 && <Row label={t('pos.rounding')} amount={order.totals.rounding} />}
+                  {views.length > 0 && <Row label={t('pos.newItemsTotal')} amount={estimate.itemsSubtotal} />}
+                  <Row label={t('pos.total')} amount={order.totals.total} strong />
+                  {order.paidTotal > 0 && <Row label={t('pos.paidSoFar')} amount={order.paidTotal} />}
+                  {order.paidTotal > 0 && due > 0 && <Row label={t('pos.due')} amount={due} />}
+                </>
+              ) : (
+                <>
+                  <Row label={itemCount === 1 ? t('pos.subtotalOneItem') : t('pos.subtotalItems', { n: itemCount })} amount={estimate.itemsSubtotal} />
+                  <Row label={t('pos.taxAndService')} amount={estimate.tax + estimate.serviceCharge} />
+                  {views.length > 0 && estimate.deliveryFee > 0 && <Row label={t('pos.deliveryCharge')} amount={estimate.deliveryFee} />}
+                  <Row label={t('pos.total')} amount={views.length > 0 ? estimate.total : 0} strong />
+                </>
+              )}
+            </dl>
+          </div>
+          {!order && (
+            <p className="flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-medium leading-snug text-amber-900">
+              <Info className="mt-px size-3.5 shrink-0" aria-hidden />
+              {t('pos.discountAfterSend')}
+            </p>
+          )}
+
+          {error && (
+            <p role="alert" className="text-sm font-semibold text-red-700">
+              {error}
+            </p>
+          )}
+
+          {order && (
+            <div className="flex flex-wrap gap-2">
+              {payable && (
+                <SmallAction icon={Printer} disabled={busy} onClick={() => run(async () => { await getApi().printPreBill(order.id); setPrint('PRE_BILL'); })}>
+                  {t('pos.printBill')}
+                </SmallAction>
+              )}
+              {payable && due > 0 && can(role, 'order.discount') && (
+                <SmallAction icon={Percent} disabled={busy} onClick={() => setDiscounting(true)}>
+                  {t('pos.discount')}
+                </SmallAction>
+              )}
+              {order.invoiceNumber !== null && (
+                <SmallAction
+                  icon={Printer}
+                  disabled={busy}
+                  onClick={() => run(async () => { const o = await getApi().printReceipt(order.id); setPrint(o.receiptPrints > 1 ? 'DUPLICATE' : 'RECEIPT'); })}
+                >
+                  {order.receiptPrints > 0 ? t('pos.reprintReceipt') : t('pos.printReceipt')}
+                </SmallAction>
+              )}
+              {handOver && due > 0 && (
+                <SmallAction icon={CheckCircle2} disabled={busy} onClick={() => run(() => getApi().markPickedUp(order.id))}>
+                  {t('pos.completeHandOver')}
+                </SmallAction>
+              )}
+              {order.type === 'TAKEAWAY' && ['ACCEPTED', 'PREPARING'].includes(order.status) && (
+                <p className="self-center text-xs text-slate-600">{t('pos.kitchenStillCooking')}</p>
+              )}
+              {order.type === 'DELIVERY' && order.status === 'READY' && (
+                <Link href="/online-orders" className="self-center text-sm font-bold text-brand underline">
+                  {t('pos.assignRiderLink')}
+                </Link>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={busy || views.length === 0}
+              onClick={() => void send(false)}
+              className="flex min-h-13 items-center justify-center gap-2 rounded-xl border-2 border-brand bg-white px-2 text-base font-bold text-brand hover:bg-brand-soft disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-white short:min-h-11"
+            >
+              <ChefHat className="size-5 shrink-0" aria-hidden />
+              {t('pos.sendToKitchen')}
+            </button>
+            {finished ? (
+              <BigAction icon={CheckCircle2} onClick={onNewBill}>
+                {t('pos.completeNewBill')}
+              </BigAction>
+            ) : handOver && due === 0 ? (
+              <BigAction icon={CheckCircle2} disabled={busy} onClick={() => run(() => getApi().markPickedUp(order.id))}>
+                {t('pos.completeHandOver')}
+              </BigAction>
+            ) : (
+              <BigAction
+                icon={ReceiptText}
+                disabled={busy || !canPay || (views.length === 0 && !(payable && due > 0))}
+                onClick={() => void billNow()}
+              >
+                {t('pos.billNow')}
+              </BigAction>
+            )}
+          </div>
+        </div>
+      </Card>
 
       {clearing && (
         <Dialog
@@ -466,7 +574,7 @@ export function CurrentBill({
               <Button
                 onClick={() => {
                   // Only unsent items go; anything already sent stays on the shared order.
-                  setDraft((d) => (d.orderId ? { ...d, cart: [] } : newDraft(d.type)));
+                  setDraft((d) => (d.orderId ? { ...d, cart: [] } : newDraft(d.type, d.phoneOrder)));
                   setClearing(false);
                 }}
               >
@@ -479,16 +587,16 @@ export function CurrentBill({
         </Dialog>
       )}
 
-      {paying && order && (
+      {paymentOrder && (
         <PaymentDialog
-          order={order}
-          onClose={() => setPaying(false)}
+          order={paymentOrder}
+          onClose={closePayment}
           onPending={() => {
-            setPaying(false);
-            toast.show({ tone: 'info', title: t('pos.pendingTitle'), body: t('pos.stillDue', { due: formatPaisa(due) }) });
+            closePayment();
+            toast.show({ tone: 'info', title: t('pos.pendingTitle'), body: t('pos.stillDue', { due: formatPaisa(paymentOrder.totals.total - paymentOrder.paidTotal) }) });
           }}
           onDone={(updated) => {
-            setPaying(false);
+            closePayment();
             toast.show(
               updated.invoiceNumber !== null
                 ? { tone: 'success', title: t('pos.paidInvoiceShort', { n: updated.invoiceNumber }) }
@@ -510,18 +618,44 @@ export function CurrentBill({
       {print && order && (
         <PrintDialog order={order} kind={print} placeLabel={placeLabel} waiterName={table?.waiterName ?? null} onClose={() => setPrint(null)} />
       )}
-    </Card>
+    </div>
   );
 }
 
 function Row({ label, amount, strong = false }: { label: string; amount: number; strong?: boolean }) {
   return (
-    <div className={cn('flex justify-between gap-2', strong && 'text-2xl font-black text-slate-900')}>
-      <dt>{label}</dt>
+    <div className={cn('flex items-baseline justify-between gap-2', strong && 'pt-0.5 text-2xl font-black text-green-700 short:text-xl')}>
+      <dt className={cn(strong && 'text-slate-900')}>{label}</dt>
       <dd className="tabular-nums">
         {formatPaisa(Math.abs(amount))}
         {amount < 0 ? ' −' : ''}
       </dd>
     </div>
+  );
+}
+
+function BigAction({ icon: Icon, children, ...rest }: { icon: typeof Phone } & ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-brand px-2 text-base font-bold text-white shadow-sm hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-brand/40 short:min-h-11"
+      {...rest}
+    >
+      <Icon className="size-5 shrink-0" aria-hidden />
+      <span className="leading-tight">{children}</span>
+    </button>
+  );
+}
+
+function SmallAction({ icon: Icon, children, ...rest }: { icon: typeof Phone } & ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      type="button"
+      className="flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+      {...rest}
+    >
+      <Icon className="size-4 shrink-0" aria-hidden />
+      {children}
+    </button>
   );
 }

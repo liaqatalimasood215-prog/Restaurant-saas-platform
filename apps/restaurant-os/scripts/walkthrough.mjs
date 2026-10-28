@@ -178,7 +178,7 @@ await shot(chickenChef, '06-tablet-chicken-chef-1-kg');
 console.log('7. Service Waiter cannot order, void, take payment or open POS');
 await serviceWaiter.goto(`${BASE_URL}/waiter?table=${TABLE.t5}`, { waitUntil: 'networkidle' });
 await serviceWaiter.locator('main h1').waitFor();
-for (const name of ['Send to kitchen', 'Void', 'Record Payment', 'Take payment']) {
+for (const name of ['Send to kitchen', 'Void', 'Record Payment', 'Bill Now']) {
   assert.equal(await serviceWaiter.getByRole('button', { name, exact: true }).count(), 0, name);
 }
 await serviceWaiter.goto(`${BASE_URL}/pos`, { waitUntil: 'networkidle' });
@@ -220,7 +220,7 @@ await preBill.getByRole('button', { name: 'Close' }).last().click();
 assert.equal(await cashier.getByText(/Paid · Invoice/).count(), 0, 'pre-bill does not mark the order paid');
 ok('pre-bill printed "NOT A RECEIPT"; order not paid');
 
-await cashier.getByRole('button', { name: /^Take payment/ }).click();
+await cashier.getByRole('button', { name: 'Bill Now' }).click();
 const pay = cashier.getByRole('dialog');
 await pay.getByLabel('Tip').fill('100');
 await pay.getByLabel('Cash received (Rs.)').fill('6000');
