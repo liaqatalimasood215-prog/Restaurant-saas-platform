@@ -358,11 +358,11 @@ export function CurrentBill({
             {draft.type === 'DINE_IN' && (
               <div className="flex items-center gap-2">
                 <span className="flex min-w-0 flex-1 items-center gap-2">
-                  <Armchair className="size-5 shrink-0 text-slate-500" aria-hidden />
-                  {table ? (
-                    <span className="text-xl font-black text-slate-900">{table.table.name}</span>
-                  ) : (
-                    <span className="text-sm text-slate-500">{t('pos.tapTableButton')}</span>
+                  {table && (
+                    <>
+                      <Armchair className="size-5 shrink-0 text-slate-500" aria-hidden />
+                      <span className="text-xl font-black text-slate-900">{table.table.name}</span>
+                    </>
                   )}
                 </span>
                 {!order && (

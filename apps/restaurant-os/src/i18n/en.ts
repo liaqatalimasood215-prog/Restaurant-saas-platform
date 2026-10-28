@@ -370,7 +370,6 @@ export const en = {
     typeTable: 'Table',
     chooseTableTitle: 'Choose a table',
     chooseTableHint: 'Green = free. Red or amber = running bill (tap to open it).',
-    tapTableButton: 'Tap “Table” to choose a table',
     callWaiter: 'Call Waiter',
     callWaiterNeedsTable: 'Choose a table to call its waiter.',
     waiterCalled: 'Waiter called to {table}',
