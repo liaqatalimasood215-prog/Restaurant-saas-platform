@@ -182,17 +182,14 @@ export function CurrentBill({
 
   /** Send the new items to the kitchen (a new order, or the next round of the running table bill). */
   const send = async (payNow: boolean): Promise<Order | null> => {
-    if (draft.type === 'DINE_IN' && !draft.tableId) {
-      setError(t('pos.chooseTableFirst'));
-      setPickingTable(true);
-      return null;
-    }
+    // No table chosen = a counter sale (takeaway), never an error: a customer does not have to sit.
+    const type = draft.type === 'DINE_IN' && !draft.tableId ? 'TAKEAWAY' : draft.type;
     let sent: Order | null = null;
     await run(async () => {
       if (discountTooBig) throw new Error(t('pos.discountValue'));
       const items = draft.cart.map(toDraftItem);
       let result: Order;
-      if (draft.type === 'DINE_IN') {
+      if (type === 'DINE_IN') {
         result = await getApi().sendRound({
           tableId: draft.tableId as string,
           guests: order?.guests ?? draft.guests,
@@ -204,8 +201,8 @@ export function CurrentBill({
         });
       } else {
         result = await getApi().createCounterOrder({
-          type: draft.type,
-          channel: draft.type === 'DELIVERY' ? 'PHONE' : 'POS',
+          type,
+          channel: type === 'DELIVERY' ? 'PHONE' : 'POS',
           customerName: draft.customer.name,
           customerPhone: draft.customer.phone,
           customerAddress: draft.customer.address,
@@ -341,7 +338,7 @@ export function CurrentBill({
                   onClick={() => {
                     // "Table" always opens the box with every table (also on a sent bill: many tables run at once)
                     if (option.type === 'DINE_IN') {
-                      if (!locked) setDraft((d) => ({ ...d, type: 'DINE_IN' }));
+                      // The bill becomes a Table bill only when a table is chosen (see pickTable).
                       return setPickingTable(true);
                     }
                     setDraft((d) => ({ ...d, type: option.type, tableId: null }));

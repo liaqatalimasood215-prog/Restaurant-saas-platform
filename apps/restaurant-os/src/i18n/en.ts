@@ -382,7 +382,6 @@ export const en = {
     subtotalOneItem: 'Subtotal (1 item)',
     taxAndService: 'Tax & service',
     table: 'Table',
-    chooseTableFirst: 'Choose a table first.',
     customer: 'Customer',
     customerOptional: 'Customer (optional)',
     findCustomer: 'Find customer: name or phone',

@@ -298,6 +298,10 @@ await cashier.bringToFront();
 await cashier.getByRole('button', { name: 'New bill', exact: true }).click();
 await bill(cashier).getByRole('radio', { name: 'Takeaway', checked: true }).waitFor();
 assert.equal(await cashier.getByText('Find table no.').count(), 0, 'the table search box is gone');
+// Tapping Table and closing the box without choosing a table must not turn this into a Table bill.
+await bill(cashier).getByRole('radio', { name: /^Table/ }).click();
+await cashier.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
+await bill(cashier).getByRole('radio', { name: 'Takeaway', checked: true }).waitFor();
 await pick(cashier, 'Beef Burger');
 await grandTotal(cashier, 'Rs. 550');
 await bill(cashier).getByRole('button', { name: 'Bill Now' }).click();
@@ -307,7 +311,7 @@ await shot(cashier, '09-desktop-cashier-quick-sale');
 await dialog.getByRole('button', { name: 'Record payment' }).click();
 await waitText(cashier, 'Paid · Invoice #7');
 await waitText(bill(cashier), 'Takeaway · Order #7');
-ok('a new bill starts as Takeaway; Beef Burger + Bill Now with no table and no customer → order #7 paid, invoice #7');
+ok('a new bill starts as Takeaway and stays so after opening and closing the Table box; Beef Burger + Bill Now with no table and no customer → order #7 paid, invoice #7');
 
 await browser.close();
 console.log('POS walkthrough passed: Flow A (dine-in, takeaway, hold, discounts, split / pending payment, Bill Now) and Flow B (Call Waiter, payment), many tables at once and a quick sale.');
