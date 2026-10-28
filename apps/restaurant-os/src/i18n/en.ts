@@ -367,6 +367,7 @@ export const en = {
     newBill: 'New bill',
     heldBill: 'Held bill',
     orderType: 'Order Type',
+    typeTable: 'Table',
     callWaiter: 'Call Waiter',
     callWaiterNeedsTable: 'Choose a table to call its waiter.',
     waiterCalled: 'Waiter called to {table}',

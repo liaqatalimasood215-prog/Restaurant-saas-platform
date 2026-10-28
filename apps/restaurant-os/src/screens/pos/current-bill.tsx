@@ -17,7 +17,6 @@ import {
   Trash2,
   Truck,
   Users,
-  UtensilsCrossed,
 } from 'lucide-react';
 import {
   calculateBill,
@@ -56,7 +55,7 @@ type Icon = typeof ChefHat;
 
 /** The order type buttons; "Call Waiter" sits next to them (owner's reference design). */
 const ORDER_OPTIONS: { type: OrderType; label: MessageKey; icon: Icon }[] = [
-  { type: 'DINE_IN', label: 'orderType.DINE_IN', icon: UtensilsCrossed },
+  { type: 'DINE_IN', label: 'pos.typeTable', icon: Armchair },
   { type: 'TAKEAWAY', label: 'orderType.TAKEAWAY', icon: ShoppingBag },
   { type: 'DELIVERY', label: 'orderType.DELIVERY', icon: Truck },
 ];
