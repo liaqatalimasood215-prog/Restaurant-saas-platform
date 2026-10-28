@@ -223,7 +223,8 @@ export function CurrentBill({
         orderId: result.id,
         heldId: null,
         sendKey: crypto.randomUUID(),
-        payNow: payNow && result.id !== d.orderId,
+        // The panel restarts when the order is new or a held bill is used up: open the payment after it.
+        payNow: payNow && (result.id !== d.orderId || d.heldId !== null),
         discount: null,
       }));
       toast.show({ tone: 'success', title: t('pos.sentToKitchen', { n: result.dailyNumber }) });
@@ -239,23 +240,49 @@ export function CurrentBill({
     if (sent && sent.id === before) setPayOrder(sent);
   };
 
+  const holdCurrent = () =>
+    getApi().holdBill({
+      id: draft.heldId,
+      type: draft.type,
+      tableId: draft.tableId,
+      guests: draft.guests,
+      customerName: draft.customer.name,
+      customerPhone: draft.customer.phone,
+      customerAddress: draft.customer.address,
+      note: draft.note,
+      items: draft.cart.map(toDraftItem),
+      discount: draft.discount,
+    });
+
   const hold = () =>
     run(async () => {
-      await getApi().holdBill({
-        id: draft.heldId,
-        type: draft.type,
-        tableId: draft.tableId,
-        guests: draft.guests,
-        customerName: draft.customer.name,
-        customerPhone: draft.customer.phone,
-        customerAddress: draft.customer.address,
-        note: draft.note,
-        items: draft.cart.map(toDraftItem),
-        discount: draft.discount,
-      });
+      await holdCurrent();
       toast.show({ tone: 'success', title: t('pos.held') });
       onNewBill();
     });
+
+  /**
+   * Choose a table from the table box. Many tables can run at once: leaving a bill that is already
+   * sent keeps it running (reopen it from the box or "Running bills"); new items that are not sent
+   * yet are put on hold for that table first, so nothing is lost.
+   */
+  const pickTable = (entry: TableBoardEntry) => {
+    if (draft.type === 'DINE_IN' && entry.table.id === draft.tableId) return setPickingTable(false);
+    setError(null);
+    if (!locked) {
+      // A new bill just takes the table; a table with a running bill gets these items as its next round.
+      setDraft((d) => ({ ...d, type: 'DINE_IN', tableId: entry.table.id, orderId: entry.order?.id ?? null, discount: entry.order ? null : d.discount }));
+      return setPickingTable(false);
+    }
+    void run(async () => {
+      if (views.length > 0) {
+        await holdCurrent();
+        toast.show({ tone: 'info', title: t('pos.held'), body: t('pos.heldForTable', { table: table?.table.name ?? '' }) });
+      }
+      setDraft(() => ({ ...newDraft('DINE_IN'), tableId: entry.table.id, orderId: entry.order?.id ?? null }));
+      setPickingTable(false);
+    });
+  };
 
   const callWaiter = (tableId: string) =>
     run(async () => {
@@ -310,16 +337,19 @@ export function CurrentBill({
                   type="button"
                   role="radio"
                   aria-checked={active}
-                  disabled={locked}
+                  disabled={locked && option.type !== 'DINE_IN'}
                   onClick={() => {
-                    setDraft((d) => ({ ...d, type: option.type, tableId: option.type === 'DINE_IN' ? d.tableId : null }));
-                    // "Table" opens the picker with every table
-                    if (option.type === 'DINE_IN') setPickingTable(true);
+                    // "Table" always opens the box with every table (also on a sent bill: many tables run at once)
+                    if (option.type === 'DINE_IN') {
+                      if (!locked) setDraft((d) => ({ ...d, type: 'DINE_IN' }));
+                      return setPickingTable(true);
+                    }
+                    setDraft((d) => ({ ...d, type: option.type, tableId: null }));
                   }}
                   className={cn(
                     typeButton,
                     active ? 'border-brand bg-brand text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
-                    locked && !active && 'opacity-50',
+                    locked && !active && option.type !== 'DINE_IN' && 'opacity-50',
                   )}
                 >
                   <OptionIcon className="size-6 shrink-0 short:size-4" aria-hidden />
@@ -623,11 +653,7 @@ export function CurrentBill({
                   key={entry.table.id}
                   type="button"
                   aria-label={`${entry.table.name} — ${status}`}
-                  onClick={() => {
-                    setError(null);
-                    setDraft((d) => ({ ...d, type: 'DINE_IN', tableId: entry.table.id, orderId: entry.order?.id ?? null }));
-                    setPickingTable(false);
-                  }}
+                  onClick={() => pickTable(entry)}
                   className={cn(
                     'flex min-h-16 flex-col items-center justify-center rounded-xl border-2 px-1 text-center',
                     entry.status === 'FREE' && 'border-green-300 bg-green-50 hover:bg-green-100',
