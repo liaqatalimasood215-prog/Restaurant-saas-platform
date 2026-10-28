@@ -10,6 +10,9 @@
   --font-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
+/* Short screens (a laptop at 150 % scaling shows about 620 px): the POS uses smaller gaps. */
+@custom-variant short (@media (max-height: 760px));
+
 html {
   -webkit-tap-highlight-color: transparent;
 }

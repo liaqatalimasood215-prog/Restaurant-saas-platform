@@ -416,3 +416,4 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-28 | POS layout (owner, size changes only, no new features): compact top, narrower sidebar, the POS fits one screen on tablet/desktop with the bill totals and actions always visible; Clear bill (with confirmation) removes only unsent items. Menu photos stay in Phase 7 | Active |
 | 2026-10-28 | POS title row holds "Find bill: table no." and a "Running bills" list (table bills, takeaway/delivery to pay, held bills); bill requests stay as a strip when there are any | Active |
 | 2026-10-28 | POS product pictures (owner): food illustrations chosen by product name and category until real menu photos (photo upload stays Phase 7) | Active |
+| 2026-10-28 | Sidebar: full names from 1024 px wide with a Collapse button (icon rail), choice remembered per browser; POS is checked on a short laptop screen (1278×627) as well as desktop and tablet | Active |

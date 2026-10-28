@@ -22,7 +22,7 @@ export function ScreenHeader({
   compact?: boolean;
 }) {
   return (
-    <div className={cn('flex flex-wrap justify-between gap-3', compact ? 'mb-3 items-center' : 'mb-5 items-start')}>
+    <div className={cn('flex flex-wrap justify-between gap-3', compact ? 'mb-3 items-center short:mb-2' : 'mb-5 items-start')}>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className={cn('font-extrabold tracking-tight text-slate-900', compact ? 'text-xl' : 'text-2xl')}>{title}</h1>

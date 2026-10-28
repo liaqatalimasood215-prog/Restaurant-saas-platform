@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ChefHat, Info, Pause, Pencil, Percent, Printer, Send, Trash2, Wallet } from 'lucide-react';
+import { Bike, CheckCircle2, ChefHat, Info, Pause, Pencil, Percent, Printer, Send, ShoppingBag, Trash2, UtensilsCrossed, Wallet } from 'lucide-react';
 import {
   ORDER_TYPES,
   calculateBill,
@@ -34,6 +34,8 @@ import { PrintDialog } from './print-dialog';
 import { ProductArt } from './product-art';
 import type { PrintKind } from './printable-bill';
 
+const TYPE_ICONS = { DINE_IN: UtensilsCrossed, DELIVERY: Bike, TAKEAWAY: ShoppingBag } as const;
+
 const toDraftItem = (l: CartLine): DraftItemInput => ({
   menuItemId: l.menuItemId,
   variantId: l.variantId,
@@ -45,7 +47,9 @@ const toDraftItem = (l: CartLine): DraftItemInput => ({
 /**
  * The bill on the right of the POS: order type, table or customer, new items, the running order
  * (same record as Waiter, Kitchen, Tables and Orders), totals and every cashier action.
- * On tablet and desktop it fills the screen height: the item list scrolls, totals and actions never do.
+ * On tablet and desktop it fills the screen height: the upper part scrolls, totals and actions never do.
+ * A product that was just added (or got one more) scrolls into view and flashes, so the cashier
+ * always sees it, even on a short laptop screen.
  */
 export function CurrentBill({
   draft,
@@ -75,6 +79,18 @@ export function CurrentBill({
   const [discounting, setDiscounting] = useState(false);
   const [print, setPrint] = useState<PrintKind | null>(null);
   const [clearing, setClearing] = useState(false);
+  const scrollArea = useRef<HTMLDivElement>(null);
+  const previousCart = useRef(draft.cart);
+
+  useEffect(() => {
+    const before = new Map(previousCart.current.map((l) => [l.key, l.quantity]));
+    previousCart.current = draft.cart;
+    const changed = draft.cart.find((l) => l.quantity > (before.get(l.key) ?? 0));
+    const row = changed && scrollArea.current?.querySelector<HTMLElement>(`[data-line="${changed.key}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    row.animate([{ backgroundColor: 'var(--color-brand-soft)' }, { backgroundColor: '#ffffff' }], { duration: 900, easing: 'ease-out' });
+  }, [draft.cart]);
   const role = session.user.role;
   const { branch } = session;
 
@@ -161,7 +177,7 @@ export function CurrentBill({
 
   return (
     <Card data-pos-bill className="flex flex-col lg:min-h-0">
-      <div className="shrink-0 space-y-2.5 px-3 pt-3">
+      <div ref={scrollArea} className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 pb-2.5 pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-black text-slate-900">
             {order ? `${placeLabel} · ${t('waiter.orderNumber', { n: order.dailyNumber })}` : draft.heldId ? t('pos.heldBill') : t('pos.newBill')}
@@ -170,19 +186,26 @@ export function CurrentBill({
         </div>
 
         <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1" role="radiogroup" aria-label={t('pos.orderType')}>
-          {ORDER_TYPES.map((type) => (
-            <button
-              key={type}
-              type="button"
-              role="radio"
-              aria-checked={draft.type === type}
-              disabled={locked}
-              onClick={() => setDraft((d) => ({ ...d, type, tableId: type === 'DINE_IN' ? d.tableId : null }))}
-              className={cn('min-h-10 rounded-lg text-sm font-bold disabled:cursor-not-allowed', draft.type === type ? 'bg-brand text-white shadow' : 'text-slate-600')}
-            >
-              {t(`orderType.${type}`)}
-            </button>
-          ))}
+          {ORDER_TYPES.map((type) => {
+            const Icon = TYPE_ICONS[type];
+            return (
+              <button
+                key={type}
+                type="button"
+                role="radio"
+                aria-checked={draft.type === type}
+                disabled={locked}
+                onClick={() => setDraft((d) => ({ ...d, type, tableId: type === 'DINE_IN' ? d.tableId : null }))}
+                className={cn(
+                  'flex min-h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-bold disabled:cursor-not-allowed',
+                  draft.type === type ? 'bg-brand text-white shadow' : 'text-slate-600 hover:bg-white',
+                )}
+              >
+                <Icon className="size-4 shrink-0" aria-hidden />
+                {t(`orderType.${type}`)}
+              </button>
+            );
+          })}
         </div>
 
         {draft.type === 'DINE_IN' && (
@@ -214,9 +237,7 @@ export function CurrentBill({
             )}
           </div>
         )}
-      </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-2.5">
         {!order ? (
           <CustomerFields
             value={draft.customer}
@@ -274,12 +295,10 @@ export function CurrentBill({
             ) : (
               <ul className="space-y-2">
                 {views.map((v) => (
-                  <li key={v.line.key} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 text-sm shadow-sm">
-                    <span className="hidden shrink-0 xl:block">
-                      <ProductArt name={v.name} categoryName={categoryOf(v.line.menuItemId)} className="size-12 rounded-lg" iconClassName="size-6" />
-                    </span>
+                  <li key={v.line.key} data-line={v.line.key} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 text-sm shadow-sm">
+                    <ProductArt name={v.name} categoryName={categoryOf(v.line.menuItemId)} className="size-11 shrink-0 rounded-lg" iconClassName="size-6" />
                     <div className="min-w-0 flex-1">
-                      <span className="block truncate font-bold text-slate-900">{v.name}</span>
+                      <span className="line-clamp-2 font-bold leading-tight text-slate-900">{v.name}</span>
                       {v.details && <span className="block text-xs text-slate-600">{v.details}</span>}
                       {v.line.note && <span className="block text-xs text-amber-700">“{v.line.note}”</span>}
                       <span className="block text-xs font-semibold text-slate-700">
@@ -329,7 +348,7 @@ export function CurrentBill({
         )}
       </div>
 
-      <div className="shrink-0 space-y-2 border-t border-slate-200 px-3 pb-3 pt-2.5">
+      <div className="shrink-0 space-y-2 border-t border-slate-200 px-3 pb-3 pt-2.5 short:space-y-1.5 short:pb-2 short:pt-2">
         <dl className="space-y-0.5 text-sm text-slate-700">
           {order ? (
             <>
@@ -351,7 +370,7 @@ export function CurrentBill({
               {estimate.tax > 0 && <Row label={t('pos.tax')} amount={estimate.tax} />}
               {views.length > 0 && estimate.deliveryFee > 0 && <Row label={t('pos.deliveryCharge')} amount={estimate.deliveryFee} />}
               <Row label={t('pos.grandTotal')} amount={views.length > 0 ? estimate.total : 0} strong />
-              <p className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
+              <p className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900 short:mt-1 short:py-1 short:text-[11px]">
                 <Info className="mt-px size-3.5 shrink-0" aria-hidden />
                 {t('pos.discountAfterSend')}
               </p>

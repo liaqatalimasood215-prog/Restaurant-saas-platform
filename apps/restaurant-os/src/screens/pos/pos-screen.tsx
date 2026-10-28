@@ -262,7 +262,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
   return (
     // Tablet and desktop: exactly one screen high (below the 4rem header and the main padding), so
     // products scroll on their own and the bill's totals and actions are always visible.
-    <div className="lg:flex lg:h-[calc(100dvh-6.5rem)] lg:flex-col">
+    <div className="lg:flex lg:h-[calc(100dvh-6.5rem)] lg:flex-col lg:short:h-[calc(100dvh-5.5rem)]">
       <ScreenHeader title={t('nav.pos')} status="DEMO_PROTOTYPE" description={t('pos.description')} compact actions={actions} />
 
       {requests.length > 0 && (
@@ -295,7 +295,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
         </div>
       )}
 
-      <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_25rem] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_28rem]">
+      <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_26rem] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_28rem]">
         <MenuPanel menu={menu.data} onPick={(item) => setPicking({ item, line: null })} />
         <CurrentBill
           key={`${draft.orderId ?? 'new'}-${draft.heldId ?? ''}`}

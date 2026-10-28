@@ -46,6 +46,8 @@ export const en = {
     mainMenu: 'Main menu',
     comingSoon: 'Coming Soon',
     phaseShort: 'P{phase}',
+    collapse: 'Collapse',
+    expand: 'Show menu names',
     more: 'More',
     allSections: 'All sections',
     close: 'Close',
