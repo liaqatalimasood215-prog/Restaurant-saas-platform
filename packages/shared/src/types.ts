@@ -311,8 +311,9 @@ export interface NotificationItem {
  *   (or, without one, the Super Waiter who took the order) and for Owner/Manager.
  * - BILL_REQUESTED: a table asked for the bill, for Cashier/Owner/Manager until accepted.
  * - BILL_ACCEPTED: the cashier accepted, for the waiter who asked, until the bill is paid.
- * - WAITER_CALLED: the cashier pressed "Call Waiter" for a table, for the Service Waiter of that table
- *   (or, without one, the Super Waiter of the order), for 15 minutes.
+ * - WAITER_CALLED: the cashier pressed "Call Waiter", for 15 minutes. For a table: the Service Waiter of
+ *   that table (or, without one, the Super Waiter of the order). Without a table (a counter customer):
+ *   every waiter on duty.
  */
 export type StaffNotification =
   | {
@@ -327,16 +328,16 @@ export type StaffNotification =
     }
   | { kind: 'BILL_REQUESTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; total: Paisa; requestedByName: string; at: IsoDateTime }
   | { kind: 'BILL_ACCEPTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; acceptedByName: string; at: IsoDateTime }
-  | { kind: 'WAITER_CALLED'; id: string; tableId: Uuid; tableName: string; calledByName: string; at: IsoDateTime }
+  | { kind: 'WAITER_CALLED'; id: string; tableId: Uuid | null; tableName: string | null; calledByName: string; at: IsoDateTime }
   /** A customer order waiting for Accept / Reject (repeating alarm until answered) */
   | { kind: 'ONLINE_ORDER'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; total: Paisa; customerName: string; at: IsoDateTime }
   /** A delivery or takeaway order is READY: assign a rider or hand it over */
   | { kind: 'COUNTER_READY'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; customerName: string; at: IsoDateTime };
 
-/** The cashier called the waiter of a table from the POS ("Call Waiter"). */
+/** The cashier called a waiter from the POS ("Call Waiter"); tableId is null for the counter. */
 export interface WaiterCall extends BranchScoped {
   id: Uuid;
-  tableId: Uuid;
+  tableId: Uuid | null;
   calledBy: Uuid;
   calledAt: IsoDateTime;
 }

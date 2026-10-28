@@ -144,8 +144,8 @@ export interface ApiClient {
   requestBill(orderId: Uuid): Promise<Order>;
   /** Cashier accepts the request; the waiter who asked sees the acknowledgement. */
   acceptBillRequest(orderId: Uuid): Promise<Order>;
-  /** POS "Call Waiter": the waiter of the table gets an alert. Returns who was called. */
-  callWaiter(tableId: Uuid): Promise<{ tableName: string; waiterNames: string[] }>;
+  /** POS "Call Waiter", always available: the table's waiter gets an alert; without a table (null) every waiter does. */
+  callWaiter(tableId: Uuid | null): Promise<{ tableName: string | null; waiterNames: string[] }>;
   /** Owner/Manager: % or fixed discount with a reason; null removes it. */
   applyDiscount(orderId: Uuid, discount: DiscountInput | null, reason: string): Promise<Order>;
   /** POS "Hold": an unsent bill is kept and can be reopened later. */

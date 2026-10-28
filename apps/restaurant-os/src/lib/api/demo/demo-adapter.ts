@@ -515,28 +515,32 @@ export class DemoAdapter implements ApiClient, DemoControls {
     );
   }
 
-  callWaiter(tableId: string): Promise<{ tableName: string; waiterNames: string[] }> {
+  callWaiter(tableId: string | null): Promise<{ tableName: string | null; waiterNames: string[] }> {
     return this.request(() =>
       this.store.update((data) => {
         const user = this.require(data, 'bill.accept');
-        const table = data.tables.find((t) => t.id === tableId && t.isActive);
-        if (!table) throw new ApiError('NOT_FOUND', 'Table not found.');
-        const waiters = this.waitersCalledFor(data, table.id);
-        if (waiters.length === 0) throw new ApiError('VALIDATION', `No waiter works on ${table.name}.`);
+        const table = tableId ? data.tables.find((t) => t.id === tableId && t.isActive) : null;
+        if (tableId && !table) throw new ApiError('NOT_FOUND', 'Table not found.');
+        const waiters = this.waitersCalledFor(data, table?.id ?? null);
+        if (waiters.length === 0) throw new ApiError('VALIDATION', table ? `No waiter works on ${table.name}.` : 'No waiter is on duty.');
         const now = nowIso();
         // A double tap within 10 seconds is one call.
-        const recent = data.waiterCalls.find((c) => c.tableId === table.id && Date.parse(now) - Date.parse(c.calledAt) < 10_000);
+        const recent = data.waiterCalls.find((c) => c.tableId === (table?.id ?? null) && Date.parse(now) - Date.parse(c.calledAt) < 10_000);
         if (!recent) {
-          data.waiterCalls.push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, tableId: table.id, calledBy: user.id, calledAt: now });
+          data.waiterCalls.push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, tableId: table?.id ?? null, calledBy: user.id, calledAt: now });
         }
-        return { tableName: table.name, waiterNames: waiters.map((w) => w.name) };
+        return { tableName: table?.name ?? null, waiterNames: waiters.map((w) => w.name) };
       }),
     );
   }
 
-  /** The Service Waiters of the table; without one, the Super Waiter of its order (or of the table). */
-  private waitersCalledFor(data: DemoData, tableId: string): StaffUser[] {
+  /**
+   * Who a call goes to: without a table (counter customer) every waiter on duty; for a table its
+   * Service Waiters, or without one the Super Waiter of its order (or of the table).
+   */
+  private waitersCalledFor(data: DemoData, tableId: string | null): StaffUser[] {
     const active = data.staff.filter((s) => s.isActive);
+    if (tableId === null) return active.filter((s) => s.role === 'WAITER' || s.role === 'SERVICE_WAITER');
     const service = active.filter((s) => s.role === 'SERVICE_WAITER' && worksOnTable(s, tableId));
     if (service.length > 0) return service;
     const order = data.orders.find((o) => o.tableId === tableId && OPEN_DINE_IN.includes(o.status));
@@ -1251,7 +1255,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           kind: 'WAITER_CALLED',
           id: `call:${call.id}`,
           tableId: call.tableId,
-          tableName: this.tableName(data, call.tableId),
+          tableName: call.tableId ? this.tableName(data, call.tableId) : null,
           calledByName: this.staffName(data, call.calledBy) ?? '',
           at: call.calledAt,
         });

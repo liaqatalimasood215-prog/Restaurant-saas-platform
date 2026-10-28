@@ -281,10 +281,14 @@ export function CurrentBill({
     });
   };
 
-  const callWaiter = (tableId: string) =>
+  const callWaiter = (tableId: string | null) =>
     run(async () => {
       const called = await getApi().callWaiter(tableId);
-      toast.show({ tone: 'success', title: t('pos.waiterCalled', { table: called.tableName }), body: called.waiterNames.join(', ') });
+      toast.show({
+        tone: 'success',
+        title: called.tableName ? t('pos.waiterCalled', { table: called.tableName }) : t('pos.waiterCalledCounter'),
+        body: called.waiterNames.join(', '),
+      });
     });
 
   /** Discount on the running order (server) or on the new bill (saved with it when sent). */
@@ -358,9 +362,8 @@ export function CurrentBill({
           </div>
           <button
             type="button"
-            disabled={busy || !callTableId || !can(role, 'bill.accept')}
-            title={callTableId ? undefined : t('pos.callWaiterNeedsTable')}
-            onClick={() => callTableId && void callWaiter(callTableId)}
+            disabled={busy || !can(role, 'bill.accept')}
+            onClick={() => void callWaiter(callTableId)}
             className={cn(
               typeButton,
               'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:border-slate-200 disabled:bg-white disabled:text-slate-400',

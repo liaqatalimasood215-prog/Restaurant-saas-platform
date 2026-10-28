@@ -619,7 +619,7 @@ never deleted.
 | `idempotency_keys` | key, user_id, route, response (kept 24 hours) | Pilot |
 | `customers` | name, phone (unique per restaurant), last_address | Pilot |
 | `held_bills` | type, discount (JSON), table_id, guests, customer copies, note, items (JSON drafts), held_by, held_at — POS bills on hold, not orders | Pilot |
-| `waiter_calls` | table_id, called_by, called_at — POS "Call Waiter"; the table's waiter is alerted for 15 minutes | Pilot |
+| `waiter_calls` | table_id (null = counter call), called_by, called_at — POS "Call Waiter"; the table's waiter is alerted for 15 minutes | Pilot |
 | `rider_cash_settlements` | rider_id, amount, order ids, settled_by | Pilot |
 | Shifts, printers, customer accounts and addresses | — | P7 |
 | Payroll: salary settings, attendance, advances, payroll runs | — | P8 |

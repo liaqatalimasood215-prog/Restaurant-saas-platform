@@ -27,7 +27,7 @@ export function notificationTitle(n: StaffNotification): string {
     case 'BILL_ACCEPTED':
       return t('alerts.billAccepted', { table: n.tableName });
     case 'WAITER_CALLED':
-      return t('alerts.waiterCalled', { table: n.tableName });
+      return n.tableName ? t('alerts.waiterCalled', { table: n.tableName }) : t('alerts.waiterCalledCounter');
     case 'ONLINE_ORDER':
       return t('alerts.onlineOrder', { n: n.dailyNumber });
     case 'COUNTER_READY':
@@ -56,6 +56,8 @@ export function notificationLink(n: StaffNotification): string {
   switch (n.kind) {
     case 'BILL_REQUESTED':
       return `/pos?table=${n.tableId}`;
+    case 'WAITER_CALLED':
+      return n.tableId ? `/waiter?table=${n.tableId}` : '/waiter';
     case 'ONLINE_ORDER':
     case 'COUNTER_READY':
       return '/online-orders';

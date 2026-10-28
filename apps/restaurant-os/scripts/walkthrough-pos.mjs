@@ -302,6 +302,13 @@ assert.equal(await cashier.getByText('Find table no.').count(), 0, 'the table se
 await bill(cashier).getByRole('radio', { name: /^Table/ }).click();
 await cashier.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
 await bill(cashier).getByRole('radio', { name: 'Takeaway', checked: true }).waitFor();
+// Call Waiter is always on: also for a counter customer with no table.
+assert.ok(await bill(cashier).getByRole('button', { name: 'Call Waiter' }).isEnabled(), 'Call Waiter works without a table');
+await bill(cashier).getByRole('button', { name: 'Call Waiter' }).click();
+await waitText(cashier, 'Waiters called to the counter');
+await waitText(serviceWaiter, 'Cashier calls you — at the counter');
+await shot(serviceWaiter, '08-phone-service-waiter-counter-call');
+ok('Call Waiter with no table (Takeaway) → "Waiters called to the counter"; the Service Waiter gets "Cashier calls you — at the counter"');
 await pick(cashier, 'Beef Burger');
 await grandTotal(cashier, 'Rs. 550');
 await bill(cashier).getByRole('button', { name: 'Bill Now' }).click();
