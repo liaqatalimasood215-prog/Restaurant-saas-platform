@@ -94,6 +94,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-29 | POS: the Dine-in button is labelled **Table** (owner); Orders, receipts and reports still say Dine-in | 57 tests, typecheck, lint pass; all three walkthroughs pass |
 | 2026-10-29 | POS: the table drop-down is removed; tapping **Table** opens a box with every table (green = free, red/amber = running bill with its amount). The chosen table shows at the top and next to Guests; Send / Bill Now without a table opens the box | 57 tests, typecheck, lint pass; all three walkthroughs pass |
 | 2026-10-29 | POS: the Guests counter is removed from the new bill; the Table and Customer rows are shown instead (Table row opens the table box; guests default to 1 for new dine-in orders; the Waiter screen still has Guests) | 57 tests, typecheck, lint pass; all three walkthroughs pass |
+| 2026-10-29 | POS: the "Table & Customer" block is removed from a new Table bill (owner): the table is chosen with the Table button, which then shows the table (e.g. Table T7) and the title says "T7 · New bill". Takeaway and Delivery keep their customer box because the order needs a name and phone | 57 tests, typecheck, lint pass; all three walkthroughs pass |
 
 ## Commands
 

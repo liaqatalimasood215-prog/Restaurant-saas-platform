@@ -373,7 +373,6 @@ export const en = {
     callWaiter: 'Call Waiter',
     callWaiterNeedsTable: 'Choose a table to call its waiter.',
     waiterCalled: 'Waiter called to {table}',
-    tableAndCustomer: 'Table & Customer',
     customerAndDelivery: 'Customer & delivery',
     sendToKitchen: 'Send to Kitchen',
     billNow: 'Bill Now',
