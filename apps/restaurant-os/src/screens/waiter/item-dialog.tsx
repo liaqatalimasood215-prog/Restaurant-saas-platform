@@ -14,16 +14,19 @@ export function ItemDialog({
   menu,
   onClose,
   onAdd,
+  initial,
 }: {
   item: MenuItem;
   menu: MenuSnapshot;
   onClose: () => void;
   onAdd: (draft: DraftItemInput) => void;
+  /** Editing a line that is already in the bill */
+  initial?: DraftItemInput;
 }) {
-  const [variantId, setVariantId] = useState<string | null>(null);
-  const [modifierIds, setModifierIds] = useState<string[]>([]);
-  const [note, setNote] = useState('');
-  const [quantity, setQuantity] = useState(1);
+  const [variantId, setVariantId] = useState<string | null>(initial?.variantId ?? null);
+  const [modifierIds, setModifierIds] = useState<string[]>(initial?.modifierIds ?? []);
+  const [note, setNote] = useState(initial?.note ?? '');
+  const [quantity, setQuantity] = useState(initial?.quantity ?? 1);
   const [showErrors, setShowErrors] = useState(false);
 
   const groups = menu.modifierGroups.filter((g) => item.modifierGroupIds.includes(g.id));
@@ -60,7 +63,7 @@ export function ItemDialog({
       title={item.name}
       footer={
         <Button size="lg" className="w-full" onClick={add}>
-          {t('waiter.addItem', { price: formatPaisa(unitPrice * quantity) })}
+          {t(initial ? 'waiter.saveItem' : 'waiter.addItem', { price: formatPaisa(unitPrice * quantity) })}
         </Button>
       }
     >

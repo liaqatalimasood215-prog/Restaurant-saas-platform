@@ -6,6 +6,7 @@ export type {
   ApiClient,
   CounterOrderInput,
   DemoControls,
+  HeldBillInput,
   OrderFilter,
   RecordPaymentInput,
   SendRoundInput,

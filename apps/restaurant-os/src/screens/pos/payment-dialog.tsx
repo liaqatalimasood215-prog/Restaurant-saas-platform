@@ -30,10 +30,13 @@ export function PaymentDialog({
   order,
   onClose,
   onDone,
+  onPending,
 }: {
   order: Order;
   onClose: () => void;
   onDone: (order: Order) => void;
+  /** "Pay later": nothing is recorded, the bill stays open with the amount due */
+  onPending?: () => void;
 }) {
   const due = Math.max(0, order.totals.total - order.paidTotal);
   const [method, setMethod] = useState<PaymentMethod>('CASH');
@@ -87,6 +90,11 @@ export function PaymentDialog({
           <Button variant="secondary" onClick={onClose}>
             {t('nav.close')}
           </Button>
+          {onPending && (
+            <Button variant="outline" onClick={onPending} disabled={busy}>
+              {t('pos.payLater')}
+            </Button>
+          )}
           <Button size="lg" onClick={submit} disabled={busy}>
             {t('pos.recordPaymentConfirm')}
           </Button>

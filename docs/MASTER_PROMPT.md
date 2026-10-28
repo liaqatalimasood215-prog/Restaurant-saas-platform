@@ -468,7 +468,7 @@ Navigation (owner, 2026-10-27):
 | Tables | Pilot | Set up areas and tables; live board with status colour, running total, guests, waiter, time seated |
 | Waiter | Pilot | Mobile; table board → order screen (search, categories, sizes, add-ons, notes, quantity); Send; ready alerts; Served; Print bill |
 | Kitchen Display | Pilot | Choose station; columns New / Preparing / Ready; big text; table or order number, type, waiter, notes, VOID marks; timers; sound; Start / Ready / Undo; "out of stock" button |
-| Cashier / POS | Pilot | Open tables with running bills; bill detail; discount (permission); service charge; tax; payments by several methods; tip; change; refund (permission); print pre-bill and receipt; reprint (marked DUPLICATE, logged) |
+| Cashier / POS | Pilot | New bill for dine-in, takeaway or delivery (table or customer, menu with sizes and add-ons, Hold and reopen, send to the kitchen); open tables with running bills; bill detail; discount (permission); service charge; tax; payments by several methods; tip; change; refund (permission); print pre-bill and receipt; reprint (marked DUPLICATE, logged) |
 | Cashier / POS — online | Pilot | Online orders inbox with repeating alarm; accept with prep time / reject with reason; phone and takeaway orders; assign or change rider; settle rider cash |
 | Orders | Pilot | Today's and past orders; search and filter by type, status, table; order detail with full timeline |
 | Menu | Pilot | Categories; items with price, sizes, add-on groups, kitchen station, available ON/OFF, online ON/OFF, display order |
@@ -618,6 +618,7 @@ never deleted.
 | `audit_logs` | actor_id, action, entity, entity_id, before, after, reason | Pilot |
 | `idempotency_keys` | key, user_id, route, response (kept 24 hours) | Pilot |
 | `customers` | name, phone (unique per restaurant), last_address | Pilot |
+| `held_bills` | type, table_id, guests, customer copies, note, items (JSON drafts), held_by, held_at — POS bills on hold, not orders | Pilot |
 | `rider_cash_settlements` | rider_id, amount, order ids, settled_by | Pilot |
 | Shifts, printers, customer accounts and addresses | — | P7 |
 | Payroll: salary settings, attendance, advances, payroll runs | — | P8 |
@@ -1141,3 +1142,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-28 | §4, §5.1: Super Waiter and Service Waiter, assigned tables, chefs per station, bill request → accept → acknowledgement, cashier finds a bill by table number; §9: selling units and waiter tables. |
 | 2026-10-28 | §6.4: fully voided tickets ("do not cook", 2 minutes) and harmless repeated ticket presses (Preview 2). |
 | 2026-10-28 | §6.3: auto-ready tickets do not make an order PREPARING (Preview 4). |
+| 2026-10-28 | §7.1 POS: full new-bill screen with Hold, discount, split and pending payment; §9 `held_bills`. |

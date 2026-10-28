@@ -412,3 +412,4 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-28 | One small "Demo mode" indicator replaces the per-screen DEMO badges and the green connection dot (a simulated sync is never shown as live) | Active (§16) |
 | 2026-10-28 | Owner approves the waiter → kitchen → cashier workflow and starts Preview 4: Orders and Online Orders | Active |
 | 2026-10-28 | Until the Customer App (Phase 2) and Rider App (Phase 3) exist, Online Orders has clearly labelled DEMO buttons that place a customer order and do the rider steps | Active (Phase 1 only) |
+| 2026-10-28 | POS / New Bill becomes a full ordering screen (owner): new dine-in / takeaway / delivery bills, Hold, discount (Owner/Manager), split and pending payments, pre-bill, receipt, complete — on the same order records; Find table and Running table bills stay. "Online" payment = recorded transfer (wallet / bank), not processed online | Active |

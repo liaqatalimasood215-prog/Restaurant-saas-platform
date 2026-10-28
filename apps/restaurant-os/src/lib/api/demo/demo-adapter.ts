@@ -18,7 +18,10 @@ import {
   tableStatusFor,
   unitPriceFor,
   type Branch,
+  type CustomerSummary,
+  type DiscountInput,
   type DraftItemInput,
+  type HeldBill,
   type FloorPlan,
   type KitchenTicket,
   type KitchenTicketView,
@@ -43,6 +46,7 @@ import {
   type ApiClient,
   type CounterOrderInput,
   type DemoControls,
+  type HeldBillInput,
   type OrderFilter,
   type RecordPaymentInput,
   type SendRoundInput,
@@ -385,6 +389,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
           }
         }
 
+        if (input.customerName?.trim()) order.customerName = input.customerName.trim();
+        if (input.customerPhone?.trim()) order.customerPhone = input.customerPhone.trim();
         const target = order;
         const roundNo = Math.max(0, ...target.items.map((i) => i.roundNo)) + 1;
         const lines = input.items.map((draft) => this.priceDraft(data, draft, target, roundNo));
@@ -512,6 +518,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
       this.store.update((data) => {
         const user = this.require(data, 'bill.accept');
         const order = this.findOrder(data, orderId);
+        if (order.type !== 'DINE_IN') {
+          // Takeaway / delivery: a pre-bill does not change the order status.
+          if (['REJECTED', 'CANCELLED'].includes(order.status)) throw new ApiError('CONFLICT', 'This order is closed.');
+          return order;
+        }
         if (order.status === 'OPEN') {
           const check = checkTransition({ type: order.type, from: 'OPEN', to: 'BILL_REQUESTED', role: user.role });
           if (!check.ok) throw ruleError(check.reason);
@@ -604,6 +615,108 @@ export class DemoAdapter implements ApiClient, DemoControls {
         return order;
       }),
     );
+  }
+
+  applyDiscount(orderId: string, discount: DiscountInput | null, reason: string): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'order.discount');
+        const order = this.findOrder(data, orderId);
+        const open = order.type === 'DINE_IN' ? OPEN_DINE_IN.includes(order.status) : !['REJECTED', 'CANCELLED'].includes(order.status);
+        if (!open || isFullyPaid(order.totals.total, order.paidTotal) && order.paidTotal > 0) {
+          throw new ApiError('CONFLICT', 'This bill is already paid or closed.');
+        }
+        if (discount && !reason.trim()) throw ruleError('REASON_REQUIRED');
+        const previous = order.discount;
+        order.discount = discount ? { input: discount, reason: reason.trim(), givenBy: user.id } : null;
+        try {
+          recalculate(order, data.branch);
+        } catch (err) {
+          order.discount = previous;
+          throw new ApiError('VALIDATION', err instanceof Error ? err.message : 'Invalid discount.');
+        }
+        if (order.totals.total < order.paidTotal) throw new ApiError('VALIDATION', 'The discount is more than what is still due.');
+        order.history.push({
+          fromStatus: order.status,
+          toStatus: order.status,
+          changedBy: user.id,
+          reason: discount ? `Discount: ${reason.trim()}` : 'Discount removed',
+          changedAt: nowIso(),
+        });
+        return order;
+      }),
+    );
+  }
+
+  listHeldBills(): Promise<HeldBill[]> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'table.order');
+      return [...data.heldBills].sort((a, b) => a.heldAt.localeCompare(b.heldAt));
+    });
+  }
+
+  holdBill(input: HeldBillInput): Promise<HeldBill> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'table.order');
+        if (input.items.length === 0) throw new ApiError('VALIDATION', 'Add at least one item before holding the bill.');
+        const existing = input.id ? data.heldBills.find((h) => h.id === input.id) : null;
+        const fields = {
+          type: input.type,
+          tableId: input.type === 'DINE_IN' ? input.tableId : null,
+          guests: input.guests,
+          customerName: input.customerName.trim(),
+          customerPhone: input.customerPhone.trim(),
+          customerAddress: input.customerAddress.trim(),
+          note: input.note.trim(),
+          items: input.items,
+          heldBy: user.id,
+          heldAt: nowIso(),
+        };
+        if (existing) {
+          Object.assign(existing, fields);
+          return existing;
+        }
+        const held: HeldBill = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ...fields };
+        data.heldBills.push(held);
+        return held;
+      }),
+    );
+  }
+
+  deleteHeldBill(id: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'table.order');
+        data.heldBills = data.heldBills.filter((h) => h.id !== id);
+      }),
+    );
+  }
+
+  searchCustomers(query: string): Promise<CustomerSummary[]> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'order.manage');
+      const q = query.trim().toLowerCase();
+      const digits = q.replace(/D/g, '');
+      const byPhone = new Map<string, CustomerSummary>();
+      for (const o of [...data.orders].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+        if (!o.customerPhone) continue;
+        const known = byPhone.get(o.customerPhone);
+        byPhone.set(o.customerPhone, {
+          name: o.customerName ?? known?.name ?? '',
+          phone: o.customerPhone,
+          address: o.customerAddress ?? known?.address ?? '',
+          orderCount: (known?.orderCount ?? 0) + 1,
+          lastOrderAt: o.createdAt,
+        });
+      }
+      return [...byPhone.values()]
+        .filter((c) => !q || c.name.toLowerCase().includes(q) || (digits.length >= 3 && c.phone.replace(/D/g, '').includes(digits)))
+        .sort((a, b) => b.lastOrderAt.localeCompare(a.lastOrderAt))
+        .slice(0, 8);
+    });
   }
 
   // ── Orders list, online, phone and takeaway orders ─────────────────────────────────────────

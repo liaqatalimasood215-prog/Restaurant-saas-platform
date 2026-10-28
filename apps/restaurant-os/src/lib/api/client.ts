@@ -1,5 +1,8 @@
 import type {
   Branch,
+  CustomerSummary,
+  DiscountInput,
+  HeldBill,
   DraftItemInput,
   FloorPlan,
   KitchenTicketView,
@@ -52,6 +55,22 @@ export interface SendRoundInput {
   items: DraftItemInput[];
   /** One key per tap of "Send to kitchen": a double tap or retry never creates a second round. */
   idempotencyKey: string;
+  /** Optional customer for a dine-in bill made at the POS */
+  customerName?: string;
+  customerPhone?: string;
+}
+
+export interface HeldBillInput {
+  /** Empty for a new held bill */
+  id: Uuid | null;
+  type: OrderType;
+  tableId: Uuid | null;
+  guests: number | null;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  note: string;
+  items: DraftItemInput[];
 }
 
 export interface RecordPaymentInput {
@@ -119,6 +138,14 @@ export interface ApiClient {
   requestBill(orderId: Uuid): Promise<Order>;
   /** Cashier accepts the request; the waiter who asked sees the acknowledgement. */
   acceptBillRequest(orderId: Uuid): Promise<Order>;
+  /** Owner/Manager: % or fixed discount with a reason; null removes it. */
+  applyDiscount(orderId: Uuid, discount: DiscountInput | null, reason: string): Promise<Order>;
+  /** POS "Hold": an unsent bill is kept and can be reopened later. */
+  listHeldBills(): Promise<HeldBill[]>;
+  holdBill(input: HeldBillInput): Promise<HeldBill>;
+  deleteHeldBill(id: Uuid): Promise<void>;
+  /** Customers from earlier orders, by name or phone. */
+  searchCustomers(query: string): Promise<CustomerSummary[]>;
   /** Cashier prints the pre-bill ("NOT A RECEIPT"); the order is not paid by this. */
   printPreBill(orderId: Uuid): Promise<Order>;
   /** Records one payment (split payments = several calls); the order becomes PAID when covered. */

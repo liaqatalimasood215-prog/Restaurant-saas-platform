@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "screenshots": "node scripts/screenshots.mjs",
     "walkthrough": "node scripts/walkthrough.mjs",
-    "walkthrough:online": "node scripts/walkthrough-online.mjs"
+    "walkthrough:online": "node scripts/walkthrough-online.mjs",
+    "walkthrough:pos": "node scripts/walkthrough-pos.mjs"
   },
   "dependencies": {
     "@restaurant-saas/shared": "workspace:*",

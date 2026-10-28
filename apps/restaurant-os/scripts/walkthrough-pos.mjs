@@ -1,0 +1,193 @@
+// POS walkthrough (owner request 2026-10-28):
+// Flow A — the cashier makes new bills (dine-in and takeaway), edits items, holds and reopens a bill,
+// sends to the kitchen, adds items to the running bill, gets a discount from the Owner, takes split
+// and pending payments, prints and completes.
+// Flow B — a waiter's table order is found by table number at the POS and paid there.
+// Usage: start the app (pnpm dev), then: pnpm --filter @restaurant-saas/restaurant-os walkthrough:pos
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright-core';
+
+const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
+const OUT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../screenshots', process.env.SHOTS ?? 'pos');
+const SESSION_KEY = 'lala-os-demo-session';
+const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const USER = { owner: id(101), cashier: id(103), superWaiter: id(104), pizzaChef: id(110), burgerChef: id(111) };
+const T5 = id(405);
+const PHONE = { width: 390, height: 844 };
+const TABLET = { width: 1024, height: 768 };
+const DESKTOP = { width: 1440, height: 900 };
+
+await mkdir(OUT_DIR, { recursive: true });
+const browser = await chromium.launch({ channel: 'msedge' });
+const context = await browser.newContext({ deviceScaleFactor: 1 });
+
+async function openAs(userId, url, viewport) {
+  const page = await context.newPage();
+  await page.setViewportSize(viewport);
+  await page.addInitScript(([key, uid]) => window.sessionStorage.setItem(key, JSON.stringify({ userId: uid })), [SESSION_KEY, userId]);
+  await page.goto(`${BASE_URL}${url}`, { waitUntil: 'networkidle' });
+  await page.locator('main h1').first().waitFor();
+  return page;
+}
+const shot = async (page, name) => {
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(OUT_DIR, `${name}.png`) });
+  console.log(`    screenshot ${name}.png`);
+};
+const waitText = (scope, text, timeout = 6_000) => scope.getByText(text).first().waitFor({ timeout });
+const ok = (message) => console.log(`  ✓ ${message}`);
+const bill = (page) => page.locator('main .lg\\:sticky');
+const grandTotal = (page, total) => bill(page).locator('dt:has-text("Grand total") + dd', { hasText: total }).waitFor({ timeout: 6_000 });
+
+async function pick(page, product, { size, addOns = [], quantity = 1 } = {}) {
+  await page.getByRole('button', { name: new RegExp(`^${product}`) }).first().click();
+  const dialog = page.getByRole('dialog');
+  if (size) await dialog.getByRole('button', { name: new RegExp(`^${size}`) }).click();
+  for (const a of addOns) await dialog.getByRole('button', { name: new RegExp(`^${a}`) }).click();
+  for (let i = 1; i < quantity; i++) await dialog.getByRole('button', { name: 'Quantity +' }).click();
+  await dialog.getByRole('button', { name: /^(Add|Save) ·/ }).click();
+}
+
+const setup = await openAs(USER.owner, '/tables', DESKTOP);
+await setup.evaluate(() => window.localStorage.clear());
+await setup.close();
+
+console.log('Flow A — dine-in bill made by the cashier');
+const cashier = await openAs(USER.cashier, '/pos', DESKTOP);
+await bill(cashier).getByLabel('Table').selectOption({ label: 'T3 — Free' });
+await bill(cashier).getByRole('button', { name: 'Guests +' }).click();
+await pick(cashier, 'Classic Pizza', { size: 'Large', addOns: ['Extra cheese'] });
+await pick(cashier, 'Cold Drink', { quantity: 2 });
+await bill(cashier).getByRole('button', { name: 'Edit Cold Drink' }).click();
+await cashier.getByRole('dialog').getByRole('button', { name: 'Quantity +' }).click();
+await cashier.getByRole('dialog').getByRole('button', { name: /^Save ·/ }).click();
+await grandTotal(cashier, 'Rs. 1,725');
+ok('T3: Classic Pizza (Large + Extra cheese) Rs. 1,350 + 3 × Cold Drink (edited from 2) = Rs. 1,725');
+await shot(cashier, '01-desktop-cashier-new-dine-in-bill');
+await bill(cashier).getByRole('button', { name: 'Send to kitchen' }).dblclick();
+await waitText(cashier, 'T3 · Order #1');
+ok('sent to the kitchen once (double tap safe) — the bill is now order #1 of T3');
+const pizzaChef = await openAs(USER.pizzaChef, '/kitchen', TABLET);
+await waitText(pizzaChef, '1 × Classic Pizza');
+assert.ok((await pizzaChef.locator('main').innerText()).includes('T3'));
+ok('Pizza Chef sees T3 · Classic Pizza (Large) + Extra cheese');
+
+await cashier.bringToFront();
+await pick(cashier, 'Loaded Fries');
+await bill(cashier).getByRole('button', { name: 'Send to kitchen' }).click();
+await grandTotal(cashier, 'Rs. 2,075');
+ok('more items added to the running bill (round 2) → Rs. 2,075');
+assert.equal(await bill(cashier).getByRole('button', { name: 'Discount' }).count(), 0, 'cashier cannot give a discount');
+ok('the cashier has no Discount button');
+
+const owner = await openAs(USER.owner, '/pos', DESKTOP);
+await owner.getByRole('button', { name: /^T3/ }).click();
+await waitText(owner, 'T3 · Order #1');
+await bill(owner).getByRole('button', { name: 'Discount' }).click();
+let dialog = owner.getByRole('dialog');
+await dialog.getByLabel('Percent', { exact: true }).fill('10');
+await dialog.getByLabel('Reason').fill('Regular customer');
+await dialog.getByRole('button', { name: 'Apply discount' }).click();
+await grandTotal(owner, 'Rs. 1,868');
+ok('Owner gives 10% (reason "Regular customer"): Rs. 2,075 − Rs. 207.50 = Rs. 1,867.50 → rounded Rs. 1,868');
+await shot(owner, '02-desktop-owner-discount');
+
+await cashier.bringToFront();
+await grandTotal(cashier, 'Rs. 1,868');
+await bill(cashier).getByRole('button', { name: 'Print Bill' }).click();
+await waitText(cashier.getByRole('dialog'), 'PRE-BILL — NOT A RECEIPT');
+await cashier.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
+await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
+dialog = cashier.getByRole('dialog');
+await dialog.getByRole('radio', { name: 'Card' }).click();
+await dialog.getByLabel('Amount (Rs.)').fill('1000');
+await dialog.getByRole('button', { name: 'Record payment' }).click();
+await waitText(bill(cashier), 'Partly paid');
+await bill(cashier).locator('dt:has-text("Due") + dd', { hasText: 'Rs. 868' }).waitFor();
+ok('pre-bill printed; split payment: Rs. 1,000 by card → partly paid, Rs. 868 due');
+await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
+dialog = cashier.getByRole('dialog');
+await dialog.getByLabel('Cash received (Rs.)').fill('1000');
+await waitText(dialog, 'Rs. 132');
+await shot(cashier, '03-desktop-cashier-cash-change');
+await dialog.getByRole('button', { name: 'Record payment' }).click();
+await waitText(cashier, 'Paid · Invoice #1');
+await bill(cashier).getByRole('button', { name: 'Print Receipt' }).click();
+await waitText(cashier.getByRole('dialog'), 'Invoice #1');
+await cashier.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
+await bill(cashier).getByRole('button', { name: 'Complete — start a new bill' }).click();
+await waitText(cashier, 'New bill');
+ok('Rs. 868 cash with Rs. 1,000 received → change Rs. 132 → Paid, invoice #1 → receipt → complete');
+
+console.log('Flow A — takeaway: new customer, hold, reopen, send, pay later, then pay and hand over');
+await bill(cashier).getByRole('radio', { name: 'Takeaway' }).click();
+await bill(cashier).getByLabel('Customer name', { exact: true }).fill('Hina Sheikh');
+await bill(cashier).getByLabel('Phone', { exact: true }).fill('0312-5556667');
+await pick(cashier, 'Zinger Burger', { quantity: 2 });
+await bill(cashier).getByRole('button', { name: 'Hold' }).click();
+await cashier.getByRole('button', { name: /^Hina Sheikh · Takeaway/ }).click();
+await grandTotal(cashier, 'Rs. 900');
+ok('bill held and reopened with customer and 2 × Zinger Burger (Rs. 900)');
+await shot(cashier, '04-desktop-cashier-held-bill');
+await bill(cashier).getByRole('button', { name: 'Send to kitchen' }).click();
+await waitText(cashier, 'Takeaway · Order #2');
+assert.equal(await cashier.getByRole('button', { name: /^Hina Sheikh · Takeaway/ }).count(), 0, 'held bill removed after sending');
+await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
+await cashier.getByRole('dialog').getByRole('button', { name: 'Pay later (pending)' }).click();
+await waitText(bill(cashier), 'Payment pending');
+ok('sent to the kitchen as order #2; held bill gone; payment left pending');
+const burgerChef = await openAs(USER.burgerChef, '/kitchen', TABLET);
+await waitText(burgerChef, 'Takeaway #2');
+await burgerChef.getByRole('button', { name: 'Start', exact: true }).click();
+await burgerChef.getByRole('button', { name: 'Ready', exact: true }).click();
+await cashier.bringToFront();
+await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
+await cashier.getByRole('dialog').getByRole('radio', { name: 'Online / Wallet' }).click();
+await cashier.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
+await waitText(cashier, 'Paid · Invoice #2');
+await bill(cashier).getByRole('button', { name: 'Complete — handed to customer' }).click();
+await waitText(bill(cashier), 'Picked up');
+ok('Burger Chef ready → paid Online/Wallet (invoice #2) → completed (picked up)');
+
+console.log('Flow A — the customer is found again by phone');
+await bill(cashier).getByRole('button', { name: 'Complete — start a new bill' }).click();
+await bill(cashier).getByRole('radio', { name: 'Takeaway' }).click();
+await bill(cashier).getByRole('searchbox', { name: 'Find customer: name or phone' }).fill('Hina');
+await bill(cashier).getByRole('searchbox', { name: 'Find customer: name or phone' }).press('Enter');
+await bill(cashier).getByRole('button', { name: /^Hina Sheikh · 0312-5556667/ }).click();
+assert.equal(await bill(cashier).getByLabel('Phone', { exact: true }).inputValue(), '0312-5556667');
+ok('customer search "Hina" → Hina Sheikh filled in');
+
+console.log('Flow B — waiter order paid at the POS');
+const waiter = await openAs(USER.superWaiter, `/waiter?table=${T5}`, PHONE);
+await waiter.getByRole('tab', { name: /^Order/ }).click();
+for (let i = 0; i < 4; i++) await waiter.getByRole('button', { name: 'Guests +' }).click();
+await waiter.getByRole('tab', { name: 'Menu' }).click();
+await pick(waiter, 'Classic Pizza', { size: 'Medium', quantity: 2 });
+await pick(waiter, 'Zinger Burger', { quantity: 4 });
+await pick(waiter, 'Loaded Fries', { quantity: 2 });
+await waiter.getByRole('tab', { name: /^Order/ }).click();
+await waiter.getByRole('button', { name: 'Send to kitchen' }).click();
+await waiter.getByText(/sent to the kitchen/).first().waitFor();
+await cashier.bringToFront();
+await cashier.locator('#pos-table').fill('5');
+await cashier.keyboard.press('Enter');
+await waitText(cashier, 'T5 · Order #3');
+await grandTotal(cashier, 'Rs. 4,200');
+const t5 = await bill(cashier).innerText();
+assert.ok(t5.includes('2 × Classic Pizza') && t5.includes('4 × Zinger Burger') && t5.includes('2 × Loaded Fries'));
+ok('table 5 found by number: the same order #3 the waiter took, Rs. 4,200');
+await shot(cashier, '05-desktop-cashier-flow-b-table-5');
+await bill(cashier).getByRole('button', { name: /^Take payment/ }).click();
+await cashier.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
+await waitText(cashier, 'Paid · Invoice #3');
+const tables = await openAs(USER.owner, '/tables', DESKTOP);
+await waitText(tables, 'T5');
+assert.ok((await tables.locator(`a[href*="${T5}"]`).innerText()).includes('Free'));
+ok('paid at the POS → invoice #3 → T5 is Free on the Tables board');
+
+await browser.close();
+console.log('POS walkthrough passed: Flow A (dine-in, takeaway, hold, discount, split / pending payment) and Flow B.');

@@ -16,8 +16,8 @@ Read before changing anything:
 **Phase 1 — Restaurant OS UI prototype: in progress.** Preview 1 and the waiter → kitchen → cashier
 workflow are approved (2026-10-28). Preview 4 (Orders, Online Orders) is ready for the owner's review.
 
-Still to build in Phase 1: Menu, Online App, Riders, Today's Summary, Settings (Preview 5); discounts
-and refunds.
+Still to build in Phase 1: Menu, Online App, Riders, Today's Summary, Settings (Preview 5); refunds
+and payment reversals.
 
 ## Folder map
 
@@ -47,7 +47,7 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | Service Waiter: assigned tables only, food-ready notifications with items and quantities, Served (partly ready orders), Request Bill / Call Cashier; no ordering, prices, discounts, payments, refunds or voids | DEMO / PROTOTYPE |
 | Kitchen / KDS: chefs see only their station (Pizza Oven, Grill & Fry, Chicken Station, Hot Kitchen, Drinks), same order number and table on every station, units ("1 kg"), timers, Start / Ready / Undo, VOID, out of stock, sound | DEMO / PROTOTYPE |
 | Tables: live board, a waiter with assigned tables sees only those | DEMO / PROTOTYPE |
-| POS (dine-in): bill requests with Accept, find a bill by table number, full item list and total, Print Bill (pre-bill, NOT A RECEIPT), Record Payment (cash / card / wallet, split, tip, change), invoice number, Print Receipt, DUPLICATE reprint, table Free | DEMO / PROTOTYPE — printing uses the browser print dialog (80 mm layout) |
+| POS / New Bill: new dine-in, takeaway or delivery bill (table, guests, customer search or quick add, menu categories, product search, sizes, add-ons, notes, quantity, edit and remove items), Hold and reopen, Send to kitchen, add items to a running table bill, discount (Owner/Manager), subtotal / tax / delivery / discount / grand total, payment by Cash / Card / Online, split and pending, pre-bill, paid receipt, Complete; plus bill requests, Find a bill by table number and Running table bills | DEMO / PROTOTYPE — same order records as Waiter, Kitchen, Tables and Orders |
 | Staff: add / edit / disable, Super Waiter or Service Waiter, assigned tables, chef stations | DEMO / PROTOTYPE — passwords in Phase 4 |
 | Installable app (PWA): manifest, icons, Install App in the profile and on the login screen | DEMO / PROTOTYPE — needs HTTPS to install on a real phone (hosting needs owner approval); no offline data |
 | Notifications: food ready (Service Waiter), bill requested (Cashier), bill accepted (waiter) with message, sound and vibration | DEMO / PROTOTYPE — between tabs of one browser only |
@@ -57,7 +57,7 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | Customer orders and rider steps (Picked up – On the way, Delivered + cash collected) | DEMO / PROTOTYPE — simulated by DEMO buttons until the Customer App (Phase 2) and Rider App (Phase 3) exist |
 | Orders: today / all, search (number, table, customer, phone), filter by type and status, detail with items, payments, kitchen tickets and full timeline; header search | DEMO / PROTOTYPE |
 | Test D (online delivery → accept → kitchen → rider → delivered → cash settled) | DEMO / PROTOTYPE — walkthrough passes with DEMO customer/rider buttons |
-| Discounts, refunds | PLACEHOLDER — next steps of Phase 1 |
+| Refunds and payment reversals | PLACEHOLDER — next step of Phase 1 |
 | Menu, Online App and Riders management, Today's Summary, Settings | PLACEHOLDER — Preview 5 |
 | Online App and Riders pages: app preview + Open Full App | PLACEHOLDER — Customer App in Phase 2, Rider App in Phase 3 |
 | Dashboard, Customers, Finance & Reports (P7), Inventory & Suppliers, Payroll (P8), AI Manager (P10) | PLACEHOLDER — Coming Soon |
@@ -84,6 +84,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-28 | Phase 1 · Preview 2: Tables board, Waiter order screen (rounds, Served, Void, Print bill), Kitchen Display by station, food-ready alerts; DEMO sync now sends the data with the message (a tab read stale data before) | 55 tests, typecheck, lint, build pass; Test A steps 1–5 + Test B void walkthrough passes (run twice); screenshots; waiting for owner review |
 | 2026-10-28 | Owner workflow: Super Waiter / Service Waiter, assigned tables, chefs per station, units (1 kg), notifications, bill request → accept → acknowledgement, POS table billing with pre-bill, payment and receipt, Staff screen, DEMO login, one "Demo mode" indicator, installable PWA | 57 tests, typecheck, lint, build pass; full workflow walkthrough passes (Test A steps 1–6 + safety checks); screenshots; waiting for owner review |
 | 2026-10-28 | Phase 1 · Preview 4: Online Orders (alarm, accept/reject, phone and takeaway orders, riders, cash on delivery and settlement) and Orders (search, filters, timeline); header search. Fixed: auto-ready drinks no longer mark an order Preparing; a short search no longer matches phone numbers | 57 tests, typecheck, lint, build pass; both walkthroughs pass (workflow + Test A, and Test D + takeaway + phone + reject + timeline); screenshots; waiting for owner review |
+| 2026-10-28 | POS / New Bill rebuilt (owner request): Flow A (cashier makes dine-in / takeaway / delivery bills, hold, discount, split and pending payment, complete) and Flow B (waiter's table bill paid at the POS) on the same order records. Fixed: Find table now reads the latest bills | 57 tests, typecheck, lint, build pass; all three walkthroughs pass (workflow, online, POS) |
 
 ## Commands
 
@@ -100,6 +101,7 @@ pnpm build
 pnpm --filter @restaurant-saas/restaurant-os screenshots   # needs pnpm dev running; uses installed Microsoft Edge
 pnpm --filter @restaurant-saas/restaurant-os walkthrough          # owner workflow + Test A steps 1–6 (needs pnpm dev)
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:online   # Test D, takeaway, phone, reject, Orders timeline
+pnpm --filter @restaurant-saas/restaurant-os walkthrough:pos      # POS Flow A (new bills) and Flow B (waiter bill)
 ```
 
 Screenshots are written to `screenshots/` (git-ignored).

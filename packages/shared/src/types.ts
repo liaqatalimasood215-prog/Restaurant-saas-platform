@@ -324,6 +324,30 @@ export type StaffNotification =
   /** A delivery or takeaway order is READY: assign a rider or hand it over */
   | { kind: 'COUNTER_READY'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; customerName: string; at: IsoDateTime };
 
+/** A bill the cashier put on hold before sending it to the kitchen (not an order yet). */
+export interface HeldBill extends BranchScoped {
+  id: Uuid;
+  type: OrderType;
+  tableId: Uuid | null;
+  guests: number | null;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  note: string;
+  items: DraftItemInput[];
+  heldBy: Uuid;
+  heldAt: IsoDateTime;
+}
+
+/** A customer found in earlier orders of this restaurant (a full customer list comes in P7). */
+export interface CustomerSummary {
+  name: string;
+  phone: string;
+  address: string;
+  orderCount: number;
+  lastOrderAt: IsoDateTime;
+}
+
 /** An order with the names a screen needs (waiter, rider, people in the timeline, payments). */
 export interface OrderView {
   order: Order;
