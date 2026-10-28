@@ -39,7 +39,7 @@ const shot = async (page, name) => {
 };
 const waitText = (scope, text, timeout = 6_000) => scope.getByText(text).first().waitFor({ timeout });
 const ok = (message) => console.log(`  ✓ ${message}`);
-const bill = (page) => page.locator('main .lg\\:sticky');
+const bill = (page) => page.locator('main [data-pos-bill]');
 const grandTotal = (page, total) => bill(page).locator('dt:has-text("Grand total") + dd', { hasText: total }).waitFor({ timeout: 6_000 });
 
 async function pick(page, product, { size, addOns = [], quantity = 1 } = {}) {
@@ -121,6 +121,18 @@ await cashier.getByRole('dialog').getByRole('button', { name: 'Close' }).last().
 await bill(cashier).getByRole('button', { name: 'Complete — start a new bill' }).click();
 await waitText(cashier, 'New bill');
 ok('Rs. 868 cash with Rs. 1,000 received → change Rs. 132 → Paid, invoice #1 → receipt → complete');
+
+console.log('Flow A — Clear bill asks first and removes only unsent items');
+await pick(cashier, 'Loaded Fries');
+await grandTotal(cashier, 'Rs. 350');
+await bill(cashier).getByRole('button', { name: 'Clear bill' }).click();
+await cashier.getByRole('dialog').getByRole('button', { name: 'Close' }).last().click();
+await grandTotal(cashier, 'Rs. 350');
+await bill(cashier).getByRole('button', { name: 'Clear bill' }).click();
+await cashier.getByRole('dialog').getByRole('button', { name: 'Yes, clear bill' }).click();
+await grandTotal(cashier, 'Rs. 0');
+assert.equal(await bill(cashier).getByRole('button', { name: 'Send to kitchen' }).count(), 0, 'nothing left to send');
+ok('Close keeps the bill; "Yes, clear bill" empties it (nothing was sent to the kitchen)');
 
 console.log('Flow A — takeaway: new customer, hold, reopen, send, pay later, then pay and hand over');
 await bill(cashier).getByRole('radio', { name: 'Takeaway' }).click();

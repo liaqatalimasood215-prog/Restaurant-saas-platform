@@ -6,7 +6,7 @@ export function Logo({ compact = false, dark = false }: { compact?: boolean; dar
   return (
     <div className="flex items-center gap-2">
       <ChefHat className="size-8 shrink-0 text-brand" strokeWidth={2.5} aria-hidden />
-      <div className={cn('leading-none', compact && 'hidden lg:block')}>
+      <div className={cn('leading-none', compact && 'hidden xl:block')}>
         <p className={cn('text-xl font-black tracking-tight', dark ? 'text-white' : 'text-slate-900')}>
           {t('app.logoTop')}
         </p>

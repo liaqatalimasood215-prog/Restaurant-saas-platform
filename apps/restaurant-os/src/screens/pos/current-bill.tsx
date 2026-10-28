@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ChefHat, Pause, Pencil, Percent, Printer, Send, Trash2, Wallet } from 'lucide-react';
+import { CheckCircle2, ChefHat, Info, Pause, Pencil, Percent, Printer, Send, Trash2, Wallet } from 'lucide-react';
 import {
   ORDER_TYPES,
   calculateBill,
@@ -16,7 +16,8 @@ import {
 } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardBody } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { Dialog } from '@/components/ui/dialog';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { useToast } from '@/components/ui/toast';
 import { t } from '@/i18n';
@@ -27,7 +28,7 @@ import { ORDER_TONES, TICKET_TONES } from '@/lib/tones';
 import { describeLine, type CartLine } from '../waiter/cart';
 import { CustomerFields } from './customer-fields';
 import { DiscountDialog } from './discount-dialog';
-import type { Draft } from './draft';
+import { newDraft, type Draft } from './draft';
 import { PaymentDialog } from './payment-dialog';
 import { PrintDialog } from './print-dialog';
 import type { PrintKind } from './printable-bill';
@@ -43,6 +44,7 @@ const toDraftItem = (l: CartLine): DraftItemInput => ({
 /**
  * The bill on the right of the POS: order type, table or customer, new items, the running order
  * (same record as Waiter, Kitchen, Tables and Orders), totals and every cashier action.
+ * On tablet and desktop it fills the screen height: the item list scrolls, totals and actions never do.
  */
 export function CurrentBill({
   draft,
@@ -71,6 +73,7 @@ export function CurrentBill({
   const [paying, setPaying] = useState(false);
   const [discounting, setDiscounting] = useState(false);
   const [print, setPrint] = useState<PrintKind | null>(null);
+  const [clearing, setClearing] = useState(false);
   const role = session.user.role;
   const { branch } = session;
 
@@ -152,10 +155,10 @@ export function CurrentBill({
     });
 
   return (
-    <Card className="self-start lg:sticky lg:top-20">
-      <CardBody className="space-y-4">
+    <Card data-pos-bill className="flex flex-col lg:min-h-0">
+      <div className="shrink-0 space-y-2.5 px-3 pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-xl font-black text-slate-900">
+          <h2 className="text-lg font-black text-slate-900">
             {order ? `${placeLabel} · ${t('waiter.orderNumber', { n: order.dailyNumber })}` : draft.heldId ? t('pos.heldBill') : t('pos.newBill')}
           </h2>
           {order && <Badge tone={ORDER_TONES[order.status]}>{t(`orderStatus.${order.status}`)}</Badge>}
@@ -170,7 +173,7 @@ export function CurrentBill({
               aria-checked={draft.type === type}
               disabled={locked}
               onClick={() => setDraft((d) => ({ ...d, type, tableId: type === 'DINE_IN' ? d.tableId : null }))}
-              className={cn('min-h-11 rounded-lg text-sm font-bold disabled:cursor-not-allowed', draft.type === type ? 'bg-brand text-white shadow' : 'text-slate-600')}
+              className={cn('min-h-10 rounded-lg text-sm font-bold disabled:cursor-not-allowed', draft.type === type ? 'bg-brand text-white shadow' : 'text-slate-600')}
             >
               {t(`orderType.${type}`)}
             </button>
@@ -180,7 +183,7 @@ export function CurrentBill({
         {draft.type === 'DINE_IN' && (
           <div className="flex flex-wrap items-end gap-3">
             <label className="block min-w-40 flex-1">
-              <span className="mb-1 block text-sm font-bold text-slate-900">{t('pos.table')}</span>
+              <span className="mb-1 block text-xs font-bold text-slate-900">{t('pos.table')}</span>
               <select
                 value={draft.tableId ?? ''}
                 disabled={locked}
@@ -188,7 +191,7 @@ export function CurrentBill({
                   const entry = tables.find((x) => x.table.id === e.target.value);
                   setDraft((d) => ({ ...d, tableId: e.target.value || null, orderId: entry?.order?.id ?? null }));
                 }}
-                className="min-h-12 w-full rounded-xl border border-slate-300 px-3 font-bold"
+                className="min-h-10 w-full rounded-xl border border-slate-300 px-3 font-bold"
               >
                 <option value="">{t('pos.chooseTableOption')}</option>
                 {tables.map((e) => (
@@ -200,13 +203,15 @@ export function CurrentBill({
             </label>
             {!order && (
               <div>
-                <span className="mb-1 block text-sm font-bold text-slate-900">{t('waiter.guests')}</span>
+                <span className="mb-1 block text-xs font-bold text-slate-900">{t('waiter.guests')}</span>
                 <QuantityStepper size="sm" value={draft.guests} onChange={(n) => setDraft((d) => ({ ...d, guests: n }))} label={t('waiter.guests')} />
               </div>
             )}
           </div>
         )}
+      </div>
 
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-2.5">
         {!order ? (
           <CustomerFields
             value={draft.customer}
@@ -259,9 +264,9 @@ export function CurrentBill({
             {views.length === 0 ? (
               <p className="rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500">{t('pos.tapProducts')}</p>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-1.5">
                 {views.map((v) => (
-                  <li key={v.line.key} className="flex items-center gap-2 rounded-xl border border-slate-200 p-2 text-sm">
+                  <li key={v.line.key} className="flex items-center gap-2 rounded-xl border border-slate-200 p-1.5 pl-2.5 text-sm">
                     <button type="button" onClick={() => onEditLine(v.line)} className="min-w-0 flex-1 text-left" aria-label={t('pos.editItem', { name: v.name })}>
                       <span className="flex items-center gap-1 font-bold">
                         {v.name}
@@ -306,8 +311,10 @@ export function CurrentBill({
         {order && !canAddItems && order.type !== 'DINE_IN' && !['PICKED_UP', 'DELIVERED'].includes(order.status) && (
           <p className="text-xs text-slate-500">{t('pos.counterNoAdd')}</p>
         )}
+      </div>
 
-        <dl className="space-y-1 border-t border-slate-200 pt-3 text-sm text-slate-700">
+      <div className="shrink-0 space-y-2 border-t border-slate-200 px-3 pb-3 pt-2.5">
+        <dl className="space-y-0.5 text-sm text-slate-700">
           {order ? (
             <>
               <Row label={t('pos.subtotal')} amount={order.totals.itemsSubtotal} />
@@ -328,7 +335,10 @@ export function CurrentBill({
               {estimate.tax > 0 && <Row label={t('pos.tax')} amount={estimate.tax} />}
               {views.length > 0 && estimate.deliveryFee > 0 && <Row label={t('pos.deliveryCharge')} amount={estimate.deliveryFee} />}
               <Row label={t('pos.grandTotal')} amount={views.length > 0 ? estimate.total : 0} strong />
-              <p className="text-xs text-slate-500">{t('pos.discountAfterSend')}</p>
+              <p className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
+                <Info className="mt-px size-3.5 shrink-0" aria-hidden />
+                {t('pos.discountAfterSend')}
+              </p>
             </>
           )}
         </dl>
@@ -346,16 +356,20 @@ export function CurrentBill({
 
         <div className="grid gap-2 sm:grid-cols-2">
           {views.length > 0 && (
-            <>
-              <Button size="lg" disabled={busy} onClick={send} className="sm:col-span-2">
-                <Send className="size-5" aria-hidden />
-                {t('waiter.send')}
+            <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-2 sm:col-span-2">
+              <Button variant="secondary" disabled={busy} onClick={() => setClearing(true)} className="whitespace-nowrap px-3 text-red-700">
+                <Trash2 className="size-5" aria-hidden />
+                {t('pos.clearBill')}
               </Button>
-              <Button variant="secondary" disabled={busy} onClick={hold}>
+              <Button variant="secondary" disabled={busy} onClick={hold} className="whitespace-nowrap px-3">
                 <Pause className="size-5" aria-hidden />
                 {t('pos.hold')}
               </Button>
-            </>
+              <Button disabled={busy} onClick={send} className="whitespace-nowrap px-3 text-base font-bold">
+                <Send className="size-5" aria-hidden />
+                {t('waiter.send')}
+              </Button>
+            </div>
           )}
           {order && payable && (
             <Button variant="outline" disabled={busy} onClick={() => run(async () => { await getApi().printPreBill(order.id); setPrint('PRE_BILL'); })}>
@@ -402,7 +416,33 @@ export function CurrentBill({
             </Button>
           )}
         </div>
-      </CardBody>
+      </div>
+
+      {clearing && (
+        <Dialog
+          open
+          onClose={() => setClearing(false)}
+          title={t('pos.clearBillTitle')}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setClearing(false)}>
+                {t('nav.close')}
+              </Button>
+              <Button
+                onClick={() => {
+                  // Only unsent items go; anything already sent stays on the shared order.
+                  setDraft((d) => (d.orderId ? { ...d, cart: [] } : newDraft(d.type)));
+                  setClearing(false);
+                }}
+              >
+                {t('pos.clearBillConfirm')}
+              </Button>
+            </>
+          }
+        >
+          {order ? t('pos.clearBillSentStays') : t('pos.clearBillBody')}
+        </Dialog>
+      )}
 
       {paying && order && (
         <PaymentDialog

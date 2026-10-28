@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, UserRound } from 'lucide-react';
+import { Plus, Search, UserRound } from 'lucide-react';
 import type { CustomerSummary } from '@restaurant-saas/shared';
 import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
@@ -14,7 +14,8 @@ export interface CustomerValue {
 
 /**
  * Find a customer from earlier orders (name or phone) or type a new one. Customers are saved with
- * the order; a full customer list (P7) is not built yet.
+ * the order; a full customer list (P7) is not built yet. When the customer is optional the box
+ * stays folded into one line until the cashier opens it (keeps the bill short on a tablet).
  */
 export function CustomerFields({
   value,
@@ -29,6 +30,7 @@ export function CustomerFields({
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CustomerSummary[] | null>(null);
+  const [open, setOpen] = useState(!optional || Boolean(value.name || value.phone));
 
   const search = async () => {
     try {
@@ -37,11 +39,25 @@ export function CustomerFields({
       setResults([]);
     }
   };
-  const field = 'min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm';
+  const field = 'min-h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm';
+
+  if (optional && !open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex min-h-10 w-full items-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+      >
+        <UserRound className="size-4" aria-hidden />
+        {t('pos.customerOptional')}
+        <Plus className="ml-auto size-4 text-slate-500" aria-hidden />
+      </button>
+    );
+  }
 
   return (
-    <fieldset className="space-y-2 rounded-xl bg-slate-50 p-3">
-      <legend className="flex items-center gap-1 px-1 text-sm font-bold text-slate-900">
+    <fieldset className="space-y-1.5 rounded-xl bg-slate-50 p-2">
+      <legend className="flex items-center gap-1 px-1 text-xs font-bold text-slate-900">
         <UserRound className="size-4" aria-hidden />
         {optional ? t('pos.customerOptional') : t('pos.customer')}
       </legend>
@@ -55,7 +71,7 @@ export function CustomerFields({
           aria-label={t('pos.findCustomer')}
           className={field}
         />
-        <button type="button" onClick={search} aria-label={t('pos.findCustomer')} className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
+        <button type="button" onClick={search} aria-label={t('pos.findCustomer')} className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
           <Search className="size-5" aria-hidden />
         </button>
       </div>
@@ -82,7 +98,7 @@ export function CustomerFields({
           ))}
         </ul>
       )}
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-1.5">
         <input value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder={t('online.customerName')} aria-label={t('online.customerName')} className={field} />
         <input value={value.phone} inputMode="tel" onChange={(e) => onChange({ ...value, phone: e.target.value })} placeholder="0300-1234567" aria-label={t('staff.phone')} className={field} />
       </div>

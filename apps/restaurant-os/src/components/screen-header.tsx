@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { FeatureStatus } from '@restaurant-saas/shared';
 import { FeatureStatusBadge } from '@/components/ui/badge';
+import { cn } from '@/lib/cn';
 
 /**
  * Title row of every screen. PLACEHOLDER screens show their badge; working DEMO screens rely on the
@@ -11,20 +12,23 @@ export function ScreenHeader({
   status,
   description,
   actions,
+  compact = false,
 }: {
   title: string;
   status: FeatureStatus;
   description?: string;
   actions?: ReactNode;
+  /** Smaller title row for busy work screens such as the POS */
+  compact?: boolean;
 }) {
   return (
-    <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+    <div className={cn('flex flex-wrap justify-between gap-3', compact ? 'mb-3 items-center' : 'mb-5 items-start')}>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{title}</h1>
+          <h1 className={cn('font-extrabold tracking-tight text-slate-900', compact ? 'text-xl' : 'text-2xl')}>{title}</h1>
           {status !== 'DEMO_PROTOTYPE' && <FeatureStatusBadge status={status} />}
         </div>
-        {description && <p className="mt-1 max-w-3xl text-sm text-slate-600">{description}</p>}
+        {description && <p className={cn('max-w-3xl text-slate-600', compact ? 'hidden text-xs xl:block' : 'mt-1 text-sm')}>{description}</p>}
       </div>
       {actions}
     </div>

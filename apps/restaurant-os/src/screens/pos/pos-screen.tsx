@@ -52,8 +52,9 @@ export function PosScreen({ tableId }: { tableId?: string }) {
       title={t('nav.pos')}
       status="DEMO_PROTOTYPE"
       description={t('pos.description')}
+      compact
       actions={
-        <Button size="lg" onClick={() => setDraftState(newDraft())}>
+        <Button onClick={() => setDraftState(newDraft())} className="min-h-11">
           <Plus className="size-5" aria-hidden />
           {t('pos.newBill')}
         </Button>
@@ -119,14 +120,16 @@ export function PosScreen({ tableId }: { tableId?: string }) {
     }
   };
   const chip = (active: boolean) =>
-    cn('flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm font-bold', active ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white hover:bg-slate-50');
+    cn('flex min-h-10 items-center gap-2 rounded-xl border px-3 text-sm font-bold', active ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white hover:bg-slate-50');
 
   return (
-    <>
+    // Tablet and desktop: exactly one screen high (below the 4rem header and the main padding), so
+    // products scroll on their own and the bill's totals and actions are always visible.
+    <div className="lg:flex lg:h-[calc(100dvh-6.5rem)] lg:flex-col">
       {header}
 
-      <Card className="mb-4">
-        <CardBody className="space-y-3">
+      <Card className="mb-3 shrink-0">
+        <CardBody className="space-y-2 px-3 py-2.5">
           {requests.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 p-2">
               <span className="flex items-center gap-1 text-sm font-bold text-amber-900">
@@ -157,9 +160,9 @@ export function PosScreen({ tableId }: { tableId?: string }) {
             </div>
           )}
 
-          <div className="flex flex-wrap items-start gap-4">
-            <div className="w-full sm:w-64">
-              <label className="mb-1 block text-sm font-bold text-slate-900" htmlFor="pos-table">
+          <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+            <div className="w-full sm:w-52">
+              <label className="mb-1 block text-xs font-bold text-slate-900" htmlFor="pos-table">
                 {t('pos.findTable')}
               </label>
               <div className="flex gap-2">
@@ -170,9 +173,9 @@ export function PosScreen({ tableId }: { tableId?: string }) {
                   onKeyDown={(e) => e.key === 'Enter' && void findTable()}
                   placeholder={t('pos.findTablePlaceholder')}
                   inputMode="numeric"
-                  className="min-h-11 w-full rounded-xl border border-slate-300 px-3 text-lg font-bold"
+                  className="min-h-10 w-full rounded-xl border border-slate-300 px-3 text-base font-bold"
                 />
-                <Button onClick={findTable} aria-label={t('pos.findTable')} className="min-h-11">
+                <Button onClick={findTable} aria-label={t('pos.findTable')} className="min-h-10 px-3">
                   <Search className="size-5" aria-hidden />
                 </Button>
               </div>
@@ -184,11 +187,11 @@ export function PosScreen({ tableId }: { tableId?: string }) {
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="mb-1 text-sm font-bold text-slate-900">
+              <p className="mb-1 text-xs font-bold text-slate-900">
                 {t('pos.openBills')} <span className="text-slate-500">({openTables.length})</span>
               </p>
               {openTables.length === 0 ? (
-                <p className="text-sm text-slate-500">{t('pos.noOpenBills')}</p>
+                <p className="flex min-h-10 items-center text-sm text-slate-500">{t('pos.noOpenBills')}</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {openTables.map((entry) => (
@@ -209,7 +212,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
             <div className="flex flex-wrap gap-4">
               {unpaidCounter.length > 0 && (
                 <div>
-                  <p className="mb-1 text-sm font-bold text-slate-900">{t('pos.runningCounter')}</p>
+                  <p className="mb-1 text-xs font-bold text-slate-900">{t('pos.runningCounter')}</p>
                   <div className="flex flex-wrap gap-2">
                     {unpaidCounter.map(({ order }) => (
                       <button
@@ -227,7 +230,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
               )}
               {held.data.length > 0 && (
                 <div>
-                  <p className="mb-1 flex items-center gap-1 text-sm font-bold text-slate-900">
+                  <p className="mb-1 flex items-center gap-1 text-xs font-bold text-slate-900">
                     <Pause className="size-4" aria-hidden />
                     {t('pos.heldBills')}
                   </p>
@@ -265,7 +268,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
         </CardBody>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_27rem]">
+      <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_25rem] lg:grid-rows-[minmax(0,1fr)]">
         <MenuPanel menu={menu.data} onPick={(item) => setPicking({ item, line: null })} />
         <CurrentBill
           key={`${draft.orderId ?? 'new'}-${draft.heldId ?? ''}`}
@@ -298,6 +301,6 @@ export function PosScreen({ tableId }: { tableId?: string }) {
           }}
         />
       )}
-    </>
+    </div>
   );
 }
