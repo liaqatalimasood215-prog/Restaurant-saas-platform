@@ -518,6 +518,10 @@ export const en = {
     waiterCalled: 'Cashier calls you — {table}',
     waiterCalledCounter: 'Cashier calls you — at the counter',
     waiterCalledBody: 'Called by {name}. Please come to the counter.',
+    // Spoken aloud on the waiter's phone (Roman Urdu; the Urdu and Hindi texts are for devices with those voices)
+    waiterCalledSpeech: 'Counter par aayein',
+    waiterCalledSpeechUrdu: 'کاؤنٹر پر آئیں',
+    waiterCalledSpeechHindi: 'काउंटर पर आइए',
     onlineOrder: 'New online order #{n}',
     onlineOrderBody: '{type} · {total} · {name} — Accept or Reject',
     counterReady: '{type} #{n} is ready',

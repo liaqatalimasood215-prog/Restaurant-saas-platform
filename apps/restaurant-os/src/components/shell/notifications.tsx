@@ -7,7 +7,7 @@ import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
-import { playAlert, unlockSound, vibrate } from '@/lib/sound';
+import { playAlert, speak, unlockSound, vibrate } from '@/lib/sound';
 
 const NotificationsContext = createContext<StaffNotification[]>([]);
 const ALARM_REPEAT_MS = 5000;
@@ -111,6 +111,10 @@ function NotificationsWatcher({ onChange }: { onChange: (list: StaffNotification
     if (fresh.length > 0) {
       playAlert();
       vibrate();
+    }
+    // "Call Waiter" also speaks: the waiter may not be looking at the phone.
+    if (fresh.some((n) => n.kind === 'WAITER_CALLED')) {
+      speak({ roman: t('alerts.waiterCalledSpeech'), urdu: t('alerts.waiterCalledSpeechUrdu'), hindi: t('alerts.waiterCalledSpeechHindi') });
     }
   }, [data, onChange, toast]);
 
