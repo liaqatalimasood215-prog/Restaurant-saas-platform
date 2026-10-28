@@ -31,6 +31,7 @@ import { DiscountDialog } from './discount-dialog';
 import { newDraft, type Draft } from './draft';
 import { PaymentDialog } from './payment-dialog';
 import { PrintDialog } from './print-dialog';
+import { ProductArt } from './product-art';
 import type { PrintKind } from './printable-bill';
 
 const toDraftItem = (l: CartLine): DraftItemInput => ({
@@ -78,6 +79,10 @@ export function CurrentBill({
   const { branch } = session;
 
   const views = draft.cart.map((l) => describeLine(l, menu)).filter((v) => v !== null);
+  const categoryOf = (menuItemId: string) => {
+    const item = menu.items.find((i) => i.id === menuItemId);
+    return menu.categories.find((c) => c.id === item?.categoryId)?.name ?? '';
+  };
   const locked = draft.orderId !== null;
   const table = tables.find((e) => e.table.id === draft.tableId);
   const canAddItems = !order || order.type === 'DINE_IN' ? !order || ['OPEN', 'BILL_REQUESTED'].includes(order.status) : false;
@@ -260,24 +265,27 @@ export function CurrentBill({
 
         {canAddItems && (
           <section>
-            <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-slate-500">{order ? t('pos.addItems') : t('pos.items')}</h3>
+            <h3 className="mb-1.5 text-sm font-bold text-slate-900">
+              {order ? t('pos.addItems') : t('pos.items')}
+              {views.length > 0 && <span className="text-slate-500"> ({views.length})</span>}
+            </h3>
             {views.length === 0 ? (
               <p className="rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500">{t('pos.tapProducts')}</p>
             ) : (
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {views.map((v) => (
-                  <li key={v.line.key} className="flex items-center gap-2 rounded-xl border border-slate-200 p-1.5 pl-2.5 text-sm">
-                    <button type="button" onClick={() => onEditLine(v.line)} className="min-w-0 flex-1 text-left" aria-label={t('pos.editItem', { name: v.name })}>
-                      <span className="flex items-center gap-1 font-bold">
-                        {v.name}
-                        <Pencil className="size-3.5 text-slate-400" aria-hidden />
-                      </span>
+                  <li key={v.line.key} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 text-sm shadow-sm">
+                    <span className="hidden shrink-0 xl:block">
+                      <ProductArt name={v.name} categoryName={categoryOf(v.line.menuItemId)} className="size-12 rounded-lg" iconClassName="size-6" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate font-bold text-slate-900">{v.name}</span>
                       {v.details && <span className="block text-xs text-slate-600">{v.details}</span>}
                       {v.line.note && <span className="block text-xs text-amber-700">“{v.line.note}”</span>}
-                      <span className="block text-xs font-semibold">
+                      <span className="block text-xs font-semibold text-slate-700">
                         {formatQuantity(v.line.quantity, v.unit)} · {formatPaisa(v.unitPrice * v.line.quantity)}
                       </span>
-                    </button>
+                    </div>
                     <QuantityStepper
                       size="sm"
                       value={v.line.quantity}
@@ -286,9 +294,17 @@ export function CurrentBill({
                     />
                     <button
                       type="button"
+                      onClick={() => onEditLine(v.line)}
+                      aria-label={t('pos.editItem', { name: v.name })}
+                      className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100"
+                    >
+                      <Pencil className="size-5" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setDraft((d) => ({ ...d, cart: d.cart.filter((l) => l.key !== v.line.key) }))}
                       aria-label={t('waiter.remove', { name: v.name })}
-                      className="flex size-10 items-center justify-center rounded-xl text-red-600 hover:bg-red-50"
+                      className="flex size-10 shrink-0 items-center justify-center rounded-xl text-red-600 hover:bg-red-50"
                     >
                       <Trash2 className="size-5" aria-hidden />
                     </button>

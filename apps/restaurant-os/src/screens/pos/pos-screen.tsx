@@ -295,7 +295,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
         </div>
       )}
 
-      <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_25rem] lg:grid-rows-[minmax(0,1fr)]">
+      <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_25rem] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_28rem]">
         <MenuPanel menu={menu.data} onPick={(item) => setPicking({ item, line: null })} />
         <CurrentBill
           key={`${draft.orderId ?? 'new'}-${draft.heldId ?? ''}`}

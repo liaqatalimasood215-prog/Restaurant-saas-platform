@@ -6,14 +6,16 @@ import { formatPaisa, type MenuItem, type MenuSnapshot } from '@restaurant-saas/
 import { Badge } from '@/components/ui/badge';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
+import { artFor, ProductArt } from './product-art';
 
 const ALL = 'ALL';
 
-/** POS menu: product search and categories on top, compact product tiles (more fit on one screen). */
+/** POS menu: product search and categories on top, product tiles with a picture, price and + button. */
 export function MenuPanel({ menu, onPick }: { menu: MenuSnapshot; onPick: (item: MenuItem) => void }) {
   const [category, setCategory] = useState(ALL);
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
+  const categoryName = (id: string) => menu.categories.find((c) => c.id === id)?.name ?? '';
   const items = menu.items.filter((i) => (category === ALL || i.categoryId === category) && (!q || i.name.toLowerCase().includes(q)));
 
   return (
@@ -37,8 +39,12 @@ export function MenuPanel({ menu, onPick }: { menu: MenuSnapshot; onPick: (item:
             role="tab"
             aria-selected={category === c.id}
             onClick={() => setCategory(c.id)}
-            className={cn('min-h-10 shrink-0 rounded-xl px-3.5 text-sm font-bold', category === c.id ? 'bg-brand text-white' : 'border border-slate-200 bg-white text-slate-700')}
+            className={cn(
+              'flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-sm font-bold',
+              category === c.id ? 'bg-brand text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+            )}
           >
+            {c.id !== ALL && <CategoryIcon name={c.name} active={category === c.id} />}
             {c.name}
           </button>
         ))}
@@ -46,7 +52,7 @@ export function MenuPanel({ menu, onPick }: { menu: MenuSnapshot; onPick: (item:
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t('waiter.noResults', { q: query })}</p>
       ) : (
-        <ul className="grid grid-cols-2 content-start gap-2 sm:grid-cols-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-0.5 xl:grid-cols-4 2xl:grid-cols-5">
+        <ul className="grid grid-cols-2 content-start gap-2.5 sm:grid-cols-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-0.5 xl:grid-cols-4 2xl:grid-cols-5">
           {items.map((item) => {
             const from = item.variants.length ? Math.min(...item.variants.map((v) => v.price)) : item.basePrice;
             return (
@@ -55,10 +61,11 @@ export function MenuPanel({ menu, onPick }: { menu: MenuSnapshot; onPick: (item:
                   type="button"
                   disabled={!item.isAvailable}
                   onClick={() => onPick(item)}
-                  className="group flex h-full min-h-20 w-full flex-col justify-between gap-1 rounded-xl border border-slate-200 bg-white p-2.5 text-left shadow-sm hover:border-brand disabled:cursor-not-allowed disabled:opacity-50"
+                  className="group flex h-full w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition hover:border-brand hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <span className="text-sm font-bold leading-snug text-slate-900">{item.name}</span>
-                  <span className="flex items-center justify-between gap-1 text-sm font-semibold text-slate-700">
+                  <ProductArt name={item.name} categoryName={categoryName(item.categoryId)} className="h-20 w-full xl:h-24" iconClassName="size-11 transition group-hover:scale-110 xl:size-12" />
+                  <span className="px-2.5 pt-2 text-sm font-bold leading-snug text-slate-900">{item.name}</span>
+                  <span className="mt-auto flex items-center justify-between gap-1 px-2.5 pb-2.5 pt-1 text-sm font-semibold text-slate-700">
                     {item.isAvailable ? (
                       item.variants.length ? (
                         t('waiter.fromPrice', { price: formatPaisa(from) })
@@ -84,4 +91,9 @@ export function MenuPanel({ menu, onPick }: { menu: MenuSnapshot; onPick: (item:
       )}
     </section>
   );
+}
+
+function CategoryIcon({ name, active }: { name: string; active: boolean }) {
+  const { icon: Icon } = artFor(name);
+  return <Icon className={cn('size-4', active ? 'text-white' : 'text-brand')} aria-hidden />;
 }
