@@ -107,7 +107,7 @@ export function CurrentBill({
   const [print, setPrint] = useState<PrintKind | null>(null);
   const [clearing, setClearing] = useState(false);
   const scrollArea = useRef<HTMLDivElement>(null);
-  const tableSelect = useRef<HTMLSelectElement>(null);
+  const [pickingTable, setPickingTable] = useState(false);
   const previousCart = useRef(draft.cart);
 
   useEffect(() => {
@@ -185,8 +185,7 @@ export function CurrentBill({
   const send = async (payNow: boolean): Promise<Order | null> => {
     if (draft.type === 'DINE_IN' && !draft.tableId) {
       setError(t('pos.chooseTableFirst'));
-      tableSelect.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      tableSelect.current?.focus();
+      setPickingTable(true);
       return null;
     }
     let sent: Order | null = null;
@@ -291,7 +290,9 @@ export function CurrentBill({
           <h2 className="text-base font-bold text-slate-900 short:text-sm">{t('pos.orderType')}</h2>
           <span className="flex min-w-0 items-center gap-1.5">
             <span className="truncate text-sm font-extrabold text-slate-900">
-              {order ? `${placeLabel} · ${t('waiter.orderNumber', { n: order.dailyNumber })}` : draft.heldId ? t('pos.heldBill') : t('pos.newBill')}
+              {order
+                ? `${placeLabel} · ${t('waiter.orderNumber', { n: order.dailyNumber })}`
+                : `${draft.type === 'DINE_IN' && table ? `${table.table.name} · ` : ''}${draft.heldId ? t('pos.heldBill') : t('pos.newBill')}`}
             </span>
             {order && <Badge tone={ORDER_TONES[order.status]}>{t(`orderStatus.${order.status}`)}</Badge>}
             {paymentState && (
@@ -311,7 +312,11 @@ export function CurrentBill({
                   role="radio"
                   aria-checked={active}
                   disabled={locked}
-                  onClick={() => setDraft((d) => ({ ...d, type: option.type, tableId: option.type === 'DINE_IN' ? d.tableId : null }))}
+                  onClick={() => {
+                    setDraft((d) => ({ ...d, type: option.type, tableId: option.type === 'DINE_IN' ? d.tableId : null }));
+                    // "Table" opens the picker with every table
+                    if (option.type === 'DINE_IN') setPickingTable(true);
+                  }}
                   className={cn(
                     typeButton,
                     active ? 'border-brand bg-brand text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
@@ -352,28 +357,14 @@ export function CurrentBill({
             )}
             {draft.type === 'DINE_IN' && (
               <div className="flex items-center gap-2">
-                <label className="relative min-w-0 flex-1">
-                  <span className="sr-only">{t('pos.table')}</span>
-                  <Armchair className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-slate-500" aria-hidden />
-                  <select
-                    ref={tableSelect}
-                    value={draft.tableId ?? ''}
-                    disabled={locked}
-                    onChange={(e) => {
-                      const entry = tables.find((x) => x.table.id === e.target.value);
-                      setError(null);
-                      setDraft((d) => ({ ...d, tableId: e.target.value || null, orderId: entry?.order?.id ?? null }));
-                    }}
-                    className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 font-bold short:min-h-10"
-                  >
-                    <option value="">{t('pos.chooseTableOption')}</option>
-                    {tables.map((e) => (
-                      <option key={e.table.id} value={e.table.id}>
-                        {e.table.name} — {e.order ? `${t(`tableStatus.${e.status}`)} · ${formatPaisa(e.order.totals.total)}` : t('tableStatus.FREE')}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  <Armchair className="size-5 shrink-0 text-slate-500" aria-hidden />
+                  {table ? (
+                    <span className="text-xl font-black text-slate-900">{table.table.name}</span>
+                  ) : (
+                    <span className="text-sm text-slate-500">{t('pos.tapTableButton')}</span>
+                  )}
+                </span>
                 {!order && (
                   <span className="flex shrink-0 items-center gap-1">
                     <Users className="size-5 text-slate-500" aria-hidden />
@@ -634,6 +625,48 @@ export function CurrentBill({
           </div>
         </div>
       </Card>
+
+      {pickingTable && (
+        <Dialog
+          open
+          onClose={() => setPickingTable(false)}
+          title={t('pos.chooseTableTitle')}
+          footer={
+            <Button variant="secondary" onClick={() => setPickingTable(false)}>
+              {t('nav.close')}
+            </Button>
+          }
+        >
+          <p className="mb-3 text-xs text-slate-600">{t('pos.chooseTableHint')}</p>
+          <div className="grid grid-cols-4 gap-2">
+            {tables.map((entry) => {
+              const status = t(`tableStatus.${entry.status}`);
+              return (
+                <button
+                  key={entry.table.id}
+                  type="button"
+                  aria-label={`${entry.table.name} — ${status}`}
+                  onClick={() => {
+                    setError(null);
+                    setDraft((d) => ({ ...d, type: 'DINE_IN', tableId: entry.table.id, orderId: entry.order?.id ?? null }));
+                    setPickingTable(false);
+                  }}
+                  className={cn(
+                    'flex min-h-16 flex-col items-center justify-center rounded-xl border-2 px-1 text-center',
+                    entry.status === 'FREE' && 'border-green-300 bg-green-50 hover:bg-green-100',
+                    entry.status === 'OCCUPIED' && 'border-red-200 bg-red-50 hover:bg-red-100',
+                    entry.status === 'BILL_REQUESTED' && 'border-amber-300 bg-amber-50 hover:bg-amber-100',
+                    entry.table.id === draft.tableId && 'ring-2 ring-brand ring-offset-1',
+                  )}
+                >
+                  <span className="text-lg font-black text-slate-900">{entry.table.name}</span>
+                  <span className="text-[11px] font-semibold text-slate-600">{entry.order ? formatPaisa(entry.order.totals.total) : status}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Dialog>
+      )}
 
       {clearing && (
         <Dialog
