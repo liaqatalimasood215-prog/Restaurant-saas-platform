@@ -500,6 +500,8 @@ export const en = {
     doneBody: 'You can now log in. Your PIN was not shown to anyone.',
     goToLogin: 'Go to login',
     invalid: 'This link cannot be used',
+    demoOtherBrowser:
+      'DEMO: a link works only in the same browser where the Owner made it (the sample data is kept in that browser). Open it in a new tab of that same browser. On other phones and browsers links will work after the server is built (Phase 4) and the app is online (HTTPS).',
     errors: {
       PIN_FORMAT: 'The PIN must be exactly {n} digits.',
       PIN_TOO_SIMPLE: 'This PIN is too easy to guess (like 111111 or 123456). Choose another.',

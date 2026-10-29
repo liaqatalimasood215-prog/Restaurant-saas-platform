@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { t } from '@/i18n';
-import { getApi } from '@/lib/api';
+import { ApiError, getApi } from '@/lib/api';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 
 /**
@@ -63,6 +63,10 @@ export function ActivationScreen({ token }: { token: string }) {
       <>
         <h1 className="mb-2 text-xl font-extrabold text-slate-900">{t('activate.invalid')}</h1>
         <ErrorState message={info.error?.message} />
+        {/* DEMO data lives in one browser: a link opened in another browser or phone is unknown there. */}
+        {info.error instanceof ApiError && info.error.code === 'NOT_FOUND' && (
+          <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">{t('activate.demoOtherBrowser')}</p>
+        )}
       </>
     );
   } else {
