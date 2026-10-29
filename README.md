@@ -13,11 +13,12 @@ Read before changing anything:
 
 ## Current stage
 
-**Phase 1 — Restaurant OS UI prototype: in progress.** Preview 1 and the waiter → kitchen → cashier
-workflow are approved (2026-10-28). Preview 4 (Orders, Online Orders) is ready for the owner's review.
+**Phase 1 — Restaurant OS UI prototype: in progress (DEMO / PROTOTYPE).** Approved by the owner: Preview 1,
+the waiter → kitchen → cashier workflow (2026-10-28), POS / New Bill, Preview 4 (Orders, Online Orders),
+Tables management and the Staff design (2026-10-30).
 
-Still to build in Phase 1: Menu, Online App, Riders, Today's Summary, Settings (Preview 5); refunds
-and payment reversals.
+Still to build in Phase 1 (after the owner's "shuru karo"): Menu, Online App, Riders, Today's Summary,
+Settings (Preview 5); refunds and payment reversals. Nothing is connected to a real backend yet (Phase 4).
 
 ## Folder map
 
@@ -47,7 +48,7 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | Service Waiter: assigned tables only, food-ready notifications with items and quantities, Served (partly ready orders), Request Bill / Call Cashier; no ordering, prices, discounts, payments, refunds or voids | DEMO / PROTOTYPE |
 | Kitchen / KDS: chefs see only their station (Pizza Oven, Grill & Fry, Chicken Station, Hot Kitchen, Drinks), same order number and table on every station, units ("1 kg"), timers, Start / Ready / Undo, VOID, out of stock, sound | DEMO / PROTOTYPE |
 | Tables: live board with search and area / status filters (Free, Occupied, Bill requested, Cleaning, Out of service), compact cards with "guests / capacity"; a waiter with assigned tables sees only those. Owner/Manager: Manage Areas (add, rename, reorder, deactivate), + Add Table (one or many, e.g. T1–T10), edit name / area / seats / display order, out of service, remove (archived when used); open-bill locks | DEMO / PROTOTYPE — same table data in Tables, POS and Waiter Orders |
-| POS / New Bill: new dine-in, takeaway or delivery bill, Call Waiter for a table, discount by Owner/Manager also before sending (table, guests, customer search or quick add, menu categories, product search, sizes, add-ons, notes, quantity, edit and remove items), Hold and reopen, Send to kitchen, add items to a running table bill, discount (Owner/Manager), subtotal / tax / delivery / discount / grand total, payment by Cash / Card / Online, split and pending, pre-bill, paid receipt, Complete; plus bill requests, Find a bill by table number and Running table bills | DEMO / PROTOTYPE — same order records as Waiter, Kitchen, Tables and Orders |
+| POS / New Bill: product cards with pictures, categories and search; Order Type Table · Takeaway · Delivery · Call Waiter (a new bill starts as Takeaway: product + Bill Now, no table or customer needed; Table opens a box of all tables by area; Delivery needs name, phone, address); edit / remove items, Hold and reopen, Clear all; discount by Owner/Manager (or anyone the Owner allows) also before sending; Send to Kitchen; Bill Now → Cash / Card / Online, split and pending; pre-bill, receipt, reprint DUPLICATE; many tables at once; Running bills list and bill requests | DEMO / PROTOTYPE — approved 2026-10-30; same order records as Waiter, Kitchen, Tables and Orders |
 | Staff Management: employee list (initials, Employee ID, role, branch, contact, Active / Inactive / Invited, last login, ⋯ actions; search, role / branch / status filters), 3-step Add / Edit wizard (personal → role & branch → permissions), Role Permissions matrix (View / Create / Edit / Delete / Approve; recommended, copy from role, turn all off) and per-person custom permissions; single-use activation and PIN-reset links, own PIN, Deactivate / Reactivate, Delete; Owner only, Manager read-only | DEMO / PROTOTYPE — the demo server checks the permissions; real server checks, audit log, email and photo upload later (Phases 4–7) |
 | Installable app (PWA): manifest, icons, Install App in the profile and on the login screen | DEMO / PROTOTYPE — needs HTTPS to install on a real phone (hosting needs owner approval); no offline data |
 | Notifications: food ready (Service Waiter), bill requested (Cashier), bill accepted (waiter) with message, sound and vibration | DEMO / PROTOTYPE — between tabs of one browser only |
@@ -106,6 +107,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-29 | Staff Delete (owner): the Owner can delete a staff member (confirmation first). Someone never used is deleted completely; someone with orders, bills or history is archived — hidden from the list and login, logged out, but old bills keep the name. Never yourself or the last active Owner; the Manager cannot delete. Also: no Reset PIN on your own row; Manager role hint updated. Demo data version 10 | 70 tests, typecheck, lint, build pass; all five walkthroughs pass (staff walkthrough deletes an unused and an archived person) |
 | 2026-10-29 | Staff redesign (owner's picture, panels 1–3, in the app's red + navy): employee list, 3-step Add Staff wizard and Role Permissions. Permissions are now per role (Owner-editable) and per person: every screen, sidebar section and demo-server check uses the person's own permissions; switching on is limited to what the order rules allow, Staff management and Settings stay Owner only. Employee ID (EMP001 …) and last login. Tap a name to open the person. Demo data version 11 | 75 tests (5 new), typecheck, lint, build pass; all five walkthroughs pass (staff walkthrough now covers the wizard, Role Permissions switching Tables off and on for Super Waiters, and a Cashier's own discount permission); screenshots in `screenshots/staff` |
 | 2026-10-30 | Owner approves the Staff design (list, 3-step wizard, Role Permissions) | No code change; approval recorded in the decision log |
+| 2026-10-30 | Owner approves POS / New Bill, Preview 4 (Orders, Online Orders) and Tables management; README "Current stage" and the POS row refreshed | No code change; approvals recorded in the decision log |
 
 ## Commands
 

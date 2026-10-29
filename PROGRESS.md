@@ -58,9 +58,9 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | Phase 1 plan | **Approved** ("ok start") 2026-10-27 |
 | Preview 1 (layout and navigation) | **Approved** 2026-10-28 |
 | Waiter → kitchen → cashier workflow (two waiter roles, stations, bill request) | **Approved** 2026-10-28 |
-| Preview 4 (Online Orders + Orders) | **Waiting for the owner's approval** (he asked to see it, never said approved) |
-| POS / New Bill (rebuilt many times at the owner's request) | **Waiting for the owner's final approval** — the last answer he gave was feedback on Call Waiter |
-| Tables management (Manage Areas, Add Table, Cleaning, Out of service — owner request 2026-10-29) | **Built, waiting for the owner's review** (Cleaning stays manual — owner) |
+| Preview 4 (Online Orders + Orders) | **Approved** 2026-10-30 |
+| POS / New Bill (rebuilt many times at the owner's request) | **Approved** 2026-10-30 |
+| Tables management (Manage Areas, Add Table, Cleaning, Out of service — owner request 2026-10-29) | **Approved** 2026-10-30 (Cleaning stays manual — owner) |
 | Staff upgrade + redesign (Owner-only, activation links, PIN, Deactivate ends sessions, employee list, 3-step wizard, Role Permissions — owner requests 2026-10-29) | **Approved** 2026-10-30 (DEMO frontend); backend parts wait for Phase 4–6 |
 | Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Not started** — start only after the owner approves and says "shuru karo" |
 
@@ -206,12 +206,10 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
-1. **Get the owner's answer** on POS, Preview 4, Tables management and the Staff upgrade (approved or
-   changes). Do not start Preview 5 before that.
-2. **Housekeeping docs (no code):** `README.md` "Current stage" and the POS row in the feature table are
-   partly outdated (they still mention Preview 4 as latest and "Find a bill by table number"); refresh them
-   with the progress log. `docs/MASTER_PROMPT.md` §7.1 POS row should describe the final POS above. Check
-   `apps/restaurant-os/scripts/screenshots.mjs` still takes the POS screens in the new layout.
+1. Done 2026-10-30: the owner approved POS, Preview 4, Tables management and the Staff design. **Preview 5
+   waits for the owner's "shuru karo"** (plan shown to him on 2026-10-30).
+2. Done 2026-10-30: README "Current stage" and POS row, MASTER_PROMPT §7.1 POS row refreshed; the screenshot
+   set already takes the POS in its new layout (10-tablet-landscape-cashier-pos).
 3. **Preview 5** (after approval): Menu management (categories, items, sizes, add-ons, units, stations,
    online ON/OFF, out of stock), Online App page (ON/OFF, link, QR, Customer App preview + Open Full App =
    PLACEHOLDER), Riders page (add/disable, assignments, cash to settle, Rider App preview + Open Full App =

@@ -27,9 +27,9 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
   Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 75 unit tests
   and the five walkthroughs (`walkthrough`, `walkthrough:online`, `walkthrough:pos`, `walkthrough:tables`,
   `walkthrough:staff`) pass.
-- **Approved by the owner:** documents, Phase 1 plan, Preview 1, the waiter → kitchen → cashier workflow, the
-  Staff design (list, 3-step wizard, Role Permissions; 2026-10-30).
-  **Waiting for his approval:** Preview 4 (Online Orders, Orders), the final POS and Tables management.
+- **Approved by the owner:** documents, Phase 1 plan, Preview 1, the waiter → kitchen → cashier workflow,
+  and on 2026-10-30 the final POS, Preview 4 (Online Orders, Orders), Tables management and the Staff design.
+  **Waiting:** his "shuru karo" for Preview 5.
 - **Next (only after approval and "shuru karo"):** Preview 5 — Menu, Online App, Riders, Today's Summary,
   Settings; then refunds. Details and open questions: `PROGRESS.md` §9–§10.
 - Customer App (Phase 2) and Rider App (Phase 3) stay PLACEHOLDERS inside Restaurant OS.
