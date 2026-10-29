@@ -219,8 +219,9 @@ Inventory Staff, Finance Staff) are a future idea and need an explicit update of
 - A disabled user cannot log in, and their existing sessions stop working immediately (checked on
   every request). Nobody changes their own role. **Only the Owner** manages staff: add, edit, roles,
   assigned tables and stations, activation / PIN-reset links, Enable / Disable (owner, 2026-10-29); the
-  Manager sees the staff list read-only. The last active Owner can never be disabled or given another
-  role.
+  Manager sees the staff list read-only. The last active Owner can never be disabled, deleted or given
+  another role. Delete: a person never used is deleted; a person named on orders, bills or history is
+  archived (`archived_at`, hidden, cannot log in) so old records keep the name.
 - Each role sees only its own sections. Home screen by role: Super Waiter → Tables, Service
   Waiter → Ready to Serve, Kitchen → Kitchen Display, Cashier → POS, Owner/Manager → POS / New Bill
   (owner, 2026-10-28).
@@ -604,7 +605,7 @@ never deleted.
 |---|---|---|
 | `restaurants` | name, slug, status | Pilot |
 | `branches` | name, slug, phone, address, timezone, business_day_start, tax settings, service_charge_pct, receipt_header, receipt_footer, online_orders_enabled, delivery_fee, min_order, default_prep_minutes | Pilot |
-| `staff_users` | branch_id (empty = all branches, Owner only), name, phone, email (optional), password_hash, pin_hash (slow hash, never plain), activated_at, failed_pin_attempts, locked_until, role (incl. WAITER = Super Waiter, SERVICE_WAITER), is_active, token_version | Pilot |
+| `staff_users` | branch_id (empty = all branches, Owner only), name, phone, email (optional), password_hash, pin_hash (slow hash, never plain), activated_at, archived_at, failed_pin_attempts, locked_until, role (incl. WAITER = Super Waiter, SERVICE_WAITER), is_active, token_version | Pilot |
 | `staff_invites` | staff_user_id, kind (ACTIVATION / PIN_RESET), token_hash (the link token itself is never stored), sent_at, expires_at (48 h), used_at, revoked_at, created_by — single-use | Pilot |
 | `staff_devices` | staff_user_id, device_id_hash, name, enrolled_at, verified_at, last_seen_at, revoked_at — PIN unlock only on an enrolled, verified device | Pilot |
 | `staff_tables` | staff_user_id, table_id — assigned tables of a waiter (none = all tables) | Pilot |

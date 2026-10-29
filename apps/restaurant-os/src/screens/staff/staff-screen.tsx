@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, KeyRound, Link2, Pencil, Send, UserPlus, XCircle } from 'lucide-react';
+import { Copy, KeyRound, Link2, Pencil, Send, Trash2, UserPlus, XCircle } from 'lucide-react';
 import {
   PHONE_EXAMPLE,
   STAFF_ROLES,
@@ -31,7 +31,7 @@ import { useSession } from '@/lib/session';
 const STAFF_FORM_ROLES = STAFF_ROLES.filter((r) => r !== 'RIDER');
 const isWaiter = (role: StaffRole) => role === 'WAITER' || role === 'SERVICE_WAITER';
 
-type Confirm = { kind: 'disable' | 'resetPin' | 'revoke'; user: StaffUser } | null;
+type Confirm = { kind: 'disable' | 'resetPin' | 'revoke' | 'remove'; user: StaffUser } | null;
 type ShownLink = { link: StaffLink; name: string } | null;
 
 /** "30 Oct, 18:05" */
@@ -121,6 +121,11 @@ export function StaffScreen() {
     run(async () => {
       await getApi().revokeInvite(user.id);
       toast.show({ tone: 'success', title: t('staff.revokedToast', { name: user.name }) });
+    });
+  const remove = (user: StaffUser) =>
+    run(async () => {
+      const result = await getApi().removeStaff(user.id);
+      toast.show({ tone: 'success', title: t(result === 'ARCHIVED' ? 'staff.archivedToast' : 'staff.deletedToast', { name: user.name }) });
     });
   const resetPin = (user: StaffUser) => run(async () => setShownLink({ link: await getApi().resetStaffPin(user.id), name: user.name }));
 
@@ -212,6 +217,18 @@ export function StaffScreen() {
                             {user.isActive ? t('staff.disable') : t('staff.enable')}
                           </Button>
                         )}
+                        {user.id !== me.id && (
+                          <Button
+                            variant="ghost"
+                            className="text-red-700"
+                            disabled={busy}
+                            onClick={() => setConfirm({ kind: 'remove', user })}
+                            aria-label={t('staff.deleteName', { name: user.name })}
+                          >
+                            <Trash2 className="size-4" aria-hidden />
+                            {t('staff.delete')}
+                          </Button>
+                        )}
                       </div>
                     )}
                   </li>
@@ -251,7 +268,13 @@ export function StaffScreen() {
               <Button
                 disabled={busy}
                 onClick={() =>
-                  void (confirm.kind === 'disable' ? toggleActive(confirm.user) : confirm.kind === 'resetPin' ? resetPin(confirm.user) : revoke(confirm.user))
+                  void (confirm.kind === 'disable'
+                    ? toggleActive(confirm.user)
+                    : confirm.kind === 'resetPin'
+                      ? resetPin(confirm.user)
+                      : confirm.kind === 'remove'
+                        ? remove(confirm.user)
+                        : revoke(confirm.user))
                 }
               >
                 {t(`staff.confirm.${confirm.kind}Button`)}

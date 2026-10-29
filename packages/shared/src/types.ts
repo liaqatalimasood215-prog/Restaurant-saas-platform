@@ -70,6 +70,8 @@ export interface StaffUser extends RestaurantScoped {
   email: string | null;
   /** When the person opened their activation link and created a PIN; null = not activated yet */
   activatedAt: IsoDateTime | null;
+  /** Deleted by the Owner but kept because old bills or history name this person; hidden everywhere else */
+  archivedAt: IsoDateTime | null;
 }
 
 /** The latest activation or PIN-reset link of a staff member, as the Owner sees it (never the token). */

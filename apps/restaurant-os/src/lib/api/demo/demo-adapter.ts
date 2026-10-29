@@ -1585,7 +1585,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const data = this.store.read();
       this.require(data, 'staff.view');
       const now = Date.now();
-      return [...data.staff]
+      return data.staff
+        .filter((s) => !s.archivedAt)
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((user) => {
           const latest = data.invites.filter((i) => i.userId === user.id).at(-1);
@@ -1608,7 +1609,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return this.request(() =>
       this.store.update((data) => {
         const actor = this.require(data, 'staff.manage');
-        const existing = input.id ? data.staff.find((s) => s.id === input.id) : null;
+        const existing = input.id ? data.staff.find((s) => s.id === input.id && !s.archivedAt) : null;
         if (input.id && !existing) throw new ApiError('NOT_FOUND', 'Staff member not found.');
         if (existing && !canManageStaffAccount(actor.role, existing.role)) {
           throw new ApiError('FORBIDDEN', 'You cannot change this account.');
@@ -1628,12 +1629,12 @@ export class DemoAdapter implements ApiClient, DemoControls {
         // 03001234567, 0300 1234567, +92 300 1234567 … are all saved as 0300-1234567.
         const phone = normalizePhone(input.phone);
         if (!phone) throw new ApiError('VALIDATION', PHONE_MESSAGE);
-        if (data.staff.some((s) => s.phone === phone && s.id !== input.id)) {
+        if (data.staff.some((s) => s.phone === phone && s.id !== input.id && !s.archivedAt)) {
           throw new ApiError('VALIDATION', 'Another staff member already uses this phone number.');
         }
         const email = input.email.trim().toLowerCase() || null;
         if (email && !isValidEmail(email)) throw new ApiError('VALIDATION', 'Email must look like name@example.com.');
-        if (email && data.staff.some((s) => s.email === email && s.id !== input.id)) {
+        if (email && data.staff.some((s) => s.email === email && s.id !== input.id && !s.archivedAt)) {
           throw new ApiError('VALIDATION', 'Another staff member already uses this email.');
         }
         // The Owner works in all branches; everyone else belongs to one branch of this restaurant.
@@ -1666,6 +1667,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           restaurantId: data.restaurant.id,
           isActive: true,
           activatedAt: null,
+          archivedAt: null,
           ...fields,
         };
         data.staff.push(created);
@@ -1678,7 +1680,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return this.request(() =>
       this.store.update((data) => {
         const actor = this.require(data, 'staff.manage');
-        const target = data.staff.find((s) => s.id === userId);
+        const target = data.staff.find((s) => s.id === userId && !s.archivedAt);
         if (!target) throw new ApiError('NOT_FOUND', 'Staff member not found.');
         if (target.id === actor.id) throw new ApiError('FORBIDDEN', 'You cannot disable your own account.');
         if (!canManageStaffAccount(actor.role, target.role)) throw new ApiError('FORBIDDEN', 'You cannot change this account.');
@@ -1691,6 +1693,44 @@ export class DemoAdapter implements ApiClient, DemoControls {
         return target;
       }),
     );
+  }
+
+  removeStaff(userId: string): Promise<'ARCHIVED' | 'DELETED'> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const actor = this.require(data, 'staff.manage');
+        const target = data.staff.find((s) => s.id === userId && !s.archivedAt);
+        if (!target) throw new ApiError('NOT_FOUND', 'Staff member not found.');
+        if (target.id === actor.id) throw new ApiError('FORBIDDEN', 'You cannot delete your own account.');
+        if (!canManageStaffAccount(actor.role, target.role)) throw new ApiError('FORBIDDEN', 'You cannot change this account.');
+        if (removesLastOwner(data.staff, target.id, { role: target.role, isActive: false })) {
+          throw new ApiError('CONFLICT', 'The restaurant needs at least one active Owner.');
+        }
+        this.endSessions(data, target.id);
+        for (const invite of data.invites) if (invite.userId === target.id && invite.state === 'PENDING') invite.state = 'REVOKED';
+        if (this.staffIsUsed(data, target.id)) {
+          // Old bills, tickets, payments and history keep showing this name, so the row stays (archived).
+          Object.assign(target, { archivedAt: nowIso(), isActive: false, tableIds: [], stationIds: [] });
+          return 'ARCHIVED' as const;
+        }
+        data.staff = data.staff.filter((s) => s.id !== target.id);
+        data.invites = data.invites.filter((i) => i.userId !== target.id);
+        delete data.sessionVersions[target.id];
+        return 'DELETED' as const;
+      }),
+    );
+  }
+
+  /**
+   * DEMO: the person is "used" when any business record (orders, tickets, payments, history, held bills,
+   * waiter calls, rider settlements …) mentions their id. The server checks its foreign keys instead.
+   */
+  private staffIsUsed(data: DemoData, userId: string): boolean {
+    const { staff, invites, sessionVersions, ...records } = data;
+    void staff;
+    void invites;
+    void sessionVersions;
+    return JSON.stringify(records).includes(userId);
   }
 
   resendInvite(userId: string): Promise<StaffLink> {
@@ -1757,7 +1797,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   /** The Owner may act on this account (the server checks the same). */
   private manageableStaff(data: DemoData, userId: string): StaffUser {
     const actor = this.require(data, 'staff.manage');
-    const target = data.staff.find((s) => s.id === userId);
+    const target = data.staff.find((s) => s.id === userId && !s.archivedAt);
     if (!target) throw new ApiError('NOT_FOUND', 'Staff member not found.');
     if (!canManageStaffAccount(actor.role, target.role)) throw new ApiError('FORBIDDEN', 'You cannot change this account.');
     if (!target.isActive) throw new ApiError('CONFLICT', `${target.name} is disabled. Enable the account first.`);

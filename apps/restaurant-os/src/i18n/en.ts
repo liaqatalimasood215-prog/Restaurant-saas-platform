@@ -449,6 +449,10 @@ export const en = {
     revoke: 'Cancel link',
     revokeName: 'Cancel the link of {name}',
     revokedToast: 'The link of {name} no longer works',
+    delete: 'Delete',
+    deleteName: 'Delete {name}',
+    deletedToast: '{name} deleted',
+    archivedToast: '{name} removed — kept only for old bills and history',
     resetPin: 'Reset PIN',
     resetPinName: 'Reset the PIN of {name}',
     you: '(you)',
@@ -486,6 +490,10 @@ export const en = {
       revokeTitle: 'Cancel the link of {name}?',
       revokeBody: 'The link stops working at once. You can send a new one with Resend link.',
       revokeButton: 'Cancel link',
+      removeTitle: 'Delete {name}?',
+      removeBody:
+        '{name} leaves the staff list, is logged out everywhere and can never log in again. If {name} has old bills, orders or history, those keep the name (the record is archived, not erased); otherwise {name} is deleted completely. This cannot be undone — add the person again if needed.',
+      removeButton: 'Delete',
     },
   },
   activate: {

@@ -258,6 +258,11 @@ export interface ApiClient {
    * returned only here, once — the server keeps only a hash of it.
    */
   saveStaff(input: StaffInput): Promise<{ user: StaffUser; link: StaffLink | null }>;
+  /**
+   * Owner only. Someone with old bills or history is archived (hidden, name kept on old records); someone
+   * never used is deleted. Never yourself or the last active Owner.
+   */
+  removeStaff(userId: Uuid): Promise<'ARCHIVED' | 'DELETED'>;
   /** Disabling ends every session of that person at once; enabling again needs a fresh login. */
   setStaffActive(userId: Uuid, active: boolean): Promise<StaffUser>;
   /** A new activation link; the old one stops working. */

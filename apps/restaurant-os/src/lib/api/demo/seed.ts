@@ -23,7 +23,7 @@ import {
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 9;
+export const DEMO_DATA_VERSION = 10;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -92,6 +92,7 @@ function staff(
     tableIds,
     email: null,
     activatedAt: SEEDED_AT,
+    archivedAt: null,
   };
 }
 
