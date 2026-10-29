@@ -6,6 +6,17 @@ import type { StaffRole } from './roles';
  * Roman Urdu: Kaun kya kar sakta hai — asli check hamesha server karega.
  */
 export const PERMISSIONS = {
+  // ── Opening a screen ("View"). The sidebar shows a section only with its view permission. ──
+  'pos.view': ['OWNER', 'MANAGER', 'CASHIER'],
+  'tables.view': ['OWNER', 'MANAGER', 'CASHIER', 'WAITER', 'SERVICE_WAITER'],
+  'orders.view': ['OWNER', 'MANAGER', 'CASHIER'],
+  'onlineOrders.view': ['OWNER', 'MANAGER', 'CASHIER'],
+  'waiter.view': ['OWNER', 'MANAGER', 'CASHIER', 'WAITER', 'SERVICE_WAITER'],
+  'kitchen.view': ['OWNER', 'MANAGER', 'KITCHEN'],
+  'menu.view': ['OWNER', 'MANAGER'],
+  'onlineApp.view': ['OWNER', 'MANAGER'],
+  'riders.view': ['OWNER', 'MANAGER'],
+  // ── Actions ──
   /** Open table, add items, send to kitchen (Super Waiter; never the Service Waiter) */
   'table.order': ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'],
   /** Request the bill / call the cashier for a table */
@@ -34,8 +45,10 @@ export const PERMISSIONS = {
   /** Picked up / Delivered / cash collected — own orders only */
   'delivery.update': ['RIDER'],
   'riderCash.settle': ['OWNER', 'MANAGER', 'CASHIER'],
-  /** Menu, areas and tables (Manage Areas, Add Table), stations; Online App and Riders pages */
-  'setup.manage': ['OWNER', 'MANAGER'],
+  /** Areas and tables: Manage Areas, Add Table, edit, out of service, remove */
+  'tables.manage': ['OWNER', 'MANAGER'],
+  /** Menu items, sizes, add-ons, stations; Online App switches (Preview 5) */
+  'menu.manage': ['OWNER', 'MANAGER'],
   /** See the staff list (read-only for the Manager) */
   'staff.view': ['OWNER', 'MANAGER'],
   /** Add / edit staff, roles, invitations, PIN reset, Enable / Disable — the Owner only (owner, 2026-10-29) */
@@ -47,6 +60,7 @@ export const PERMISSIONS = {
 } as const satisfies Record<string, readonly StaffRole[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
+export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
 
 /** Restaurant-level switches that change what a role may do. */
 export interface PermissionContext {

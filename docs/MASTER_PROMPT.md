@@ -245,6 +245,16 @@ Inventory Staff, Finance Staff) are a future idea and need an explicit update of
 | Mark a table for cleaning / clean again | ✓ | ✓ | ✓ | ✓ | ✓ (own tables) | | |
 | Menu, areas and tables (Manage Areas, Add Table, edit, out of service, remove), stations; Online App and Riders pages | ✓ | ✓ | | | | | |
 | Staff management (add, edit, roles, tables / stations, activation and PIN-reset links, Enable / Disable) | ✓ | see the list only | | | | | |
+
+**Editable permissions (owner, 2026-10-29).** The table above is the **recommended** set of each role.
+Staff → Role Permissions shows it as a matrix (feature × View / Create / Edit / Delete / Approve; every tick
+is one real permission, including a "View" permission per screen). The Owner may switch a permission OFF
+for a role or for one person ("Custom permissions"), and ON only where the order rules allow that role —
+e.g. payments, accepting online orders and assigning riders stay counter work; Staff management and
+Settings stay Owner only; the Owner always has everything. A person's permissions = their own set, else
+their role's set, else the recommended set. Role Permissions replaces the "Managers may see money reports"
+switch (the Manager's Reports tick). Shared rules: `packages/shared/src/access.ts`; the server enforces them
+from Phase 4 and records every change in the audit log.
 | Payroll (Phase 8) | ✓ | | | | | | |
 | Money reports | ✓ | if the Owner allows | | own tips | own tips | | own cash |
 | Settings (tax, service charge, receipt, business day) | ✓ | | | | | | |
@@ -1171,3 +1181,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-29 | §7.1 POS: Phone Call replaced by Call Waiter (`waiter_calls`, notification WAITER_CALLED); §8 Owner/Manager discount also on a new bill before sending (saved with the new order); `held_bills.discount` instead of `phone_order`. |
 | 2026-10-29 | §4, §6.6, §7.1 Tables, §9: area and table setup on the Tables screen (owner) — Manage Areas, Add Table (one or many), edit, display order, Cleaning and Out of service states, open-bill locks, archive instead of delete; search and status filters; permission "mark a table for cleaning". |
 | 2026-10-29 | §4, §9, §10.3: Staff upgrade (owner) — only the Owner manages staff (Manager read-only), last active Owner protected, email and branch on staff, single-use expiring activation and PIN-reset links, own PIN, PIN unlock on enrolled devices, Disable ends sessions and real-time access; tables `staff_invites`, `staff_devices`. Phase 1: DEMO frontend; real parts in Phases 4–6. |
+| 2026-10-29 | §4: editable permissions — Role Permissions matrix and per-person custom permissions within each role's allowed set ("ceiling"); view permissions per screen; Staff screen redesign (employee list with Employee ID and last login, 3-step Add Staff wizard). |

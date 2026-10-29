@@ -182,8 +182,8 @@ for (const name of ['Send to kitchen', 'Void', 'Record Payment', 'Bill Now']) {
   assert.equal(await serviceWaiter.getByRole('button', { name, exact: true }).count(), 0, name);
 }
 await serviceWaiter.goto(`${BASE_URL}/pos`, { waitUntil: 'networkidle' });
-await waitText(serviceWaiter, 'Not available for this role');
-ok('no Send / Void / payment buttons; POS shows "Not available for this role"');
+await waitText(serviceWaiter, 'No access');
+ok('no Send / Void / payment buttons; POS shows "No access"');
 
 console.log('8. Service Waiter requests the bill → Cashier is notified and accepts → waiter sees it');
 await serviceWaiter.goto(`${BASE_URL}/waiter?table=${TABLE.t5}`, { waitUntil: 'networkidle' });

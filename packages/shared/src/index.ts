@@ -14,3 +14,4 @@ export * from './units';
 export * from './tables';
 export * from './staff';
 export * from './phone';
+export * from './access';

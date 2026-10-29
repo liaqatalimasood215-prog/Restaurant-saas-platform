@@ -1,24 +1,26 @@
 'use client';
 
 import { createContext, useContext, type ReactNode } from 'react';
-import type { PermissionContext } from '@restaurant-saas/shared';
+import type { Permission } from '@restaurant-saas/shared';
 import { getApi, type Session } from '@/lib/api';
 import { useApiQuery, type ApiQuery } from '@/lib/hooks/use-api-query';
 
 /** data: undefined = still loading, null = logged out. */
 interface SessionState extends ApiQuery<Session | null> {
-  /** Restaurant-level switches that change permissions (e.g. Manager money reports) */
-  permissionContext: PermissionContext;
+  /**
+   * May the logged-in person do this? Uses their own permissions (Role Permissions / custom set).
+   * Only hides buttons — the server checks every request.
+   */
+  allowed: (permission: Permission) => boolean;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const query = useApiQuery(() => getApi().getSession(), []);
-  const permissionContext: PermissionContext = {
-    managerCanSeeMoneyReports: query.data?.branch.managerCanSeeMoneyReports ?? false,
-  };
-  return <SessionContext.Provider value={{ ...query, permissionContext }}>{children}</SessionContext.Provider>;
+  const permissions = query.data?.permissions;
+  const allowed = (permission: Permission) => permissions?.includes(permission) ?? false;
+  return <SessionContext.Provider value={{ ...query, allowed }}>{children}</SessionContext.Provider>;
 }
 
 export function useSession(): SessionState {

@@ -50,10 +50,10 @@ test('display order: a record moves to its position and the list is numbered aga
 });
 
 test('only the Owner and Manager set up tables; everyone on the floor marks cleaning', () => {
-  assert.equal(can('OWNER', 'setup.manage'), true);
-  assert.equal(can('MANAGER', 'setup.manage'), true);
-  assert.equal(can('CASHIER', 'setup.manage'), false);
-  assert.equal(can('WAITER', 'setup.manage'), false);
+  assert.equal(can('OWNER', 'tables.manage'), true);
+  assert.equal(can('MANAGER', 'tables.manage'), true);
+  assert.equal(can('CASHIER', 'tables.manage'), false);
+  assert.equal(can('WAITER', 'tables.manage'), false);
   for (const role of ['OWNER', 'MANAGER', 'CASHIER', 'WAITER', 'SERVICE_WAITER'] as const) assert.equal(can(role, 'table.clean'), true, role);
   assert.equal(can('KITCHEN', 'table.clean'), false);
 });

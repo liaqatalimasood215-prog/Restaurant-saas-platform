@@ -16,6 +16,8 @@ import type {
   OrderStatus,
   OrderType,
   OrderView,
+  Permission,
+  RolePermissionsEntry,
   PaymentMethod,
   RiderCashSettlement,
   RiderCashView,
@@ -42,6 +44,8 @@ export interface Session {
   user: StaffUser;
   restaurant: Restaurant;
   branch: Branch;
+  /** What this person may do (their own set, else their role's set). Screens use it only to show buttons. */
+  permissions: Permission[];
 }
 
 export type ApiErrorCode = 'NETWORK' | 'NOT_FOUND' | 'FORBIDDEN' | 'VALIDATION' | 'CONFLICT';
@@ -134,6 +138,8 @@ export interface StaffInput {
   role: StaffRole;
   stationIds: Uuid[];
   tableIds: Uuid[];
+  /** Own permissions for this person; null = follow the role */
+  permissions: Permission[] | null;
 }
 
 export interface AreaInput {
@@ -271,6 +277,11 @@ export interface ApiClient {
   revokeInvite(userId: Uuid): Promise<void>;
   /** The old PIN and all sessions stop working; the person sets a new PIN with this single-use link. */
   resetStaffPin(userId: Uuid): Promise<StaffLink>;
+
+  /** Role Permissions (Owner changes, Manager may look): each editable role with its current and recommended set. */
+  getRolePermissions(): Promise<RolePermissionsEntry[]>;
+  /** Owner only. null = back to the recommended set. Everyone of that role without own permissions follows at once. */
+  saveRolePermissions(role: StaffRole, permissions: Permission[] | null): Promise<void>;
 
   /** Activation page (no login): who the link is for, or an error when it is used, revoked or expired. */
   getActivation(token: string): Promise<ActivationInfo>;

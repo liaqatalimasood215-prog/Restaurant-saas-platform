@@ -82,7 +82,7 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 - Data layer: `ApiClient` interface (`src/lib/api/client.ts`) + `DemoAdapter` (`src/lib/api/demo/*`).
   Screens use `getApi()`; an ESLint rule blocks importing the demo folder anywhere else. Demo data in
   localStorage + BroadcastChannel (the message carries the data); the login session is per tab in
-  sessionStorage. **Demo data version is 10** (changing it resets everyone's demo data once).
+  sessionStorage. **Demo data version is 11** (changing it resets everyone's demo data once).
 - All UI text lives in `apps/restaurant-os/src/i18n/en.ts` (Urdu UI is Phase 7).
 - Installable PWA (manifest, icons, no-cache service worker, Install App in the profile menu); no offline
   data. One small "Demo mode" indicator in the header explains that sync works only between tabs of one
@@ -98,7 +98,7 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 | Kitchen / KDS | Chefs see only their station; same order number and table everywhere; units, timers, Start / Ready / Undo, VOID, out of stock, sound |
 | Online Orders | Repeating alarm for customer orders, Accept (prep time) / Reject (reason), phone delivery and takeaway orders, tickets by station, assign/change rider, Picked up, takeaway payment/receipt, rider cash to settle, Cancel. Customer and rider steps are simulated by labelled DEMO buttons until Phases 2–3 |
 | Orders | Today / all, search (number, table, customer, phone), filters, detail with items, payments, kitchen tickets and timeline; header search |
-| Staff | **Owner only** (Manager read-only): add / edit (name, mobile, optional email, branch, role, tables / station), Enable / Disable and **Delete** with confirmation (never used = deleted; with orders / history = archived, name kept on old bills; not yourself, not the last Owner); last active Owner protected. New staff get a single-use activation link (48 h; copy or WhatsApp — email NOT CONNECTED); Resend / Cancel link; Reset PIN. Public page `/activate?token=…`: the person creates a 6-digit PIN (DEMO: checked, never stored). Only activated accounts appear on the DEMO login. Disable, role change and PIN reset end the person's sessions (DEMO session version). Mobile numbers are accepted in any common form (03001234567, +92 300 1234567 …) and saved as 0300-1234567 (`packages/shared/src/phone.ts`, also used for customers). Rules: `packages/shared/src/staff.ts` |
+| Staff | Redesigned like the owner's picture (panels 1–3, app colours): **Employees** tab (initials, #EMP…, role, branch, contact, Active / Inactive / Invited, last login, ⋯ menu: Edit details, Edit permissions, Resend / Cancel link, Reset PIN, Deactivate / Reactivate, Delete; search and filters; tap a name to open) and **Role Permissions** tab (matrix View / Create / Edit / Delete / Approve, copy from role, use recommended, turn all off). **3-step wizard** for Add and Edit (personal → role & branch → permissions). Per-person permissions within each role's allowed set; Staff management and Settings Owner only; Manager read-only. Activation links, own PIN (`/activate`), PIN reset, last-Owner protection as before. Rules: `packages/shared/src/access.ts`, `staff.ts`, `phone.ts`; screens: `apps/restaurant-os/src/screens/staff/` |
 | POS / New Bill | See §5 |
 | Placeholders | Menu, Online App, Riders, Today's Summary, Settings (Preview 5); Dashboard, Customers, Finance & Reports, Inventory, Payroll, AI Manager (Coming Soon) |
 
@@ -158,7 +158,7 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 
 ## 7. Test status (last run, all green)
 
-- `pnpm test` — 70 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-29, Staff
+- `pnpm test` — 75 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-29, Staff
   upgrade).
 - Automated walkthroughs (Edge through `playwright-core`, while `pnpm dev` runs), all pass:
   - `pnpm --filter @restaurant-saas/restaurant-os walkthrough` — waiter → kitchen → cashier workflow, Test A
@@ -231,6 +231,8 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 - Call Waiter voice: the owner asked for speech; he has not yet confirmed how it sounds on a real phone or
   whether the wording is right. His other idea — the **waiter calling the cashier at any time, without a
   table** (today a waiter can only send Request Bill on a table bill) — was offered and not answered.
+- Staff (not built, owner's long request 2026-10-29): Email / WhatsApp / POS-PIN invite methods (panel 4 of the
+  picture), extra roles (Dispatcher, Inventory, Finance), photo upload (Phase 7), Import Staff, custom roles.
 - Staff: what is the primary login on a new device — phone + password (current rule, recommended; the
   activation page would then also set a password) or something else? Decide before Phase 4. Riders are still
   added on the Riders page (Preview 5) and follow the same Owner-only rule.

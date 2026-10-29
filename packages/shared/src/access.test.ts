@@ -27,7 +27,7 @@ test('Service Waiter serves food and asks for the bill, but never changes orders
     'payment.refund',
     'order.cancel',
     'bill.accept',
-    'setup.manage',
+    'tables.manage',
     'staff.manage',
   ] as const;
   for (const p of allowed) assert.equal(can('SERVICE_WAITER', p), true, p);
@@ -54,7 +54,7 @@ test('permission matrix follows MASTER_PROMPT §4', () => {
   assert.equal(can('KITCHEN', 'item.outOfStock'), true);
   assert.equal(can('CASHIER', 'order.discount'), false);
   assert.equal(can('CASHIER', 'riderCash.settle'), true);
-  assert.equal(can('CASHIER', 'setup.manage'), false);
+  assert.equal(can('CASHIER', 'tables.manage'), false);
   assert.equal(can('MANAGER', 'settings.manage'), false);
   assert.equal(can('OWNER', 'settings.manage'), true);
   assert.equal(can('RIDER', 'delivery.update'), true);

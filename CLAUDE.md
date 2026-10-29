@@ -24,7 +24,7 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - **Built (DEMO / PROTOTYPE):** layout and sidebar, DEMO login, Tables, Waiter Orders (Super + Service
   Waiter), Kitchen / KDS, Staff, Online Orders, Orders, installable PWA, notifications (message, beep,
   vibration), the full **POS / New Bill** (see below) and **Tables management** (Manage Areas, Add Table,
-  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 70 unit tests
+  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 75 unit tests
   and the five walkthroughs (`walkthrough`, `walkthrough:online`, `walkthrough:pos`, `walkthrough:tables`,
   `walkthrough:staff`) pass.
 - **Approved by the owner:** documents, Phase 1 plan, Preview 1, the waiter → kitchen → cashier workflow.
@@ -62,6 +62,10 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - Only the **Owner** manages staff (add, edit, roles, tables / station, links, Enable / Disable); the Manager
   sees the list. The last active Owner is protected. Single-use activation / PIN-reset links (48 hours); the
   person creates their own PIN; nobody else sees it.
+- Staff screen = owner's picture panels 1–3 in the app's red + navy: Employees list, 3-step wizard, Role
+  Permissions. Permissions are per role and per person (`packages/shared/src/access.ts`): screens and the demo
+  server use `session.permissions` / `allowed()`, never `can(role, …)`. Switch ON only within the role's
+  allowed set ("ceiling"); Staff management and Settings stay Owner only.
 - Owner: **"front end first, back end last."** Phase 1 has the DEMO screens only. Real login (phone +
   password), hashed PINs, device enrolment, attempt limits, server sessions, real-time revoke, email sending
   and HTTPS hosting are Phases 4–6 (MASTER_PROMPT.md §10.3). Never treat the DEMO login or localStorage as security.

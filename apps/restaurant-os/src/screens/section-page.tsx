@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { Lock } from 'lucide-react';
-import { canSeeSection, findSection, type OsSection, type OsSectionKey } from '@restaurant-saas/shared';
+import { canSeeSectionWith, findSection, type OsSection, type OsSectionKey } from '@restaurant-saas/shared';
 import { Card, CardBody } from '@/components/ui/card';
 import { t } from '@/i18n';
 import { PREVIEW_FOR_SECTION } from '@/lib/build-plan';
@@ -41,7 +41,7 @@ function renderSection(section: OsSection, options: SectionOptions) {
 
 /** One sidebar feature = one screen. Checks that the current role may open it (UI only; the server checks from Phase 4). */
 export function SectionPage({ sectionKey, ...options }: { sectionKey: OsSectionKey } & SectionOptions) {
-  const { data: session, permissionContext } = useSession();
+  const { data: session } = useSession();
   const section = findSection(sectionKey);
   if (!section) throw new Error(`Unknown section: ${sectionKey}`);
 
@@ -50,13 +50,13 @@ export function SectionPage({ sectionKey, ...options }: { sectionKey: OsSectionK
   }, [sectionKey]);
 
   if (!session) return null;
-  if (!canSeeSection(section, session.user.role, permissionContext)) {
+  if (!canSeeSectionWith(section, session.user.role, session.permissions)) {
     return <NoAccess section={section} role={session.user.role} />;
   }
   return renderSection(section, options);
 }
 
-function NoAccess({ section, role }: { section: OsSection; role: Parameters<typeof canSeeSection>[1] }) {
+function NoAccess({ section, role }: { section: OsSection; role: Parameters<typeof canSeeSectionWith>[1] }) {
   return (
     <Card className="mx-auto max-w-xl">
       <CardBody className="flex flex-col items-center gap-3 py-10 text-center">

@@ -44,11 +44,12 @@ const SHOTS = [
   { name: '13-phone-owner-more-menu', size: 'phone', role: 'OWNER', path: '/tables', click: 'button:has-text("More")' },
   { name: '14-desktop-demo-mode-explained', size: 'desktop', role: 'OWNER', path: '/pos', click: 'button:has-text("Demo mode")' },
   { name: '15-desktop-owner-staff', size: 'desktop', role: 'OWNER', path: '/staff' },
-  { name: '16-desktop-owner-add-service-waiter', size: 'desktop', role: 'OWNER', path: '/staff', click: 'button:has-text("Add staff")', then: 'button:has-text("Service Waiter")' },
+  { name: '16-desktop-owner-add-staff-wizard', size: 'desktop', role: 'OWNER', path: '/staff', click: 'button:has-text("Add Staff")' },
   { name: '17-phone-service-waiter-home', size: 'phone', role: 'SERVICE_WAITER', path: '/' },
   { name: '18-desktop-owner-manage-areas', size: 'desktop', role: 'OWNER', path: '/tables', click: 'button:has-text("Manage Areas")' },
   { name: '19-desktop-owner-add-many-tables', size: 'desktop', role: 'OWNER', path: '/tables', click: 'button:has-text("Add Table")', then: 'button:has-text("Many tables")' },
   { name: '20-phone-owner-tables', size: 'phone', role: 'OWNER', path: '/tables' },
+  { name: '21-desktop-owner-role-permissions', size: 'desktop', role: 'OWNER', path: '/staff', click: 'button[role="tab"]:has-text("Role Permissions")' },
 ];
 
 const browser = await chromium.launch({ channel: 'msedge' });

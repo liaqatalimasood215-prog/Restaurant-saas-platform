@@ -4,14 +4,12 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Search, Send, Trash2 } from 'lucide-react';
 import {
-  can,
   formatPaisa,
   formatQuantity,
   type DraftItemInput,
   type MenuItem,
   type MenuSnapshot,
   type OrderItem,
-  type StaffRole,
   type TableBoardEntry,
 } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
@@ -84,7 +82,6 @@ function TablePicker() {
 }
 
 function TableOrder({ tableId }: { tableId: string }) {
-  const { data: session } = useSession();
   const floor = useApiQuery(() => getApi().getFloorPlan(), []);
   const menu = useApiQuery(() => getApi().getMenu(), []);
 
@@ -126,7 +123,6 @@ function TableOrder({ tableId }: { tableId: string }) {
         entry={entry}
         areaName={floor.data.areas.find((a) => a.id === entry.table.areaId)?.name ?? ''}
         menu={menu.data}
-        role={session?.user.role ?? 'WAITER'}
       />
     </>
   );
@@ -136,13 +132,12 @@ function OrderWorkspace({
   entry,
   areaName,
   menu,
-  role,
 }: {
   entry: TableBoardEntry;
   areaName: string;
   menu: MenuSnapshot;
-  role: StaffRole;
 }) {
+  const { allowed } = useSession();
   const toast = useToast();
   const order = entry.order;
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -345,8 +340,8 @@ function OrderWorkspace({
                 <SentRounds
                   order={order}
                   stations={menu.stations}
-                  canServe={can(role, 'ticket.serve')}
-                  canVoid={can(role, 'item.void')}
+                  canServe={allowed('ticket.serve')}
+                  canVoid={allowed('item.void')}
                   busy={busy}
                   onServe={(ticketId) => run(() => getApi().updateTicket(ticketId, 'SERVED'))}
                   onVoid={setVoidTarget}

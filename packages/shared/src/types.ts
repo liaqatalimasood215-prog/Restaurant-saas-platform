@@ -4,6 +4,7 @@ import type { PaymentKind, PaymentMethod } from './payments';
 import type { BillTotals, DiscountInput, TaxSettings } from './pricing';
 import type { StaffRole } from './roles';
 import type { InviteKind, InviteStatus } from './staff';
+import type { Permission } from './permissions';
 import type { MenuUnit } from './units';
 
 /**
@@ -72,6 +73,20 @@ export interface StaffUser extends RestaurantScoped {
   activatedAt: IsoDateTime | null;
   /** Deleted by the Owner but kept because old bills or history name this person; hidden everywhere else */
   archivedAt: IsoDateTime | null;
+  /** Short employee number, e.g. EMP007 — given once, never reused */
+  employeeCode: string;
+  /** This person's own permissions; null = follows the role (Role Permissions) */
+  permissions: Permission[] | null;
+  lastLoginAt: IsoDateTime | null;
+}
+
+/** One role on the Role Permissions screen. */
+export interface RolePermissionsEntry {
+  role: StaffRole;
+  permissions: Permission[];
+  recommended: Permission[];
+  /** The Owner changed this role away from the recommended set */
+  customized: boolean;
 }
 
 /** The latest activation or PIN-reset link of a staff member, as the Owner sees it (never the token). */

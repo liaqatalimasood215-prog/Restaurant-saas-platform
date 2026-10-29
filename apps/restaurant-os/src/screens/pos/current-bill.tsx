@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import {
   calculateBill,
-  can,
   formatPaisa,
   formatQuantity,
   type Area,
@@ -123,7 +122,6 @@ export function CurrentBill({
     row.animate([{ backgroundColor: 'var(--color-brand-soft)' }, { backgroundColor: '#ffffff' }], { duration: 900, easing: 'ease-out' });
   }, [draft.cart]);
 
-  const role = session.user.role;
   const { branch } = session;
   const views = draft.cart.map((l) => describeLine(l, menu)).filter((v) => v !== null);
   const categoryOf = (menuItemId: string) => {
@@ -155,8 +153,8 @@ export function CurrentBill({
   const payable = order && !['REJECTED', 'CANCELLED'].includes(order.status) && (order.type !== 'DINE_IN' || ['OPEN', 'BILL_REQUESTED'].includes(order.status));
   const placeLabel = order?.type === 'DINE_IN' ? (table?.table.name ?? '') : t(`orderType.${draft.type}`);
   const selected = order ? order.type : draft.type;
-  const canPay = can(role, 'payment.record');
-  const canDiscount = can(role, 'order.discount');
+  const canPay = session.permissions.includes('payment.record');
+  const canDiscount = session.permissions.includes('order.discount');
   const callTableId = order?.tableId ?? (draft.type === 'DINE_IN' ? draft.tableId : null);
   /** Pieces count one each; a kg item counts as one line */
   const countItems = (lines: { quantity: number; unit: string }[]) => lines.reduce((n, l) => n + (l.unit === 'piece' ? l.quantity : 1), 0);
@@ -366,7 +364,7 @@ export function CurrentBill({
           </div>
           <button
             type="button"
-            disabled={busy || !can(role, 'bill.accept')}
+            disabled={busy || !session.permissions.includes('bill.accept')}
             onClick={() => void callWaiter(callTableId)}
             className={cn(
               typeButton,

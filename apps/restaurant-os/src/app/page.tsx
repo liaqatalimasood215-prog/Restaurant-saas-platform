@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { canUseApp, HOME_SECTION } from '@restaurant-saas/shared';
+import { canUseApp, homeSectionFor, type OsRole } from '@restaurant-saas/shared';
 import { LoadingState } from '@/components/ui/states';
 import { useSession } from '@/lib/session';
 
@@ -11,10 +11,12 @@ export default function HomePage() {
   const { data: session } = useSession();
   const router = useRouter();
   const role = session?.user.role;
+  // The usual home screen, or the first one this person may open when the Owner switched it off.
+  const home = session && role && canUseApp(role, 'restaurant-os') ? homeSectionFor(role as OsRole, session.permissions) : null;
 
   useEffect(() => {
-    if (role && canUseApp(role, 'restaurant-os')) router.replace(`/${HOME_SECTION[role as keyof typeof HOME_SECTION]}`);
-  }, [role, router]);
+    if (home) router.replace(`/${home}`);
+  }, [home, router]);
 
   return <LoadingState />;
 }

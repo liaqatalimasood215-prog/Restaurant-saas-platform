@@ -8,9 +8,13 @@ import {
   automaticOrderSteps,
   businessDate,
   calculateBill,
-  can,
   canManageStaffAccount,
   checkPin,
+  cleanPermissions,
+  effectivePermissions,
+  recommendedPermissions,
+  samePermissions,
+  EDITABLE_ROLES,
   inviteExpiresAt,
   inviteStatus,
   isValidEmail,
@@ -19,6 +23,8 @@ import {
   type ActivationInfo,
   type InviteKind,
   type PinProblem,
+  type RolePermissionsEntry,
+  type StaffRole,
   type StaffMember,
   canUseApp,
   cashChange,
@@ -289,10 +295,15 @@ export class DemoAdapter implements ApiClient, DemoControls {
 
   private require(data: DemoData, permission: Permission): StaffUser {
     const user = this.requireUser(data);
-    if (!can(user.role, permission, { managerCanSeeMoneyReports: data.branch.managerCanSeeMoneyReports })) {
-      throw new ApiError('FORBIDDEN', 'Your role is not allowed to do this.');
+    if (!this.permissionsOf(data, user).includes(permission)) {
+      throw new ApiError('FORBIDDEN', 'You do not have permission to do this.');
     }
     return user;
+  }
+
+  /** The person's own permissions, else their role's (as set by the Owner), else the recommended set. */
+  private permissionsOf(data: DemoData, user: StaffUser): Permission[] {
+    return effectivePermissions(user, data.rolePermissions, { managerCanSeeMoneyReports: data.branch.managerCanSeeMoneyReports });
   }
 
   private staffName(data: DemoData, id: string | null): string | null {
@@ -315,7 +326,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return this.request(() => {
       const data = this.store.read();
       const user = this.currentUser(data);
-      return user ? { user, restaurant: data.restaurant, branch: data.branch } : null;
+      return user ? { user, restaurant: data.restaurant, branch: data.branch, permissions: this.permissionsOf(data, user) } : null;
     });
   }
 
@@ -391,7 +402,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   getTableSetup(): Promise<TableSetup> {
     return this.request(() => {
       const data = this.store.read();
-      this.require(data, 'setup.manage');
+      this.require(data, 'tables.manage');
       const tables = data.tables.filter((t) => t.archivedAt === null);
       return {
         areas: [...data.areas]
@@ -425,7 +436,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   saveArea(input: AreaInput): Promise<Area> {
     return this.request(() =>
       this.store.update((data) => {
-        this.require(data, 'setup.manage');
+        this.require(data, 'tables.manage');
         const existing = input.id ? data.areas.find((a) => a.id === input.id) : null;
         if (input.id && !existing) throw new ApiError('NOT_FOUND', 'Area not found.');
         const name = cleanName(input.name);
@@ -452,7 +463,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   setAreaActive(areaId: string, active: boolean): Promise<void> {
     return this.request(() =>
       this.store.update((data) => {
-        this.require(data, 'setup.manage');
+        this.require(data, 'tables.manage');
         const area = data.areas.find((a) => a.id === areaId);
         if (!area) throw new ApiError('NOT_FOUND', 'Area not found.');
         if (!active) {
@@ -472,7 +483,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   moveArea(areaId: string, position: number): Promise<void> {
     return this.request(() =>
       this.store.update((data) => {
-        this.require(data, 'setup.manage');
+        this.require(data, 'tables.manage');
         if (!data.areas.some((a) => a.id === areaId)) throw new ApiError('NOT_FOUND', 'Area not found.');
         data.areas = placeAt(data.areas, areaId, position);
       }),
@@ -482,7 +493,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   saveTable(input: TableInput): Promise<DiningTable> {
     return this.request(() =>
       this.store.update((data) => {
-        this.require(data, 'setup.manage');
+        this.require(data, 'tables.manage');
         const existing = input.id ? data.tables.find((t) => t.id === input.id && t.archivedAt === null) : null;
         if (input.id && !existing) throw new ApiError('NOT_FOUND', 'Table not found.');
         const area = data.areas.find((a) => a.id === input.areaId);
@@ -525,7 +536,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   addTables(input: BulkTablesInput): Promise<DiningTable[]> {
     return this.request(() =>
       this.store.update((data) => {
-        this.require(data, 'setup.manage');
+        this.require(data, 'tables.manage');
         const area = data.areas.find((a) => a.id === input.areaId);
         if (!area) throw new ApiError('VALIDATION', 'Choose an area.');
         const check = checkBulkTables(input, this.tableNamesIn(data, area.id, null));
@@ -554,7 +565,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   setTableInService(tableId: string, inService: boolean): Promise<void> {
     return this.request(() =>
       this.store.update((data) => {
-        this.require(data, 'setup.manage');
+        this.require(data, 'tables.manage');
         const table = data.tables.find((t) => t.id === tableId && t.archivedAt === null);
         if (!table) throw new ApiError('NOT_FOUND', 'Table not found.');
         if (!inService && this.hasOpenBill(data, table.id)) {
@@ -569,7 +580,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   removeTable(tableId: string): Promise<'ARCHIVED' | 'DELETED'> {
     return this.request(() =>
       this.store.update((data) => {
-        this.require(data, 'setup.manage');
+        this.require(data, 'tables.manage');
         const table = data.tables.find((t) => t.id === tableId && t.archivedAt === null);
         if (!table) throw new ApiError('NOT_FOUND', 'Table not found.');
         if (this.hasOpenBill(data, table.id)) {
@@ -1499,7 +1510,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       };
 
       const list: StaffNotification[] = [];
-      if (can(user.role, 'order.manage')) {
+      if (this.permissionsOf(data, user).includes('order.manage')) {
         for (const order of data.orders) {
           if (order.type === 'DINE_IN') continue;
           const base = { orderId: order.id, dailyNumber: order.dailyNumber, orderType: order.type, customerName: order.customerName ?? '' };
@@ -1536,7 +1547,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         }
 
         const request = order.billRequest;
-        if (request && !request.acceptedAt && can(user.role, 'bill.accept')) {
+        if (request && !request.acceptedAt && this.permissionsOf(data, user).includes('bill.accept')) {
           list.push({
             kind: 'BILL_REQUESTED',
             id: `bill:${order.id}:${request.requestedAt}`,
@@ -1647,6 +1658,9 @@ export class DemoAdapter implements ApiClient, DemoControls {
           throw new ApiError('VALIDATION', 'Unknown table.');
         }
         const isWaiter = input.role === 'WAITER' || input.role === 'SERVICE_WAITER';
+        // Own permissions are cut to what the role may have; the same as the role's set = follow the role.
+        const roleSet = effectivePermissions({ role: input.role, permissions: null }, data.rolePermissions);
+        const own = input.permissions && input.role !== 'OWNER' ? cleanPermissions(input.role, input.permissions) : null;
         const fields = {
           name,
           phone,
@@ -1655,6 +1669,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           role: input.role,
           stationIds: input.role === 'KITCHEN' ? input.stationIds : [],
           tableIds: isWaiter ? input.tableIds : [],
+          permissions: own && !samePermissions(own, roleSet) ? own : null,
         };
         if (existing) {
           // A new role applies at once: the person's open sessions end and they log in again.
@@ -1668,6 +1683,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
           isActive: true,
           activatedAt: null,
           archivedAt: null,
+          employeeCode: `EMP${String(++data.employeeCounter).padStart(3, '0')}`,
+          lastLoginAt: null,
           ...fields,
         };
         data.staff.push(created);
@@ -1691,6 +1708,30 @@ export class DemoAdapter implements ApiClient, DemoControls {
         // Disable: every open session ends now. Enable: old sessions stay ended, so a fresh login is needed.
         this.endSessions(data, target.id);
         return target;
+      }),
+    );
+  }
+
+  getRolePermissions(): Promise<RolePermissionsEntry[]> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'staff.view');
+      const ctx = { managerCanSeeMoneyReports: data.branch.managerCanSeeMoneyReports };
+      return EDITABLE_ROLES.map((role) => {
+        const recommended = recommendedPermissions(role, ctx);
+        const permissions = effectivePermissions({ role, permissions: null }, data.rolePermissions, ctx);
+        return { role, permissions, recommended, customized: !samePermissions(permissions, recommended) };
+      });
+    });
+  }
+
+  saveRolePermissions(role: StaffRole, permissions: Permission[] | null): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'staff.manage');
+        if (!(EDITABLE_ROLES as readonly StaffRole[]).includes(role)) throw new ApiError('FORBIDDEN', 'This role cannot be changed.');
+        if (permissions === null) delete data.rolePermissions[role];
+        else data.rolePermissions[role] = cleanPermissions(role, permissions);
       }),
     );
   }
@@ -1846,6 +1887,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
   }
 
   demoLogin(userId: string): void {
+    this.store.update((data) => {
+      const user = data.staff.find((s) => s.id === userId);
+      if (user) user.lastLoginAt = nowIso();
+    });
     this.store.setSession(userId, this.store.read().sessionVersions[userId] ?? 0);
   }
 

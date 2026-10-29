@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Download } from 'lucide-react';
-import { HOME_SECTION, STAFF_ROLES, type OsRole, type StaffUser } from '@restaurant-saas/shared';
+import { STAFF_ROLES, type StaffUser } from '@restaurant-saas/shared';
 import { initials } from '@/components/shell/profile-menu';
 import { Logo } from '@/components/shell/logo';
 import { DemoModeIndicator } from '@/components/shell/demo-mode';
@@ -24,7 +24,8 @@ export function LoginScreen() {
 
   const login = (user: StaffUser) => {
     getDemoControls().demoLogin(user.id);
-    router.replace(`/${HOME_SECTION[user.role as OsRole]}`);
+    // Home decides the start screen from this person's permissions.
+    router.replace('/');
   };
 
   return (

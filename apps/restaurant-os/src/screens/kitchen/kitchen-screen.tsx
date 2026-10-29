@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { PackageX, Volume2, VolumeX } from 'lucide-react';
-import { can, type KitchenStation, type TicketStatus } from '@restaurant-saas/shared';
+import { type KitchenStation, type TicketStatus } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,7 @@ function readStoredStation(): string {
 
 /** Kitchen Display by station (MASTER_PROMPT.md §5.1 steps 4–5, §7.1 Kitchen Display). Tablet first. */
 export function KitchenScreen() {
-  const { data: session } = useSession();
+  const { data: session, allowed } = useSession();
   const tickets = useApiQuery(() => getApi().listKitchenTickets(), []);
   const menu = useApiQuery(() => getApi().getMenu(), []);
   const [stationId, setStationId] = useState(readStoredStation);
@@ -106,7 +106,7 @@ export function KitchenScreen() {
             {soundOn ? <Volume2 className="size-5" aria-hidden /> : <VolumeX className="size-5" aria-hidden />}
             {soundOn ? t('kitchen.soundOn') : t('kitchen.enableSound')}
           </Button>
-          {user && can(user.role, 'item.outOfStock') && (
+          {user && allowed('item.outOfStock') && (
             <Button variant="secondary" onClick={() => setStockOpen(true)} disabled={!menu.data}>
               <PackageX className="size-5" aria-hidden />
               {t('kitchen.outOfStock')}

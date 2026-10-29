@@ -66,16 +66,17 @@ function comingSoon(
 
 export const OS_SECTIONS: readonly OsSection[] = [
   // Owner decision 2026-10-27: the most-used sections first — POS, Tables, Orders, Online Orders.
-  feature('pos', 'POS / New Bill', COUNTER),
-  feature('tables', 'Tables', FLOOR),
-  feature('orders', 'Orders', COUNTER),
-  feature('online-orders', 'Online Orders', COUNTER),
-  feature('waiter', 'Waiter Orders', FLOOR),
-  feature('kitchen', 'Kitchen / KDS', ['OWNER', 'MANAGER', 'KITCHEN']),
-  feature('menu', 'Menu', MANAGEMENT),
-  feature('online-app', 'Online App', MANAGEMENT),
-  feature('riders', 'Riders', MANAGEMENT),
-  feature('staff', 'Staff', MANAGEMENT),
+  // The role list is who may ever open the screen; the view permission can be turned off per role / person.
+  feature('pos', 'POS / New Bill', COUNTER, 'pos.view'),
+  feature('tables', 'Tables', FLOOR, 'tables.view'),
+  feature('orders', 'Orders', COUNTER, 'orders.view'),
+  feature('online-orders', 'Online Orders', COUNTER, 'onlineOrders.view'),
+  feature('waiter', 'Waiter Orders', FLOOR, 'waiter.view'),
+  feature('kitchen', 'Kitchen / KDS', ['OWNER', 'MANAGER', 'KITCHEN'], 'kitchen.view'),
+  feature('menu', 'Menu', MANAGEMENT, 'menu.view'),
+  feature('online-app', 'Online App', MANAGEMENT, 'onlineApp.view'),
+  feature('riders', 'Riders', MANAGEMENT, 'riders.view'),
+  feature('staff', 'Staff', MANAGEMENT, 'staff.view'),
   feature('summary', "Today's Summary", MANAGEMENT, 'reports.money'),
   feature('settings', 'Settings', ['OWNER']),
   comingSoon('dashboard', 'Dashboard', MANAGEMENT, 7),
@@ -93,6 +94,23 @@ export function findSection(key: string): OsSection | undefined {
 export function canSeeSection(section: OsSection, role: StaffRole, ctx: PermissionContext = {}): boolean {
   if (!section.roles.includes(role)) return false;
   return section.permission ? can(role, section.permission, ctx) : true;
+}
+
+/** With one person's own permissions (Role Permissions / custom permissions, owner 2026-10-29). */
+export function canSeeSectionWith(section: OsSection, role: StaffRole, permissions: readonly Permission[]): boolean {
+  if (!section.roles.includes(role)) return false;
+  return section.permission ? permissions.includes(section.permission) : true;
+}
+
+export function sectionsFor(role: StaffRole, permissions: readonly Permission[]): OsSection[] {
+  return OS_SECTIONS.filter((s) => canSeeSectionWith(s, role, permissions));
+}
+
+/** The role's usual home screen, or the first screen the person may open when that one was turned off. */
+export function homeSectionFor(role: OsRole, permissions: readonly Permission[]): OsSectionKey | null {
+  const visible = sectionsFor(role, permissions).filter((s) => s.group === 'FEATURES');
+  const home = HOME_SECTION[role];
+  return visible.some((s) => s.key === home) ? home : (visible[0]?.key ?? null);
 }
 
 export function sectionsForRole(role: StaffRole, ctx: PermissionContext = {}): OsSection[] {

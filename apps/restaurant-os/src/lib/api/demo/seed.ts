@@ -6,6 +6,8 @@ import {
   type DiningTable,
   type HeldBill,
   type InviteKind,
+  type Permission,
+  type StaffRole,
   type InviteState,
   type ItemVariant,
   type KitchenStation,
@@ -23,7 +25,7 @@ import {
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 10;
+export const DEMO_DATA_VERSION = 11;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -58,6 +60,10 @@ export interface DemoData {
   invites: DemoInvite[];
   /** DEMO stand-in for the server's per-user token_version: a higher number ends older sessions */
   sessionVersions: Record<string, number>;
+  /** Role Permissions changed by the Owner; a missing role uses the recommended set */
+  rolePermissions: Partial<Record<StaffRole, Permission[]>>;
+  /** Last employee number given (EMP012 …); never reused */
+  employeeCounter: number;
 }
 
 export interface DemoInvite {
@@ -93,6 +99,9 @@ function staff(
     email: null,
     activatedAt: SEEDED_AT,
     archivedAt: null,
+    employeeCode: `EMP${String(n).padStart(3, '0')}`,
+    permissions: null,
+    lastLoginAt: null,
   };
 }
 
@@ -295,5 +304,7 @@ export function createSeed(): DemoData {
     waiterCalls: [],
     invites: [],
     sessionVersions: {},
+    rolePermissions: {},
+    employeeCounter: 12,
   };
 }

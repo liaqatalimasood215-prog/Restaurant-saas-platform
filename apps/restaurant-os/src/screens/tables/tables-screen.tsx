@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Check, Clock, LayoutGrid, Pencil, Plus, Search, Sparkles, Users } from 'lucide-react';
-import { TABLE_STATUSES, can, formatPaisa, type TableBoardEntry, type TableStatus } from '@restaurant-saas/shared';
+import { TABLE_STATUSES, formatPaisa, type TableBoardEntry, type TableStatus } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,10 +29,9 @@ type Dialogs = { kind: 'areas' } | { kind: 'add' } | { kind: 'edit'; tableId: st
  * Orders read the same floor plan from the ApiClient.
  */
 export function TablesScreen() {
-  const { data: session } = useSession();
-  const role = session?.user.role;
-  const canManage = role ? can(role, 'setup.manage') : false;
-  const canClean = role ? can(role, 'table.clean') : false;
+  const { allowed } = useSession();
+  const canManage = allowed('tables.manage');
+  const canClean = allowed('table.clean');
   const { data, error, loading, reload } = useApiQuery(() => getApi().getFloorPlan(), []);
   const setup = useApiQuery(() => (canManage ? getApi().getTableSetup() : Promise.resolve(null)), [canManage]);
   const toast = useToast();

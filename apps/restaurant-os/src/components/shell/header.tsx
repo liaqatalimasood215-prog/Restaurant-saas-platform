@@ -4,7 +4,6 @@ import { useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Bell, Search, Store } from 'lucide-react';
-import { can } from '@restaurant-saas/shared';
 import { t } from '@/i18n';
 import { minutesSince } from '@/lib/format';
 import { useNow } from '@/lib/hooks/use-now';
@@ -17,7 +16,7 @@ import { ProfileMenu } from './profile-menu';
 
 /** Header: search, branch, Demo mode, notifications and the profile (MASTER_PROMPT.md §7.1). */
 export function Header() {
-  const { data: session } = useSession();
+  const { data: session, allowed } = useSession();
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-3 md:px-6">
@@ -25,7 +24,7 @@ export function Header() {
         <Logo />
       </div>
 
-      <div className="hidden max-w-xl flex-1 md:block">{session && can(session.user.role, 'order.manage') && <OrderSearch />}</div>
+      <div className="hidden max-w-xl flex-1 md:block">{session && allowed('orders.view') && <OrderSearch />}</div>
 
       <div className="ml-auto flex items-center gap-1 sm:gap-2">
         {session && (
