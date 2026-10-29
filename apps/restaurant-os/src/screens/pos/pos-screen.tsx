@@ -261,6 +261,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
           setDraft={setDraftState}
           menu={menu.data}
           tables={tables}
+          areas={floor.data.areas}
           session={session}
           onEditLine={(line) => {
             const item = menu.data?.items.find((i) => i.id === line.menuItemId);

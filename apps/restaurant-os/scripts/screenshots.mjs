@@ -46,6 +46,9 @@ const SHOTS = [
   { name: '15-desktop-owner-staff', size: 'desktop', role: 'OWNER', path: '/staff' },
   { name: '16-desktop-owner-add-service-waiter', size: 'desktop', role: 'OWNER', path: '/staff', click: 'button:has-text("Add staff")', then: 'button:has-text("Service Waiter")' },
   { name: '17-phone-service-waiter-home', size: 'phone', role: 'SERVICE_WAITER', path: '/' },
+  { name: '18-desktop-owner-manage-areas', size: 'desktop', role: 'OWNER', path: '/tables', click: 'button:has-text("Manage Areas")' },
+  { name: '19-desktop-owner-add-many-tables', size: 'desktop', role: 'OWNER', path: '/tables', click: 'button:has-text("Add Table")', then: 'button:has-text("Many tables")' },
+  { name: '20-phone-owner-tables', size: 'phone', role: 'OWNER', path: '/tables' },
 ];
 
 const browser = await chromium.launch({ channel: 'msedge' });

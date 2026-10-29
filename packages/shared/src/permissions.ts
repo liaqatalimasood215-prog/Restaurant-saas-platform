@@ -10,6 +10,8 @@ export const PERMISSIONS = {
   'table.order': ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'],
   /** Request the bill / call the cashier for a table */
   'bill.request': ['OWNER', 'MANAGER', 'CASHIER', 'WAITER', 'SERVICE_WAITER'],
+  /** Mark a table for cleaning and clean again (everyone who works on the floor) */
+  'table.clean': ['OWNER', 'MANAGER', 'CASHIER', 'WAITER', 'SERVICE_WAITER'],
   /** Accept a bill request, print the pre-bill */
   'bill.accept': ['OWNER', 'MANAGER', 'CASHIER'],
   /** Void an item after it was sent (with reason) */
@@ -32,7 +34,7 @@ export const PERMISSIONS = {
   /** Picked up / Delivered / cash collected — own orders only */
   'delivery.update': ['RIDER'],
   'riderCash.settle': ['OWNER', 'MANAGER', 'CASHIER'],
-  /** Menu, tables, stations; Online App and Riders pages */
+  /** Menu, areas and tables (Manage Areas, Add Table), stations; Online App and Riders pages */
   'setup.manage': ['OWNER', 'MANAGER'],
   /** Staff management (Managers: not Owner/Manager accounts) */
   'staff.manage': ['OWNER', 'MANAGER'],

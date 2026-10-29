@@ -238,7 +238,8 @@ Inventory Staff, Finance Staff) are a future idea and need an explicit update of
 | Cancel order (with reason) | ✓ | ✓ | delivery/takeaway, before the kitchen starts | | | | |
 | Picked up / Delivered / cash collected | | | | | | | own orders only |
 | Settle rider cash | ✓ | ✓ | ✓ | | | | |
-| Menu, tables, stations; Online App and Riders pages | ✓ | ✓ | | | | | |
+| Mark a table for cleaning / clean again | ✓ | ✓ | ✓ | ✓ | ✓ (own tables) | | |
+| Menu, areas and tables (Manage Areas, Add Table, edit, out of service, remove), stations; Online App and Riders pages | ✓ | ✓ | | | | | |
 | Staff management (incl. waiter type and assigned tables) | ✓ | ✓ (not Owner/Manager accounts) | | | | | |
 | Payroll (Phase 8) | ✓ | | | | | | |
 | Money reports | ✓ | if the Owner allows | | own tips | own tips | | own cash |
@@ -418,7 +419,10 @@ TAKEAWAY  PLACED → ACCEPTED → PREPARING → READY → PICKED_UP
 - **Business day:** each branch has a day start time (default 06:00), so sales after midnight count
   for the previous business day.
 - A table's status is **derived** from its open order (Free / Occupied / Bill requested), never
-  stored twice.
+  stored twice. Two states belong to the table itself: **Cleaning** (a flag set by floor staff,
+  cleared by "Table is clean" or when the next guests are seated) and **Out of service** (the table
+  is not in service: shown on the Tables board, but no new bill can be opened). An open bill always
+  wins over both.
 
 ### 6.7 Real-time (Phase 5)
 
@@ -465,7 +469,7 @@ Navigation (owner, 2026-10-27):
 | Module | Phase | Requirements |
 |---|---|---|
 | Login | Pilot | Phone + password, redirect by role, rate-limited, clear errors (DEMO role switcher in Phases 1–3) |
-| Tables | Pilot | Set up areas and tables; live board with status colour, running total, guests, waiter, time seated |
+| Tables | Pilot | Live board with search, area filter and status filter (Free, Occupied, Bill requested, Cleaning, Out of service); compact cards: name, capacity and status, an occupied table also shows its bill, "guests / capacity", waiter, time seated and kitchen progress. Owner/Manager set up areas and tables here (owner, 2026-10-29): **Manage Areas** (add, rename, reorder, deactivate) and **+ Add Table** (one table, or many at once such as T1–T10 with 4 seats each); edit a table's name, area, seats and display order; take it out of service; remove it. Rules: seats are a positive whole number (1–50); a table name is unique inside its area; a table with a running or held bill cannot be removed, taken out of service or moved to another area; an area with running or held bills cannot be deactivated; a removed table that has old bills (or is assigned to a waiter) is archived, never deleted, so old bills keep its name. Tables, POS and Waiter Orders read the same table data. Reservations, merging tables and split bills come later |
 | Waiter | Pilot | Mobile; table board → order screen (search, categories, sizes, add-ons, notes, quantity); Send; ready alerts; Served; Print bill |
 | Kitchen Display | Pilot | Choose station; columns New / Preparing / Ready; big text; table or order number, type, waiter, notes, VOID marks; timers; sound; Start / Ready / Undo; "out of stock" button |
 | Cashier / POS | Pilot | New bill for dine-in, takeaway or delivery (table or customer, menu with sizes and add-ons, Hold and reopen, send to the kitchen); open tables with running bills; bill detail; discount (permission); service charge; tax; payments by several methods; tip; change; refund (permission); print pre-bill and receipt; reprint (marked DUPLICATE, logged) |
@@ -601,8 +605,8 @@ never deleted.
 | `staff_tables` | staff_user_id, table_id — assigned tables of a waiter (none = all tables) | Pilot |
 | `kitchen_stations` | name, auto_ready, warn_minutes, late_minutes, sort | Pilot |
 | `staff_stations` | staff_user_id, station_id | Pilot |
-| `areas` | name, sort | Pilot |
-| `dining_tables` | area_id, name, seats, is_active, sort (status is derived, not stored) | Pilot |
+| `areas` | name, sort, is_active | Pilot |
+| `dining_tables` | area_id, name (unique per area among tables that are not archived), seats (1–50), is_active (false = out of service), sort (display order in the area), cleaning, archived_at (order status is derived, not stored) | Pilot |
 | `menu_categories` | branch_id (empty = all branches), name, sort, is_active | Pilot |
 | `menu_items` | category_id, station_id, name, description, base_price, unit (piece / kg / plate / litre), is_available, is_online, sort, image_url (P7) | Pilot |
 | `item_variants` | menu_item_id, name (Small / Medium / Large), price, sort | Pilot |
@@ -1146,3 +1150,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-28 | §7.1 POS: full new-bill screen with Hold, discount, split and pending payment; §9 `held_bills`. |
 | 2026-10-29 | §7.1 POS: Phone Call order button (takeaway, channel PHONE) and Bill Now (send, then take payment); `held_bills.phone_order`. |
 | 2026-10-29 | §7.1 POS: Phone Call replaced by Call Waiter (`waiter_calls`, notification WAITER_CALLED); §8 Owner/Manager discount also on a new bill before sending (saved with the new order); `held_bills.discount` instead of `phone_order`. |
+| 2026-10-29 | §4, §6.6, §7.1 Tables, §9: area and table setup on the Tables screen (owner) — Manage Areas, Add Table (one or many), edit, display order, Cleaning and Out of service states, open-bill locks, archive instead of delete; search and status filters; permission "mark a table for cleaning". |

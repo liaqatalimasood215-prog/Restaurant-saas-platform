@@ -12,7 +12,8 @@
     "screenshots": "node scripts/screenshots.mjs",
     "walkthrough": "node scripts/walkthrough.mjs",
     "walkthrough:online": "node scripts/walkthrough-online.mjs",
-    "walkthrough:pos": "node scripts/walkthrough-pos.mjs"
+    "walkthrough:pos": "node scripts/walkthrough-pos.mjs",
+    "walkthrough:tables": "node scripts/walkthrough-tables.mjs"
   },
   "dependencies": {
     "@restaurant-saas/shared": "workspace:*",

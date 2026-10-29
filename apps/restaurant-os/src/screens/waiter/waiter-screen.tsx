@@ -56,17 +56,27 @@ function TablePicker() {
         <ErrorState message={error?.message} onRetry={reload} />
       ) : (
         <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-          {data.tables.map((entry) => (
-            <li key={entry.table.id}>
-              <Link
-                href={`/waiter?table=${entry.table.id}`}
-                className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border-2 border-slate-200 bg-white"
-              >
+          {data.tables.map((entry) => {
+            const content = (
+              <>
                 <span className="text-lg font-black">{entry.table.name}</span>
                 <Badge tone={TABLE_TONES[entry.status]}>{t(`tableStatus.${entry.status}`)}</Badge>
-              </Link>
-            </li>
-          ))}
+              </>
+            );
+            const box = 'flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border-2 bg-white';
+            return (
+              <li key={entry.table.id}>
+                {/* Out of service: shown, but no bill can be opened there */}
+                {entry.status === 'OUT_OF_SERVICE' ? (
+                  <div className={cn(box, 'border-dashed border-slate-300 opacity-60')}>{content}</div>
+                ) : (
+                  <Link href={`/waiter?table=${entry.table.id}`} className={cn(box, 'border-slate-200')}>
+                    {content}
+                  </Link>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </>

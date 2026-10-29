@@ -60,12 +60,13 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | Waiter → kitchen → cashier workflow (two waiter roles, stations, bill request) | **Approved** 2026-10-28 |
 | Preview 4 (Online Orders + Orders) | **Waiting for the owner's approval** (he asked to see it, never said approved) |
 | POS / New Bill (rebuilt many times at the owner's request) | **Waiting for the owner's final approval** — the last answer he gave was feedback on Call Waiter |
+| Tables management (Manage Areas, Add Table, Cleaning, Out of service — owner request 2026-10-29) | **Built, waiting for the owner's review** |
 | Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Not started** — start only after the owner approves and says "shuru karo" |
 
 ## 4. What is built (all DEMO / PROTOTYPE unless noted)
 
-Last commit: `a03c8c3` "Call Waiter speaks aloud on the waiter's phone: Counter par aayein" (26 local
-commits on `phase-1/restaurant-os-ui`, working tree clean before this handover, nothing pushed).
+Last work: Tables management (2026-10-29), one local commit on `phase-1/restaurant-os-ui` after
+`3d17acb`; see `git log`. Nothing pushed.
 
 ### 4.1 Foundation
 
@@ -80,7 +81,7 @@ commits on `phase-1/restaurant-os-ui`, working tree clean before this handover, 
 - Data layer: `ApiClient` interface (`src/lib/api/client.ts`) + `DemoAdapter` (`src/lib/api/demo/*`).
   Screens use `getApi()`; an ESLint rule blocks importing the demo folder anywhere else. Demo data in
   localStorage + BroadcastChannel (the message carries the data); the login session is per tab in
-  sessionStorage. **Demo data version is 7** (changing it resets everyone's demo data once).
+  sessionStorage. **Demo data version is 8** (changing it resets everyone's demo data once).
 - All UI text lives in `apps/restaurant-os/src/i18n/en.ts` (Urdu UI is Phase 7).
 - Installable PWA (manifest, icons, no-cache service worker, Install App in the profile menu); no offline
   data. One small "Demo mode" indicator in the header explains that sync works only between tabs of one
@@ -91,7 +92,7 @@ commits on `phase-1/restaurant-os-ui`, working tree clean before this handover, 
 | Screen | What works |
 |---|---|
 | Login | DEMO login: pick an account, no password |
-| Tables | Live board; a waiter with assigned tables sees only those |
+| Tables | Live board with search, area and status filters (Free, Occupied, Bill requested, Cleaning, Out of service); compact cards ("2 / 6 guests" when occupied); a waiter with assigned tables sees only those. Owner/Manager: **Manage Areas** (add, rename, reorder, deactivate), **+ Add Table** (one, or many such as T1–T10), edit (name, area, seats, display order), Out of service, Remove (archived when used). Open bills lock a table and its area. Any floor staff marks Cleaning by hand. Rules: `packages/shared/src/tables.ts` |
 | Waiter Orders | Super Waiter: tables, guests, menu with sizes/add-ons/notes/units, rounds, Send to kitchen (double-tap safe), item status, Void, Print bill, Request Bill + cashier acknowledgement. Service Waiter: assigned tables, food-ready alerts, Served, Request Bill; no ordering/prices/payments |
 | Kitchen / KDS | Chefs see only their station; same order number and table everywhere; units, timers, Start / Ready / Undo, VOID, out of stock, sound |
 | Online Orders | Repeating alarm for customer orders, Accept (prep time) / Reject (reason), phone delivery and takeaway orders, tickets by station, assign/change rider, Picked up, takeaway payment/receipt, rider cash to settle, Cancel. Customer and rider steps are simulated by labelled DEMO buttons until Phases 2–3 |
@@ -156,8 +157,8 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 
 ## 7. Test status (last run, all green)
 
-- `pnpm test` — 57 unit tests pass. `pnpm typecheck` and `pnpm lint` pass after every step up to the last
-  commit. `pnpm build` last ran at commit `5697102` (passed); re-run it first in the new chat.
+- `pnpm test` — 64 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-29, Tables
+  management).
 - Automated walkthroughs (Edge through `playwright-core`, while `pnpm dev` runs), all pass:
   - `pnpm --filter @restaurant-saas/restaurant-os walkthrough` — waiter → kitchen → cashier workflow, Test A
     steps 1–6, permission checks.
@@ -167,6 +168,10 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
     many tables at once (T9/T10), quick sale (product + Bill Now), counter Call Waiter incl. what the
     phone is told to say. The script asserts order/invoice numbers (#1–#7): adding or removing orders in an
     earlier step shifts later numbers.
+  - `... walkthrough:tables` — Manage Areas (add, duplicate refused, rename, reorder), Add Table many
+    (T17–T22) and one (duplicate, 0 and 2.5 seats refused), edit seats and display order, open-bill locks on
+    T1 and Hall, Cleaning, Out of service, POS table box by area, Waiter Orders list, remove (deleted vs
+    archived), search, area deactivation, Manager vs Cashier buttons.
 - Screenshots go to `screenshots/` (git-ignored). `... screenshots` retakes the standard set.
 - **Not verified:** the actual spoken voice (only the text handed to the speech engine is tested); real
   phones/tablets (sync is DEMO); PWA install on a phone (needs HTTPS hosting = owner approval); no test of
@@ -196,7 +201,8 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
-1. **Get the owner's answer** on POS and Preview 4 (approved or changes). Do not start Preview 5 before that.
+1. **Get the owner's answer** on POS, Preview 4 and Tables management (approved or changes). Do not start
+   Preview 5 before that.
 2. **Housekeeping docs (no code):** `README.md` "Current stage" and the POS row in the feature table are
    partly outdated (they still mention Preview 4 as latest and "Find a bill by table number"); refresh them
    with the progress log. `docs/MASTER_PROMPT.md` §7.1 POS row should describe the final POS above. Check
@@ -216,6 +222,9 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 - Call Waiter voice: the owner asked for speech; he has not yet confirmed how it sounds on a real phone or
   whether the wording is right. His other idea — the **waiter calling the cashier at any time, without a
   table** (today a waiter can only send Request Bill on a table bill) — was offered and not answered.
+- Tables: Cleaning is set by hand (sparkle button on a free table). Open question for the owner: should a
+  table go to Cleaning **automatically** after its bill is paid? (Not done, because it changes what everyone
+  sees after payment.) Settings (Preview 5) no longer needs areas/tables — they live on the Tables screen.
 - Real food photos: owner may want them before Phase 7 (needs his own photos; never use other people's).
 - Table bills no longer capture guests or a customer name at the POS (owner removed those fields).
 - "Dine-in" still appears on the Orders list, receipts and reports (only the POS button says "Table").

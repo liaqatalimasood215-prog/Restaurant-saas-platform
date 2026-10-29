@@ -1,5 +1,8 @@
 import type {
+  Area,
   Branch,
+  DiningTable,
+  TableSetup,
   CustomerSummary,
   DiscountChoice,
   DiscountInput,
@@ -126,13 +129,56 @@ export interface StaffInput {
   tableIds: Uuid[];
 }
 
+export interface AreaInput {
+  /** Empty for a new area */
+  id: Uuid | null;
+  name: string;
+}
+
+export interface TableInput {
+  /** Empty for a new table */
+  id: Uuid | null;
+  name: string;
+  areaId: Uuid;
+  seats: number;
+  /** Display order inside the area, 1 = first; empty = last */
+  position: number | null;
+}
+
+/** "Add many tables": prefix "T", 1 → 10, 4 seats = T1 … T10. */
+export interface BulkTablesInput {
+  areaId: Uuid;
+  prefix: string;
+  from: number;
+  to: number;
+  seats: number;
+}
+
 export interface ApiClient {
   /** The logged-in staff member, or null. Phases 1–3: DEMO login; Phase 4: phone + password. */
   getSession(): Promise<Session | null>;
   logout(): Promise<void>;
 
-  /** Areas and the live table board (a waiter with assigned tables sees only those). */
+  /** Active areas and the live table board (a waiter with assigned tables sees only those). */
   getFloorPlan(): Promise<FloorPlan>;
+  /** Anyone on the floor: mark a free table for cleaning, or clean again. */
+  setTableCleaning(tableId: Uuid, cleaning: boolean): Promise<void>;
+
+  /**
+   * Area and table setup (Owner, Manager). The server refuses to remove, take out of service or move a
+   * table with a running or held bill, and to deactivate an area with one.
+   */
+  getTableSetup(): Promise<TableSetup>;
+  saveArea(input: AreaInput): Promise<Area>;
+  setAreaActive(areaId: Uuid, active: boolean): Promise<void>;
+  /** Display order of the areas, 1 = first */
+  moveArea(areaId: Uuid, position: number): Promise<void>;
+  saveTable(input: TableInput): Promise<DiningTable>;
+  addTables(input: BulkTablesInput): Promise<DiningTable[]>;
+  /** false = Out of service */
+  setTableInService(tableId: Uuid, inService: boolean): Promise<void>;
+  /** A table with old bills is archived (kept for history); an unused one is deleted. */
+  removeTable(tableId: Uuid): Promise<'ARCHIVED' | 'DELETED'>;
   getMenu(): Promise<MenuSnapshot>;
   getOrder(orderId: Uuid): Promise<Order>;
   /** Super Waiter / counter: creates the table's order if needed and adds one round. */

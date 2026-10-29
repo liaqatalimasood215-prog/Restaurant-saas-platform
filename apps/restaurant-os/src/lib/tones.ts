@@ -9,11 +9,13 @@ export const TICKET_TONES: Record<TicketStatus, Tone> = {
   SERVED: 'grey',
 };
 
-/** Table colours follow the owner's design: free green, occupied red, bill requested amber. */
+/** Table colours follow the owner's design: free green, occupied red, bill requested amber; cleaning blue, out of service grey. */
 export const TABLE_TONES: Record<TableStatus, Tone> = {
   FREE: 'green',
   OCCUPIED: 'red',
   BILL_REQUESTED: 'amber',
+  CLEANING: 'blue',
+  OUT_OF_SERVICE: 'grey',
 };
 
 /** Order status colours: new = blue, cooking = orange, ready = green, on the road = amber, done = grey. */

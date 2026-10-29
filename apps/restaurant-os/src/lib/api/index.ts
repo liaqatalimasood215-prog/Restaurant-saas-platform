@@ -4,6 +4,8 @@ import { DemoAdapter } from './demo/demo-adapter';
 export { ApiError } from './client';
 export type {
   ApiClient,
+  AreaInput,
+  BulkTablesInput,
   CounterOrderInput,
   DemoControls,
   HeldBillInput,
@@ -12,6 +14,7 @@ export type {
   SendRoundInput,
   Session,
   StaffInput,
+  TableInput,
 } from './client';
 
 let adapter: DemoAdapter | null = null;

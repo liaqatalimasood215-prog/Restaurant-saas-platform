@@ -22,6 +22,7 @@ import {
   can,
   formatPaisa,
   formatQuantity,
+  type Area,
   type BillTotals,
   type DiscountInput,
   type DraftItemInput,
@@ -81,6 +82,7 @@ export function CurrentBill({
   setDraft,
   menu,
   tables,
+  areas,
   session,
   onEditLine,
   onNewBill,
@@ -89,6 +91,8 @@ export function CurrentBill({
   setDraft: (update: (d: Draft) => Draft) => void;
   menu: MenuSnapshot;
   tables: TableBoardEntry[];
+  /** Active areas in display order: the table box shows each area's tables together */
+  areas: Area[];
   session: Session;
   onEditLine: (line: CartLine) => void;
   onNewBill: () => void;
@@ -645,26 +649,41 @@ export function CurrentBill({
           }
         >
           <p className="mb-3 text-xs text-slate-600">{t('pos.chooseTableHint')}</p>
-          <div className="grid grid-cols-4 gap-2">
-            {tables.map((entry) => {
-              const status = t(`tableStatus.${entry.status}`);
+          <div className="space-y-3">
+            {areas.map((area) => {
+              const inArea = tables.filter((e) => e.table.areaId === area.id);
+              if (inArea.length === 0) return null;
               return (
-                <button
-                  key={entry.table.id}
-                  type="button"
-                  aria-label={`${entry.table.name} — ${status}`}
-                  onClick={() => pickTable(entry)}
-                  className={cn(
-                    'flex min-h-16 flex-col items-center justify-center rounded-xl border-2 px-1 text-center',
-                    entry.status === 'FREE' && 'border-green-300 bg-green-50 hover:bg-green-100',
-                    entry.status === 'OCCUPIED' && 'border-red-200 bg-red-50 hover:bg-red-100',
-                    entry.status === 'BILL_REQUESTED' && 'border-amber-300 bg-amber-50 hover:bg-amber-100',
-                    entry.table.id === draft.tableId && 'ring-2 ring-brand ring-offset-1',
-                  )}
-                >
-                  <span className="text-lg font-black text-slate-900">{entry.table.name}</span>
-                  <span className="text-[11px] font-semibold text-slate-600">{entry.order ? formatPaisa(entry.order.totals.total) : status}</span>
-                </button>
+                <section key={area.id}>
+                  {areas.length > 1 && <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">{area.name}</h3>}
+                  <div className="grid grid-cols-4 gap-2">
+                    {inArea.map((entry) => {
+                      const status = t(`tableStatus.${entry.status}`);
+                      return (
+                        <button
+                          key={entry.table.id}
+                          type="button"
+                          aria-label={`${entry.table.name} — ${status}`}
+                          // Out of service: no new bill can be opened on this table.
+                          disabled={entry.status === 'OUT_OF_SERVICE'}
+                          onClick={() => pickTable(entry)}
+                          className={cn(
+                            'flex min-h-16 flex-col items-center justify-center rounded-xl border-2 px-1 text-center',
+                            entry.status === 'FREE' && 'border-green-300 bg-green-50 hover:bg-green-100',
+                            entry.status === 'OCCUPIED' && 'border-red-200 bg-red-50 hover:bg-red-100',
+                            entry.status === 'BILL_REQUESTED' && 'border-amber-300 bg-amber-50 hover:bg-amber-100',
+                            entry.status === 'CLEANING' && 'border-blue-200 bg-blue-50 hover:bg-blue-100',
+                            entry.status === 'OUT_OF_SERVICE' && 'cursor-not-allowed border-dashed border-slate-300 bg-slate-50 opacity-60',
+                            entry.table.id === draft.tableId && 'ring-2 ring-brand ring-offset-1',
+                          )}
+                        >
+                          <span className="text-lg font-black text-slate-900">{entry.table.name}</span>
+                          <span className="text-[11px] font-semibold text-slate-600">{entry.order ? formatPaisa(entry.order.totals.total) : status}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
               );
             })}
           </div>

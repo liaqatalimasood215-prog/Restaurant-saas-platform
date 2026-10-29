@@ -80,15 +80,25 @@ export interface Area extends BranchScoped {
   id: Uuid;
   name: string;
   sort: number;
+  /** An inactive area and its tables are hidden from Tables, POS and Waiter Orders */
+  isActive: boolean;
 }
 
 export interface DiningTable extends BranchScoped {
   id: Uuid;
   areaId: Uuid;
+  /** Unique inside its area */
   name: string;
+  /** Seating capacity, a positive whole number */
   seats: number;
+  /** false = Out of service: shown on the Tables board, but no new bill can be opened */
   isActive: boolean;
+  /** Display order inside the area */
   sort: number;
+  /** Staff marked the table for cleaning; cleared when it is marked clean or the next guests are seated */
+  cleaning: boolean;
+  /** A removed table that was used keeps its row for the history of old bills */
+  archivedAt: IsoDateTime | null;
 }
 
 export interface MenuCategory extends RestaurantScoped {
@@ -276,6 +286,31 @@ export interface TableBoardEntry {
 export interface FloorPlan {
   areas: Area[];
   tables: TableBoardEntry[];
+}
+
+/** One area in "Manage Areas". */
+export interface AreaSetupEntry {
+  area: Area;
+  /** Tables of the area that are not removed */
+  tableCount: number;
+  /** Running or held bills on the area's tables; an area with any cannot be deactivated */
+  openBills: number;
+}
+
+/** One table in the table setup, with what blocks changing it. */
+export interface TableSetupEntry {
+  table: DiningTable;
+  status: TableStatus;
+  /** A running or held bill: the table cannot be removed, taken out of service or moved to another area */
+  hasOpenBill: boolean;
+  /** Has old bills or is assigned to a waiter: removing it archives it instead of deleting it */
+  used: boolean;
+}
+
+/** All areas (also inactive) and all tables that are not removed — Owner / Manager only. */
+export interface TableSetup {
+  areas: AreaSetupEntry[];
+  tables: TableSetupEntry[];
 }
 
 /** Everything a staff order screen needs to show the menu. */

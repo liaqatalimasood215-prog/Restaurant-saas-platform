@@ -21,7 +21,7 @@ import {
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 7;
+export const DEMO_DATA_VERSION = 8;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -102,7 +102,10 @@ function tables(): DiningTable[] {
       name: `T${n}`,
       seats: n <= 10 ? 4 : 6,
       isActive: true,
-      sort: n,
+      // Display order inside the area: Hall T1–T10 = 1–10, Family T11–T16 = 1–6
+      sort: n <= 10 ? n : n - 10,
+      cleaning: false,
+      archivedAt: null,
     });
   }
   return list;
@@ -204,8 +207,8 @@ export function createSeed(): DemoData {
       station(STATION.drinks, 'Drinks', 5, true),
     ],
     areas: [
-      { id: AREA.hall, ...scoped, name: 'Hall', sort: 1 },
-      { id: AREA.family, ...scoped, name: 'Family', sort: 2 },
+      { id: AREA.hall, ...scoped, name: 'Hall', sort: 1, isActive: true },
+      { id: AREA.family, ...scoped, name: 'Family', sort: 2, isActive: true },
     ],
     tables: tables(),
     categories: [

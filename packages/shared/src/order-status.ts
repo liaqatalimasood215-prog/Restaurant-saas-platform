@@ -256,11 +256,21 @@ export function deliveryStepIndex(status: OrderStatus): number {
   return DELIVERY_STEPS.indexOf(status);
 }
 
-/** Dine-in table status is derived from the table's open order, never stored twice (§6.6). */
-export type TableStatus = 'FREE' | 'OCCUPIED' | 'BILL_REQUESTED';
+/**
+ * Table status (§6.6). Occupied / Bill requested are derived from the table's open order, never stored
+ * twice. Cleaning and Out of service are the table's own state (a flag and "not in service").
+ */
+export const TABLE_STATUSES = ['FREE', 'OCCUPIED', 'BILL_REQUESTED', 'CLEANING', 'OUT_OF_SERVICE'] as const;
+export type TableStatus = (typeof TABLE_STATUSES)[number];
 
-export function tableStatusFor(openOrderStatus: OrderStatus | null | undefined): TableStatus {
+export function tableStatusFor(
+  openOrderStatus: OrderStatus | null | undefined,
+  table?: { isActive: boolean; cleaning: boolean },
+): TableStatus {
+  // An open bill always wins: a table with guests is never shown as cleaning or out of service.
   if (openOrderStatus === 'OPEN') return 'OCCUPIED';
   if (openOrderStatus === 'BILL_REQUESTED') return 'BILL_REQUESTED';
+  if (table && !table.isActive) return 'OUT_OF_SERVICE';
+  if (table?.cleaning) return 'CLEANING';
   return 'FREE';
 }

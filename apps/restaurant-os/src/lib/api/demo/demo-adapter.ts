@@ -1,5 +1,8 @@
 import {
+  MAX_BULK_TABLES,
+  MAX_NAME_LENGTH,
   MAX_QUANTITY_PER_LINE,
+  MAX_TABLE_SEATS,
   amountDue,
   automaticOrderSteps,
   businessDate,
@@ -8,16 +11,25 @@ import {
   canManageStaffAccount,
   canUseApp,
   cashChange,
+  checkBulkTables,
+  checkName,
   checkPaymentAmount,
+  checkSeats,
   checkTicketTransition,
   checkTransition,
+  cleanName,
   initialStatus,
   isFullyPaid,
+  placeAt,
   splitRoundIntoTickets,
   summarizeMoney,
   tableStatusFor,
   unitPriceFor,
+  type Area,
   type Branch,
+  type DiningTable,
+  type TableSetup,
+  type TableSetupProblem,
   type CustomerSummary,
   type DiscountChoice,
   type DiscountInput,
@@ -45,6 +57,8 @@ import {
 import {
   ApiError,
   type ApiClient,
+  type AreaInput,
+  type BulkTablesInput,
   type CounterOrderInput,
   type DemoControls,
   type HeldBillInput,
@@ -53,6 +67,7 @@ import {
   type SendRoundInput,
   type Session,
   type StaffInput,
+  type TableInput,
 } from '../client';
 import type { DemoData } from './seed';
 import { DemoStore } from './store';
@@ -97,6 +112,24 @@ const RULE_MESSAGES: Record<TransitionFailure | TicketTransitionFailure, string>
   UNDO_EXPIRED: 'Undo is only possible within 2 minutes of Ready.',
   ORDER_CLOSED: 'The order has already left the kitchen.',
 };
+
+/** Area and table setup mistakes, in the words the screens show. */
+function setupMessage(problem: TableSetupProblem, name: string, areaName = ''): string {
+  switch (problem) {
+    case 'NAME_REQUIRED':
+      return 'Enter a name.';
+    case 'NAME_TOO_LONG':
+      return `Names can have at most ${MAX_NAME_LENGTH} letters.`;
+    case 'NAME_TAKEN':
+      return areaName ? `${areaName} already has a table called ${name}.` : `An area called ${name} already exists.`;
+    case 'SEATS_INVALID':
+      return `Seats must be a whole number from 1 to ${MAX_TABLE_SEATS}.`;
+    case 'RANGE_INVALID':
+      return 'The "to" number must be the same as or higher than the "from" number.';
+    case 'TOO_MANY':
+      return `Add at most ${MAX_BULK_TABLES} tables at once.`;
+  }
+}
 
 function ruleError(reason: TransitionFailure | TicketTransitionFailure): ApiError {
   const code = reason === 'WRONG_ROLE' || reason === 'NOT_OWN_STATION' ? 'FORBIDDEN' : 'CONFLICT';
@@ -278,20 +311,275 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return this.request(() => {
       const data = this.store.read();
       const user = this.requireUser(data);
-      const tables = data.tables
-        .filter((t) => t.isActive && worksOnTable(user, t.id))
-        .sort((a, b) => a.sort - b.sort)
-        .map((table) => {
-          const order = data.orders.find((o) => o.tableId === table.id && OPEN_DINE_IN.includes(o.status)) ?? null;
-          return {
-            table,
-            status: tableStatusFor(order?.status),
-            order,
-            waiterName: this.staffName(data, order?.waiterId ?? null),
-          };
-        });
-      return { areas: [...data.areas].sort((a, b) => a.sort - b.sort), tables };
+      // Tables, POS and Waiter Orders all read this one list: active areas in their order, then each
+      // area's tables in display order. Out-of-service tables stay visible; removed ones do not.
+      const areas = data.areas.filter((a) => a.isActive).sort((a, b) => a.sort - b.sort);
+      const tables = areas.flatMap((area) =>
+        data.tables
+          .filter((t) => t.areaId === area.id && t.archivedAt === null && worksOnTable(user, t.id))
+          .sort((a, b) => a.sort - b.sort)
+          .map((table) => {
+            const order = this.openTableOrder(data, table.id);
+            return {
+              table,
+              status: tableStatusFor(order?.status, table),
+              order,
+              waiterName: this.staffName(data, order?.waiterId ?? null),
+            };
+          }),
+      );
+      return { areas, tables };
     });
+  }
+
+  setTableCleaning(tableId: string, cleaning: boolean): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'table.clean');
+        const table = data.tables.find((t) => t.id === tableId && t.archivedAt === null);
+        if (!table || !worksOnTable(user, table.id)) throw new ApiError('NOT_FOUND', 'Table not found.');
+        if (cleaning && this.openTableOrder(data, table.id)) {
+          throw new ApiError('CONFLICT', `${table.name} has a running bill. Mark it for cleaning after the bill is paid.`);
+        }
+        table.cleaning = cleaning;
+      }),
+    );
+  }
+
+  private openTableOrder(data: DemoData, tableId: string): Order | null {
+    return data.orders.find((o) => o.tableId === tableId && OPEN_DINE_IN.includes(o.status)) ?? null;
+  }
+
+  /** A running bill or a held (unsent) bill keeps a table in use. */
+  private hasOpenBill(data: DemoData, tableId: string): boolean {
+    return this.openTableOrder(data, tableId) !== null || data.heldBills.some((h) => h.tableId === tableId);
+  }
+
+  /** A table that can take a new bill: not removed, in service, in an active area. */
+  private usableTable(data: DemoData, tableId: string): DiningTable {
+    const table = data.tables.find((t) => t.id === tableId && t.archivedAt === null);
+    const area = data.areas.find((a) => a.id === table?.areaId);
+    if (!table || !area?.isActive) throw new ApiError('NOT_FOUND', 'Table not found.');
+    if (!table.isActive) throw new ApiError('CONFLICT', `${table.name} is out of service.`);
+    return table;
+  }
+
+  // ── Area and table setup (Owner, Manager) ──────────────────────────────────────────────────
+
+  getTableSetup(): Promise<TableSetup> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'setup.manage');
+      const tables = data.tables.filter((t) => t.archivedAt === null);
+      return {
+        areas: [...data.areas]
+          .sort((a, b) => a.sort - b.sort)
+          .map((area) => {
+            const own = tables.filter((t) => t.areaId === area.id);
+            return { area, tableCount: own.length, openBills: own.filter((t) => this.hasOpenBill(data, t.id)).length };
+          }),
+        tables: [...tables]
+          .sort((a, b) => a.sort - b.sort)
+          .map((table) => ({
+            table,
+            status: tableStatusFor(this.openTableOrder(data, table.id)?.status, table),
+            hasOpenBill: this.hasOpenBill(data, table.id),
+            used: this.tableIsUsed(data, table.id),
+          })),
+      };
+    });
+  }
+
+  /** Old bills, held bills, waiter calls or a waiter assignment point at the table: keep its row. */
+  private tableIsUsed(data: DemoData, tableId: string): boolean {
+    return (
+      data.orders.some((o) => o.tableId === tableId) ||
+      data.heldBills.some((h) => h.tableId === tableId) ||
+      data.waiterCalls.some((c) => c.tableId === tableId) ||
+      data.staff.some((s) => s.tableIds.includes(tableId))
+    );
+  }
+
+  saveArea(input: AreaInput): Promise<Area> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'setup.manage');
+        const existing = input.id ? data.areas.find((a) => a.id === input.id) : null;
+        if (input.id && !existing) throw new ApiError('NOT_FOUND', 'Area not found.');
+        const name = cleanName(input.name);
+        const problem = checkName(name, data.areas.filter((a) => a.id !== input.id).map((a) => a.name));
+        if (problem) throw new ApiError('VALIDATION', setupMessage(problem, name));
+        if (existing) {
+          existing.name = name;
+          return existing;
+        }
+        const area: Area = {
+          id: newId(),
+          restaurantId: data.restaurant.id,
+          branchId: data.branch.id,
+          name,
+          sort: Math.max(0, ...data.areas.map((a) => a.sort)) + 1,
+          isActive: true,
+        };
+        data.areas.push(area);
+        return area;
+      }),
+    );
+  }
+
+  setAreaActive(areaId: string, active: boolean): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'setup.manage');
+        const area = data.areas.find((a) => a.id === areaId);
+        if (!area) throw new ApiError('NOT_FOUND', 'Area not found.');
+        if (!active) {
+          const busy = data.tables.filter((t) => t.areaId === area.id && t.archivedAt === null && this.hasOpenBill(data, t.id));
+          if (busy.length > 0) {
+            throw new ApiError('CONFLICT', `${area.name} has running or held bills (${busy.map((t) => t.name).join(', ')}). Close them first.`);
+          }
+          if (data.areas.filter((a) => a.isActive && a.id !== area.id).length === 0) {
+            throw new ApiError('VALIDATION', 'Keep at least one active area.');
+          }
+        }
+        area.isActive = active;
+      }),
+    );
+  }
+
+  moveArea(areaId: string, position: number): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'setup.manage');
+        if (!data.areas.some((a) => a.id === areaId)) throw new ApiError('NOT_FOUND', 'Area not found.');
+        data.areas = placeAt(data.areas, areaId, position);
+      }),
+    );
+  }
+
+  saveTable(input: TableInput): Promise<DiningTable> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'setup.manage');
+        const existing = input.id ? data.tables.find((t) => t.id === input.id && t.archivedAt === null) : null;
+        if (input.id && !existing) throw new ApiError('NOT_FOUND', 'Table not found.');
+        const area = data.areas.find((a) => a.id === input.areaId);
+        if (!area) throw new ApiError('VALIDATION', 'Choose an area.');
+        const name = cleanName(input.name);
+        const problem =
+          checkName(name, this.tableNamesIn(data, area.id, input.id)) ?? checkSeats(input.seats);
+        if (problem) throw new ApiError('VALIDATION', setupMessage(problem, name, area.name));
+
+        let table = existing;
+        if (table) {
+          if (table.areaId !== area.id && this.hasOpenBill(data, table.id)) {
+            throw new ApiError('CONFLICT', `${table.name} has a running or held bill. Move it to another area after the bill is closed.`);
+          }
+          const moved = table.areaId !== area.id;
+          Object.assign(table, { name, areaId: area.id, seats: input.seats });
+          // A table moved to another area goes to the end of that area unless a position is given.
+          if (moved) table.sort = this.lastSortIn(data, area.id, table.id) + 1;
+        } else {
+          table = {
+            id: newId(),
+            restaurantId: data.restaurant.id,
+            branchId: data.branch.id,
+            areaId: area.id,
+            name,
+            seats: input.seats,
+            isActive: true,
+            sort: this.lastSortIn(data, area.id, null) + 1,
+            cleaning: false,
+            archivedAt: null,
+          };
+          data.tables.push(table);
+        }
+        if (input.position !== null) this.placeTable(data, table.id, input.position);
+        return table;
+      }),
+    );
+  }
+
+  addTables(input: BulkTablesInput): Promise<DiningTable[]> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'setup.manage');
+        const area = data.areas.find((a) => a.id === input.areaId);
+        if (!area) throw new ApiError('VALIDATION', 'Choose an area.');
+        const check = checkBulkTables(input, this.tableNamesIn(data, area.id, null));
+        if (!check.ok) throw new ApiError('VALIDATION', setupMessage(check.problem, check.name ?? '', area.name));
+        let sort = this.lastSortIn(data, area.id, null);
+        const created = check.names.map(
+          (name): DiningTable => ({
+            id: newId(),
+            restaurantId: data.restaurant.id,
+            branchId: data.branch.id,
+            areaId: area.id,
+            name,
+            seats: input.seats,
+            isActive: true,
+            sort: ++sort,
+            cleaning: false,
+            archivedAt: null,
+          }),
+        );
+        data.tables.push(...created);
+        return created;
+      }),
+    );
+  }
+
+  setTableInService(tableId: string, inService: boolean): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'setup.manage');
+        const table = data.tables.find((t) => t.id === tableId && t.archivedAt === null);
+        if (!table) throw new ApiError('NOT_FOUND', 'Table not found.');
+        if (!inService && this.hasOpenBill(data, table.id)) {
+          throw new ApiError('CONFLICT', `${table.name} has a running or held bill. Take it out of service after the bill is closed.`);
+        }
+        table.isActive = inService;
+        table.cleaning = false;
+      }),
+    );
+  }
+
+  removeTable(tableId: string): Promise<'ARCHIVED' | 'DELETED'> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'setup.manage');
+        const table = data.tables.find((t) => t.id === tableId && t.archivedAt === null);
+        if (!table) throw new ApiError('NOT_FOUND', 'Table not found.');
+        if (this.hasOpenBill(data, table.id)) {
+          throw new ApiError('CONFLICT', `${table.name} has a running or held bill. Remove it after the bill is closed.`);
+        }
+        if (this.tableIsUsed(data, table.id)) {
+          // Old bills keep showing the table's name, so the row stays (archived, hidden everywhere else).
+          Object.assign(table, { archivedAt: nowIso(), isActive: false, cleaning: false });
+          return 'ARCHIVED' as const;
+        }
+        data.tables = data.tables.filter((t) => t.id !== table.id);
+        return 'DELETED' as const;
+      }),
+    );
+  }
+
+  /** Names already used in the area (removed tables free their name). */
+  private tableNamesIn(data: DemoData, areaId: string, exceptId: string | null): string[] {
+    return data.tables.filter((t) => t.areaId === areaId && t.archivedAt === null && t.id !== exceptId).map((t) => t.name);
+  }
+
+  private lastSortIn(data: DemoData, areaId: string, exceptId: string | null): number {
+    return Math.max(0, ...data.tables.filter((t) => t.areaId === areaId && t.archivedAt === null && t.id !== exceptId).map((t) => t.sort));
+  }
+
+  /** Display order inside the table's area (removed tables are left out). */
+  private placeTable(data: DemoData, tableId: string, position: number): void {
+    const table = data.tables.find((t) => t.id === tableId);
+    if (!table) return;
+    const inArea = data.tables.filter((t) => t.areaId === table.areaId && t.archivedAt === null);
+    const sorts = new Map(placeAt(inArea, tableId, position).map((t) => [t.id, t.sort]));
+    for (const t of data.tables) t.sort = sorts.get(t.id) ?? t.sort;
   }
 
   getMenu(): Promise<MenuSnapshot> {
@@ -333,12 +621,14 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (!Number.isInteger(input.guests) || input.guests < 1 || input.guests > 50) {
           throw new ApiError('VALIDATION', 'Number of guests must be between 1 and 50.');
         }
-        const table = data.tables.find((t) => t.id === input.tableId && t.isActive);
-        if (!table || !worksOnTable(user, table.id)) throw new ApiError('NOT_FOUND', 'Table not found.');
+        if (!worksOnTable(user, input.tableId)) throw new ApiError('NOT_FOUND', 'Table not found.');
+        const table = this.usableTable(data, input.tableId);
 
         const now = nowIso();
         let order = data.orders.find((o) => o.tableId === table.id && OPEN_DINE_IN.includes(o.status));
         if (!order) {
+          // New guests sit down: the table is no longer waiting for cleaning.
+          table.cleaning = false;
           const { date, dailyNumber } = nextDailyNumber(data);
           order = {
             id: newId(),

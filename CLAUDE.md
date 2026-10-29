@@ -20,13 +20,14 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 
 - Phase 0 approved by the owner on 2026-10-27.
 - **Phase 1 — Restaurant OS UI prototype** in progress on branch `phase-1/restaurant-os-ui`
-  (PROJECT_RULES.md §15–§16, MASTER_PROMPT.md §12). 26 local commits, last `a03c8c3`; **nothing pushed**.
+  (PROJECT_RULES.md §15–§16, MASTER_PROMPT.md §12). Local commits only; **nothing pushed** (see `git log`).
 - **Built (DEMO / PROTOTYPE):** layout and sidebar, DEMO login, Tables, Waiter Orders (Super + Service
   Waiter), Kitchen / KDS, Staff, Online Orders, Orders, installable PWA, notifications (message, beep,
-  vibration), and the full **POS / New Bill** (see below). 57 unit tests and the three walkthroughs
-  (`walkthrough`, `walkthrough:online`, `walkthrough:pos`) pass.
+  vibration), the full **POS / New Bill** (see below) and **Tables management** (Manage Areas, Add Table,
+  Cleaning, Out of service). 64 unit tests and the four walkthroughs (`walkthrough`, `walkthrough:online`,
+  `walkthrough:pos`, `walkthrough:tables`) pass.
 - **Approved by the owner:** documents, Phase 1 plan, Preview 1, the waiter → kitchen → cashier workflow.
-  **Waiting for his approval:** Preview 4 (Online Orders, Orders) and the final POS.
+  **Waiting for his approval:** Preview 4 (Online Orders, Orders), the final POS and Tables management.
 - **Next (only after approval and "shuru karo"):** Preview 5 — Menu, Online App, Riders, Today's Summary,
   Settings; then refunds. Details and open questions: `PROGRESS.md` §9–§10.
 - Customer App (Phase 2) and Rider App (Phase 3) stay PLACEHOLDERS inside Restaurant OS.
@@ -47,6 +48,14 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - The POS fits one screen (tested at 1278×627, 1440×900, 1024×768); totals and Send to Kitchen / Bill Now
   stay visible. Product pictures are emoji until real photos (Phase 7).
 
+## Tables — owner decisions (2026-10-29)
+
+- Owner/Manager set up areas and tables on the Tables screen: **Manage Areas** and **+ Add Table** (one or
+  many). Table: name (unique in its area), area, seats (1–50), display order. Cleaning (any floor staff, set
+  by hand; seating new guests clears it) and Out of service (no new bill). Open bills lock a table (no move,
+  out of service or remove) and its area (no deactivate); used tables are archived, never deleted.
+- Shared rules: `packages/shared/src/tables.ts`; screens: `apps/restaurant-os/src/screens/tables/`.
+
 ## Every session
 
 1. Inspect the repository and README.md before changing anything. Never restart the project and
@@ -60,7 +69,8 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
    `apps/restaurant-os/scripts/screenshots.mjs`. `pnpm --filter @restaurant-saas/restaurant-os walkthrough` clicks
    through the owner workflow and Test A steps 1–6 (each person in their own tab);
    `walkthrough:online` covers Test D, takeaway, phone orders and the Orders timeline;
-   `walkthrough:pos` covers the POS (new bills, hold, discounts, payments, many tables, quick sale, Call Waiter).
+   `walkthrough:pos` covers the POS (new bills, hold, discounts, payments, many tables, quick sale, Call Waiter);
+   `walkthrough:tables` covers areas and tables (add one / many, edit, locks, cleaning, out of service, remove).
 6. Report with the template in MASTER_PROMPT.md §15.4, in Roman Urdu.
 7. If something is unclear, ask one short question with a recommended answer. Never connect a
    paid service without explaining the cost and getting approval.
