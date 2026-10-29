@@ -424,6 +424,7 @@ export const en = {
     name: 'Full name',
     phone: 'Phone',
     mobile: 'Mobile',
+    mobileHint: 'Any way is fine: 03001234567, 0300 1234567 or +92 300 1234567.',
     email: 'Email (optional)',
     emailPlaceholder: 'name@example.com',
     branch: 'Branch',

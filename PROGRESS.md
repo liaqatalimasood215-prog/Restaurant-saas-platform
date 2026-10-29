@@ -98,7 +98,7 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 | Kitchen / KDS | Chefs see only their station; same order number and table everywhere; units, timers, Start / Ready / Undo, VOID, out of stock, sound |
 | Online Orders | Repeating alarm for customer orders, Accept (prep time) / Reject (reason), phone delivery and takeaway orders, tickets by station, assign/change rider, Picked up, takeaway payment/receipt, rider cash to settle, Cancel. Customer and rider steps are simulated by labelled DEMO buttons until Phases 2–3 |
 | Orders | Today / all, search (number, table, customer, phone), filters, detail with items, payments, kitchen tickets and timeline; header search |
-| Staff | **Owner only** (Manager read-only): add / edit (name, mobile, optional email, branch, role, tables / station), Enable / Disable with confirmation; last active Owner protected. New staff get a single-use activation link (48 h; copy or WhatsApp — email NOT CONNECTED); Resend / Cancel link; Reset PIN. Public page `/activate?token=…`: the person creates a 6-digit PIN (DEMO: checked, never stored). Only activated accounts appear on the DEMO login. Disable, role change and PIN reset end the person's sessions (DEMO session version). Rules: `packages/shared/src/staff.ts` |
+| Staff | **Owner only** (Manager read-only): add / edit (name, mobile, optional email, branch, role, tables / station), Enable / Disable with confirmation; last active Owner protected. New staff get a single-use activation link (48 h; copy or WhatsApp — email NOT CONNECTED); Resend / Cancel link; Reset PIN. Public page `/activate?token=…`: the person creates a 6-digit PIN (DEMO: checked, never stored). Only activated accounts appear on the DEMO login. Disable, role change and PIN reset end the person's sessions (DEMO session version). Mobile numbers are accepted in any common form (03001234567, +92 300 1234567 …) and saved as 0300-1234567 (`packages/shared/src/phone.ts`, also used for customers). Rules: `packages/shared/src/staff.ts` |
 | POS / New Bill | See §5 |
 | Placeholders | Menu, Online App, Riders, Today's Summary, Settings (Preview 5); Dashboard, Customers, Finance & Reports, Inventory, Payroll, AI Manager (Coming Soon) |
 
@@ -158,7 +158,7 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 
 ## 7. Test status (last run, all green)
 
-- `pnpm test` — 68 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-29, Staff
+- `pnpm test` — 70 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-29, Staff
   upgrade).
 - Automated walkthroughs (Edge through `playwright-core`, while `pnpm dev` runs), all pass:
   - `pnpm --filter @restaurant-saas/restaurant-os walkthrough` — waiter → kitchen → cashier workflow, Test A

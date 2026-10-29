@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { formatPaisa, formatQuantity, type DraftItemInput, type MenuItem, type MenuSnapshot, type Order } from '@restaurant-saas/shared';
+import { formatPaisa, formatQuantity, normalizePhone, type DraftItemInput, type MenuItem, type MenuSnapshot, type Order } from '@restaurant-saas/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
@@ -44,9 +44,9 @@ export function CounterOrderDialog({
   const itemsTotal = views.reduce((sum, v) => sum + v.unitPrice * v.line.quantity, 0);
 
   const lookUp = async () => {
-    if (!/^03\d{2}-\d{7}$/.test(phone.trim()) || name) return;
+    if (!normalizePhone(phone) || name) return;
     try {
-      const known = await getApi().findCustomer(phone.trim());
+      const known = await getApi().findCustomer(phone);
       if (known) {
         setName(known.name);
         if (type === 'DELIVERY' && !address) setAddress(known.address);

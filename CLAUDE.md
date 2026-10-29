@@ -24,7 +24,7 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - **Built (DEMO / PROTOTYPE):** layout and sidebar, DEMO login, Tables, Waiter Orders (Super + Service
   Waiter), Kitchen / KDS, Staff, Online Orders, Orders, installable PWA, notifications (message, beep,
   vibration), the full **POS / New Bill** (see below) and **Tables management** (Manage Areas, Add Table,
-  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 68 unit tests
+  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 70 unit tests
   and the five walkthroughs (`walkthrough`, `walkthrough:online`, `walkthrough:pos`, `walkthrough:tables`,
   `walkthrough:staff`) pass.
 - **Approved by the owner:** documents, Phase 1 plan, Preview 1, the waiter → kitchen → cashier workflow.

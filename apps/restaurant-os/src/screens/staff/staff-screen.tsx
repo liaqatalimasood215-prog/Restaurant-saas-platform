@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { Copy, KeyRound, Link2, Pencil, Send, UserPlus, XCircle } from 'lucide-react';
 import {
+  PHONE_EXAMPLE,
   STAFF_ROLES,
   can,
   canManageStaffAccount,
+  normalizePhone,
   type DiningTable,
   type KitchenStation,
   type StaffMember,
@@ -415,10 +417,13 @@ function StaffDialog({
             <input
               value={form.phone}
               inputMode="tel"
-              placeholder="0300-1234567"
+              placeholder={PHONE_EXAMPLE}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              // 03001234567 or +92 300 1234567 is shown as 0300-1234567 once the field is left.
+              onBlur={() => setForm((f) => ({ ...f, phone: normalizePhone(f.phone) ?? f.phone }))}
               className={field}
             />
+            <span className="mt-1 block text-xs text-slate-500">{t('staff.mobileHint')}</span>
           </label>
           <label className="block">
             <span className="mb-1 block font-bold text-slate-900">{t('staff.email')}</span>

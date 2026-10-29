@@ -14,6 +14,7 @@ import {
   inviteExpiresAt,
   inviteStatus,
   isValidEmail,
+  normalizePhone,
   removesLastOwner,
   type ActivationInfo,
   type InviteKind,
@@ -99,7 +100,6 @@ const KITCHEN_ORDER_STATUSES: readonly OrderStatus[] = [
 ];
 /** How long a fully voided ticket stays on the kitchen screen so the cooks notice the VOID. */
 const VOID_TICKET_VISIBLE_MS = 2 * 60 * 1000;
-const PHONE_PATTERN = /^03\d{2}-\d{7}$/;
 
 function wait(): Promise<void> {
   const ms = MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS);
@@ -129,6 +129,8 @@ const PIN_MESSAGES: Record<PinProblem, string> = {
   PIN_TOO_SIMPLE: 'This PIN is too easy to guess (like 111111 or 123456). Choose another.',
   PIN_MISMATCH: 'The two PINs are not the same.',
 };
+
+const PHONE_MESSAGE = 'Enter a mobile number, for example 0300-1234567 or 03001234567.';
 
 /** Area and table setup mistakes, in the words the screens show. */
 function setupMessage(problem: TableSetupProblem, name: string, areaName = ''): string {
@@ -701,7 +703,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         }
 
         if (input.customerName?.trim()) order.customerName = input.customerName.trim();
-        if (input.customerPhone?.trim()) order.customerPhone = input.customerPhone.trim();
+        if (input.customerPhone?.trim()) order.customerPhone = normalizePhone(input.customerPhone) ?? input.customerPhone.trim();
         const target = order;
         const roundNo = Math.max(0, ...target.items.map((i) => i.roundNo)) + 1;
         const lines = input.items.map((draft) => this.priceDraft(data, draft, target, roundNo));
@@ -1016,7 +1018,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           tableId: input.type === 'DINE_IN' ? input.tableId : null,
           guests: input.guests,
           customerName: input.customerName.trim(),
-          customerPhone: input.customerPhone.trim(),
+          customerPhone: normalizePhone(input.customerPhone) ?? input.customerPhone.trim(),
           customerAddress: input.customerAddress.trim(),
           note: input.note.trim(),
           items: input.items,
@@ -1049,7 +1051,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const data = this.store.read();
       this.require(data, 'order.manage');
       const q = query.trim().toLowerCase();
-      const digits = q.replace(/D/g, '');
+      const digits = q.replace(/\D/g, '');
       const byPhone = new Map<string, CustomerSummary>();
       for (const o of [...data.orders].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
         if (!o.customerPhone) continue;
@@ -1063,7 +1065,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         });
       }
       return [...byPhone.values()]
-        .filter((c) => !q || c.name.toLowerCase().includes(q) || (digits.length >= 3 && c.phone.replace(/D/g, '').includes(digits)))
+        .filter((c) => !q || c.name.toLowerCase().includes(q) || (digits.length >= 3 && c.phone.replace(/\D/g, '').includes(digits)))
         .sort((a, b) => b.lastOrderAt.localeCompare(a.lastOrderAt))
         .slice(0, 8);
     });
@@ -1142,7 +1144,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const data = this.store.read();
       this.require(data, 'order.manage');
       const last = [...data.orders]
-        .filter((o) => o.customerPhone === phone.trim())
+        .filter((o) => o.customerPhone === (normalizePhone(phone) ?? phone.trim()))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
       return last ? { name: last.customerName ?? '', address: last.customerAddress ?? '' } : null;
     });
@@ -1205,10 +1207,12 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (input.items.length === 0) throw new ApiError('VALIDATION', 'Add at least one item.');
         // A counter sale (takeaway) needs no customer; a delivery needs name, phone and address.
         const name = input.customerName.trim();
-        const phone = input.customerPhone.trim();
+        const typedPhone = input.customerPhone.trim();
+        // 03001234567, +92 300 1234567 … are all saved as 0300-1234567.
+        const phone = typedPhone ? (normalizePhone(typedPhone) ?? '') : '';
         const walkIn = input.type === 'TAKEAWAY';
         if ((!walkIn || name) && name.length < 2) throw new ApiError('VALIDATION', 'Enter the customer name.');
-        if ((!walkIn || phone) && !PHONE_PATTERN.test(phone)) throw new ApiError('VALIDATION', 'Phone must look like 0300-1234567.');
+        if ((!walkIn || typedPhone) && !phone) throw new ApiError('VALIDATION', PHONE_MESSAGE);
         if (input.type === 'DELIVERY' && input.customerAddress.trim().length < 5) {
           throw new ApiError('VALIDATION', 'Enter the delivery address.');
         }
@@ -1621,8 +1625,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
         }
         const name = input.name.trim();
         if (name.length < 2) throw new ApiError('VALIDATION', 'Enter the full name.');
-        if (!PHONE_PATTERN.test(input.phone.trim())) throw new ApiError('VALIDATION', 'Phone must look like 0300-1234567.');
-        if (data.staff.some((s) => s.phone === input.phone.trim() && s.id !== input.id)) {
+        // 03001234567, 0300 1234567, +92 300 1234567 … are all saved as 0300-1234567.
+        const phone = normalizePhone(input.phone);
+        if (!phone) throw new ApiError('VALIDATION', PHONE_MESSAGE);
+        if (data.staff.some((s) => s.phone === phone && s.id !== input.id)) {
           throw new ApiError('VALIDATION', 'Another staff member already uses this phone number.');
         }
         const email = input.email.trim().toLowerCase() || null;
@@ -1642,7 +1648,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const isWaiter = input.role === 'WAITER' || input.role === 'SERVICE_WAITER';
         const fields = {
           name,
-          phone: input.phone.trim(),
+          phone,
           email,
           branchId,
           role: input.role,
