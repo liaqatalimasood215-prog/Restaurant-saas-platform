@@ -15,3 +15,4 @@ export * from './tables';
 export * from './staff';
 export * from './phone';
 export * from './access';
+export * from './menu';

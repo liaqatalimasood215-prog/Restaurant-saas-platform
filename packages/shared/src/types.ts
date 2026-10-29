@@ -193,6 +193,8 @@ export interface MenuItem extends RestaurantScoped {
   sort: number;
   variants: ItemVariant[];
   modifierGroupIds: Uuid[];
+  /** Removed from the menu but kept because old orders or held bills point at it; hidden everywhere */
+  archivedAt: IsoDateTime | null;
 }
 
 /** Snapshot of the chosen add-on, copied at order time */
@@ -355,6 +357,14 @@ export interface TableSetupEntry {
 export interface TableSetup {
   areas: AreaSetupEntry[];
   tables: TableSetupEntry[];
+}
+
+/** Menu screen (Owner, Manager): every category (also hidden) and item (not removed), add-on groups, stations. */
+export interface MenuSetup {
+  categories: { category: MenuCategory; itemCount: number }[];
+  items: MenuItem[];
+  addonGroups: { group: ModifierGroup; itemCount: number }[];
+  stations: KitchenStation[];
 }
 
 /** Everything a staff order screen needs to show the menu. */

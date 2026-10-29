@@ -10,6 +10,12 @@ import {
   calculateBill,
   canManageStaffAccount,
   checkPin,
+  checkAddonGroup,
+  checkMenuItem,
+  MENU_UNITS,
+  MAX_SIZES,
+  MAX_ADDONS_PER_GROUP,
+  MAX_DESCRIPTION_LENGTH,
   cleanPermissions,
   effectivePermissions,
   recommendedPermissions,
@@ -23,6 +29,13 @@ import {
   type ActivationInfo,
   type InviteKind,
   type PinProblem,
+  type ItemVariant,
+  type MenuCategory,
+  type MenuCheck,
+  type MenuItem,
+  type MenuProblem,
+  type MenuSetup,
+  type ModifierGroup,
   type RolePermissionsEntry,
   type StaffRole,
   type StaffMember,
@@ -74,7 +87,9 @@ import {
 import {
   ApiError,
   type ApiClient,
+  type AddonGroupInput,
   type AreaInput,
+  type MenuItemInput,
   type BulkTablesInput,
   type CounterOrderInput,
   type DemoControls,
@@ -137,6 +152,41 @@ const PIN_MESSAGES: Record<PinProblem, string> = {
 };
 
 const PHONE_MESSAGE = 'Enter a mobile number, for example 0300-1234567 or 03001234567.';
+
+/** Menu setup mistakes; `where` is the category name for items, or 'category' / 'group'. */
+function menuMessage(check: NonNullable<MenuCheck>, name: string, where: string): string {
+  const detail = check.detail ?? name;
+  switch (check.problem) {
+    case 'NAME_REQUIRED':
+      return 'Enter a name.';
+    case 'NAME_TOO_LONG':
+      return `Names can have at most ${MAX_NAME_LENGTH} letters.`;
+    case 'NAME_TAKEN':
+      return where === 'category'
+        ? `A category called ${name} already exists.`
+        : where === 'group'
+          ? `An add-on group called ${name} already exists.`
+          : `${where} already has an item called ${name}.`;
+    case 'PRICE_INVALID':
+      return check.detail ? `Enter a price for ${detail}.` : 'Enter a price above Rs. 0.';
+    case 'DESCRIPTION_TOO_LONG':
+      return `The description can have at most ${MAX_DESCRIPTION_LENGTH} letters.`;
+    case 'SIZE_NAME_REQUIRED':
+      return 'Every size needs a name (for example Small).';
+    case 'SIZE_NAME_TAKEN':
+      return `The size ${detail} is there twice.`;
+    case 'TOO_MANY_SIZES':
+      return `At most ${MAX_SIZES} sizes.`;
+    case 'ADDON_NAME_REQUIRED':
+      return 'Every add-on needs a name.';
+    case 'ADDON_NAME_TAKEN':
+      return `The add-on ${detail} is there twice.`;
+    case 'TOO_MANY_ADDONS':
+      return `At most ${MAX_ADDONS_PER_GROUP} add-ons in one group.`;
+    case 'GROUP_RULE_INVALID':
+      return 'Check "choose at least / at most": at least 0, at most 1 or more, and not more than the number of add-ons.';
+  }
+}
 
 /** Area and table setup mistakes, in the words the screens show. */
 function setupMessage(problem: TableSetupProblem, name: string, areaName = ''): string {
@@ -621,7 +671,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
       this.requireUser(data);
       return {
         categories: data.categories.filter((c) => c.isActive).sort((a, b) => a.sort - b.sort),
-        items: [...data.items].sort((a, b) => a.sort - b.sort),
+        // Removed items and items of hidden categories are not offered for ordering.
+        items: data.items
+          .filter((i) => !i.archivedAt && data.categories.some((c) => c.id === i.categoryId && c.isActive))
+          .sort((a, b) => a.sort - b.sort),
         modifierGroups: data.modifierGroups,
         stations: [...data.stations].sort((a, b) => a.sort - b.sort),
       };
@@ -732,6 +785,9 @@ export class DemoAdapter implements ApiClient, DemoControls {
   private priceDraft(data: DemoData, draft: DraftItemInput, order: Order, roundNo: number): OrderItem {
     const menuItem = data.items.find((i) => i.id === draft.menuItemId);
     if (!menuItem) throw new ApiError('NOT_FOUND', 'Menu item not found.');
+    if (menuItem.archivedAt || !data.categories.some((c) => c.id === menuItem.categoryId && c.isActive)) {
+      throw new ApiError('VALIDATION', `${menuItem.name} is no longer on the menu.`);
+    }
     if (!menuItem.isAvailable) throw new ApiError('VALIDATION', `${menuItem.name} is out of stock.`);
     if (!Number.isInteger(draft.quantity) || draft.quantity < 1 || draft.quantity > MAX_QUANTITY_PER_LINE) {
       throw new ApiError('VALIDATION', `Quantity must be between 1 and ${MAX_QUANTITY_PER_LINE}.`);
@@ -1483,9 +1539,241 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return this.request(() =>
       this.store.update((data) => {
         this.require(data, 'item.outOfStock');
-        const item = data.items.find((i) => i.id === menuItemId);
+        const item = data.items.find((i) => i.id === menuItemId && !i.archivedAt);
         if (!item) throw new ApiError('NOT_FOUND', 'Menu item not found.');
         item.isAvailable = available;
+      }),
+    );
+  }
+
+  // ── Menu setup (Preview 5: Owner, Manager) ─────────────────────────────────────────────────
+
+  getMenuSetup(): Promise<MenuSetup> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'menu.view');
+      const items = data.items.filter((i) => !i.archivedAt).sort((a, b) => a.sort - b.sort);
+      return {
+        categories: [...data.categories]
+          .sort((a, b) => a.sort - b.sort)
+          .map((category) => ({ category, itemCount: items.filter((i) => i.categoryId === category.id).length })),
+        items,
+        addonGroups: data.modifierGroups.map((group) => ({ group, itemCount: items.filter((i) => i.modifierGroupIds.includes(group.id)).length })),
+        stations: [...data.stations].sort((a, b) => a.sort - b.sort),
+      };
+    });
+  }
+
+  saveMenuCategory(input: { id: string | null; name: string }): Promise<MenuCategory> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        const existing = input.id ? data.categories.find((c) => c.id === input.id) : null;
+        if (input.id && !existing) throw new ApiError('NOT_FOUND', 'Category not found.');
+        const name = cleanName(input.name);
+        const problem = checkName(name, data.categories.filter((c) => c.id !== input.id).map((c) => c.name));
+        if (problem) throw new ApiError('VALIDATION', menuMessage({ problem: problem as MenuProblem }, name, 'category'));
+        if (existing) {
+          existing.name = name;
+          return existing;
+        }
+        const category: MenuCategory = {
+          id: newId(),
+          restaurantId: data.restaurant.id,
+          branchId: null,
+          name,
+          sort: Math.max(0, ...data.categories.map((c) => c.sort)) + 1,
+          isActive: true,
+        };
+        data.categories.push(category);
+        return category;
+      }),
+    );
+  }
+
+  setMenuCategoryActive(categoryId: string, active: boolean): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        const category = data.categories.find((c) => c.id === categoryId);
+        if (!category) throw new ApiError('NOT_FOUND', 'Category not found.');
+        category.isActive = active;
+      }),
+    );
+  }
+
+  moveMenuCategory(categoryId: string, position: number): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        if (!data.categories.some((c) => c.id === categoryId)) throw new ApiError('NOT_FOUND', 'Category not found.');
+        data.categories = placeAt(data.categories, categoryId, position);
+      }),
+    );
+  }
+
+  removeMenuCategory(categoryId: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        const category = data.categories.find((c) => c.id === categoryId);
+        if (!category) throw new ApiError('NOT_FOUND', 'Category not found.');
+        const count = data.items.filter((i) => i.categoryId === categoryId && !i.archivedAt).length;
+        if (count > 0) {
+          throw new ApiError('CONFLICT', `${category.name} still has ${count} items. Move or remove them first, or hide the category.`);
+        }
+        data.categories = data.categories.filter((c) => c.id !== categoryId);
+      }),
+    );
+  }
+
+  saveMenuItem(input: MenuItemInput): Promise<MenuItem> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        const existing = input.id ? data.items.find((i) => i.id === input.id && !i.archivedAt) : null;
+        if (input.id && !existing) throw new ApiError('NOT_FOUND', 'Menu item not found.');
+        const category = data.categories.find((c) => c.id === input.categoryId);
+        if (!category) throw new ApiError('VALIDATION', 'Choose a category.');
+        if (!data.stations.some((s) => s.id === input.stationId)) throw new ApiError('VALIDATION', 'Choose a kitchen station.');
+        if (!MENU_UNITS.includes(input.unit)) throw new ApiError('VALIDATION', 'Unknown unit.');
+        if (input.modifierGroupIds.some((id) => !data.modifierGroups.some((g) => g.id === id))) {
+          throw new ApiError('VALIDATION', 'Unknown add-on group.');
+        }
+        const name = cleanName(input.name);
+        const taken = data.items.filter((i) => i.categoryId === category.id && !i.archivedAt && i.id !== input.id).map((i) => i.name);
+        const check = checkMenuItem({ name, description: input.description, price: input.price, sizes: input.sizes }, taken);
+        if (check) throw new ApiError('VALIDATION', menuMessage(check, name, category.name));
+
+        // Sizes keep their id when only renamed or repriced, so a held bill still finds its size.
+        const variants: ItemVariant[] = input.sizes.map((size, index) => ({
+          id: size.id && existing?.variants.some((v) => v.id === size.id) ? size.id : newId(),
+          name: cleanName(size.name),
+          price: size.price ?? 0,
+          sort: index + 1,
+        }));
+        const fields = {
+          name,
+          categoryId: category.id,
+          stationId: input.stationId,
+          description: input.description.trim(),
+          unit: input.unit,
+          // With sizes the smallest size price is shown as "from Rs. …"; the size price is what is charged.
+          basePrice: variants.length > 0 ? Math.min(...variants.map((v) => v.price)) : (input.price ?? 0),
+          variants,
+          modifierGroupIds: [...new Set(input.modifierGroupIds)],
+          isAvailable: input.isAvailable,
+          isOnline: input.isOnline,
+        };
+        let item: MenuItem;
+        if (existing) {
+          const moved = existing.categoryId !== category.id;
+          Object.assign(existing, fields);
+          if (moved && input.position === null) existing.sort = Math.max(0, ...data.items.map((i) => i.sort)) + 1;
+          item = existing;
+        } else {
+          item = {
+            id: newId(),
+            restaurantId: data.restaurant.id,
+            branchId: null,
+            ...fields,
+            sort: Math.max(0, ...data.items.map((i) => i.sort)) + 1,
+            archivedAt: null,
+          };
+          data.items.push(item);
+        }
+        if (input.position !== null) this.placeMenuItem(data, item.id, input.position);
+        return item;
+      }),
+    );
+  }
+
+  /** Display order inside the category: the category's own sort numbers are handed out again in the new order. */
+  private placeMenuItem(data: DemoData, itemId: string, position: number): void {
+    const item = data.items.find((i) => i.id === itemId);
+    if (!item) return;
+    const inCategory = data.items.filter((i) => i.categoryId === item.categoryId && !i.archivedAt).sort((a, b) => a.sort - b.sort);
+    const slots = inCategory.map((i) => i.sort);
+    const ordered = placeAt(inCategory, itemId, position);
+    ordered.forEach((placed, index) => {
+      const target = data.items.find((i) => i.id === placed.id);
+      if (target) target.sort = slots[index] ?? target.sort;
+    });
+  }
+
+  setItemOnline(menuItemId: string, online: boolean): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        const item = data.items.find((i) => i.id === menuItemId && !i.archivedAt);
+        if (!item) throw new ApiError('NOT_FOUND', 'Menu item not found.');
+        item.isOnline = online;
+      }),
+    );
+  }
+
+  removeMenuItem(menuItemId: string): Promise<'ARCHIVED' | 'DELETED'> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        const item = data.items.find((i) => i.id === menuItemId && !i.archivedAt);
+        if (!item) throw new ApiError('NOT_FOUND', 'Menu item not found.');
+        const used =
+          data.orders.some((o) => o.items.some((line) => line.menuItemId === item.id)) ||
+          data.heldBills.some((h) => h.items.some((line) => line.menuItemId === item.id));
+        if (used) {
+          // Old bills keep their own copy of the name and price; the row stays for the history.
+          Object.assign(item, { archivedAt: nowIso(), isAvailable: false, isOnline: false });
+          return 'ARCHIVED' as const;
+        }
+        data.items = data.items.filter((i) => i.id !== item.id);
+        return 'DELETED' as const;
+      }),
+    );
+  }
+
+  saveAddonGroup(input: AddonGroupInput): Promise<ModifierGroup> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        const existing = input.id ? data.modifierGroups.find((g) => g.id === input.id) : null;
+        if (input.id && !existing) throw new ApiError('NOT_FOUND', 'Add-on group not found.');
+        const name = cleanName(input.name);
+        const check = checkAddonGroup(
+          { name, minSelect: input.minSelect, maxSelect: input.maxSelect, addons: input.addons },
+          data.modifierGroups.filter((g) => g.id !== input.id).map((g) => g.name),
+        );
+        if (check) throw new ApiError('VALIDATION', menuMessage(check, name, 'group'));
+        const modifiers: Modifier[] = input.addons.map((addon) => ({
+          id: addon.id && existing?.modifiers.some((m) => m.id === addon.id) ? addon.id : newId(),
+          name: cleanName(addon.name),
+          price: addon.price ?? 0,
+          isAvailable: addon.isAvailable,
+        }));
+        if (existing) {
+          Object.assign(existing, { name, minSelect: input.minSelect, maxSelect: input.maxSelect, modifiers });
+          return existing;
+        }
+        const group: ModifierGroup = { id: newId(), restaurantId: data.restaurant.id, name, minSelect: input.minSelect, maxSelect: input.maxSelect, modifiers };
+        data.modifierGroups.push(group);
+        return group;
+      }),
+    );
+  }
+
+  removeAddonGroup(groupId: string): Promise<number> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        if (!data.modifierGroups.some((g) => g.id === groupId)) throw new ApiError('NOT_FOUND', 'Add-on group not found.');
+        let count = 0;
+        for (const item of data.items) {
+          if (!item.modifierGroupIds.includes(groupId)) continue;
+          item.modifierGroupIds = item.modifierGroupIds.filter((id) => id !== groupId);
+          if (!item.archivedAt) count++;
+        }
+        data.modifierGroups = data.modifierGroups.filter((g) => g.id !== groupId);
+        return count;
       }),
     );
   }

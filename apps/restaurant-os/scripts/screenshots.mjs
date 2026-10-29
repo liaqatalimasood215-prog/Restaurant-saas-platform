@@ -50,6 +50,8 @@ const SHOTS = [
   { name: '19-desktop-owner-add-many-tables', size: 'desktop', role: 'OWNER', path: '/tables', click: 'button:has-text("Add Table")', then: 'button:has-text("Many tables")' },
   { name: '20-phone-owner-tables', size: 'phone', role: 'OWNER', path: '/tables' },
   { name: '21-desktop-owner-role-permissions', size: 'desktop', role: 'OWNER', path: '/staff', click: 'button[role="tab"]:has-text("Role Permissions")' },
+  { name: '22-desktop-owner-menu', size: 'desktop', role: 'OWNER', path: '/menu' },
+  { name: '23-desktop-owner-menu-add-item', size: 'desktop', role: 'OWNER', path: '/menu', click: 'button:has-text("Add Item")' },
 ];
 
 const browser = await chromium.launch({ channel: 'msedge' });

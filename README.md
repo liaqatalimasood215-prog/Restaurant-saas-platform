@@ -59,7 +59,7 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | Orders: today / all, search (number, table, customer, phone), filter by type and status, detail with items, payments, kitchen tickets and full timeline; header search | DEMO / PROTOTYPE |
 | Test D (online delivery → accept → kitchen → rider → delivered → cash settled) | DEMO / PROTOTYPE — walkthrough passes with DEMO customer/rider buttons |
 | Refunds and payment reversals | PLACEHOLDER — next step of Phase 1 |
-| Menu, Online App and Riders management, Today's Summary, Settings | PLACEHOLDER — Preview 5 |
+| Menu: items (one price or sizes, add-ons, station, unit, In stock / Online switches, search, filters, edit, delete or archive), categories (add, rename, reorder, hide, delete when empty), add-on groups | DEMO / PROTOTYPE — Preview 5 step 1; changes reach POS, Waiter Orders and the kitchen at once, old bills keep their prices |
 | Online App and Riders pages: app preview + Open Full App | PLACEHOLDER — Customer App in Phase 2, Rider App in Phase 3 |
 | Dashboard, Customers, Finance & Reports (P7), Inventory & Suppliers, Payroll (P8), AI Manager (P10) | PLACEHOLDER — Coming Soon |
 | Sync between phones, tablets and laptops | Not started — needs the shared backend (Phase 4) and Socket.IO (Phase 5) |
@@ -108,6 +108,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-29 | Staff redesign (owner's picture, panels 1–3, in the app's red + navy): employee list, 3-step Add Staff wizard and Role Permissions. Permissions are now per role (Owner-editable) and per person: every screen, sidebar section and demo-server check uses the person's own permissions; switching on is limited to what the order rules allow, Staff management and Settings stay Owner only. Employee ID (EMP001 …) and last login. Tap a name to open the person. Demo data version 11 | 75 tests (5 new), typecheck, lint, build pass; all five walkthroughs pass (staff walkthrough now covers the wizard, Role Permissions switching Tables off and on for Super Waiters, and a Cashier's own discount permission); screenshots in `screenshots/staff` |
 | 2026-10-30 | Owner approves the Staff design (list, 3-step wizard, Role Permissions) | No code change; approval recorded in the decision log |
 | 2026-10-30 | Owner approves POS / New Bill, Preview 4 (Orders, Online Orders) and Tables management; README "Current stage" and the POS row refreshed | No code change; approvals recorded in the decision log |
+| 2026-10-30 | Preview 5 started ("shuru karo"). Step 1 Menu: items, categories and add-on groups on the Menu screen (Owner / Manager); hidden categories and removed items leave POS and Waiter Orders; a removed item that was ever ordered is archived; prices typed in rupees, kept in paisa. Demo data version 12 | 78 tests (3 new), typecheck, lint, build pass; all six walkthroughs pass (new `walkthrough:menu`); screenshots in `screenshots/menu` |
 
 ## Commands
 
@@ -126,7 +127,8 @@ pnpm --filter @restaurant-saas/restaurant-os walkthrough          # owner workfl
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:online   # Test D, takeaway, phone, reject, Orders timeline
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:pos      # POS Flow A (new bills) and Flow B (waiter bill)
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:tables   # areas, add / edit / remove tables, cleaning, out of service
-pnpm --filter @restaurant-saas/restaurant-os walkthrough:staff    # invitations, activation + PIN, PIN reset, Disable / Enable, Manager read-only
+pnpm --filter @restaurant-saas/restaurant-os walkthrough:staff    # staff list, wizard, permissions, links, PIN, Deactivate, Delete
+pnpm --filter @restaurant-saas/restaurant-os walkthrough:menu     # categories, items with sizes / add-ons, prices, stock, delete
 ```
 
 Screenshots are written to `screenshots/` (git-ignored).

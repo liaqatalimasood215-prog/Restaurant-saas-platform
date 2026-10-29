@@ -11,7 +11,12 @@ import type {
   DraftItemInput,
   FloorPlan,
   KitchenTicketView,
+  MenuCategory,
+  MenuItem,
+  MenuSetup,
   MenuSnapshot,
+  MenuUnit,
+  ModifierGroup,
   Order,
   OrderStatus,
   OrderType,
@@ -174,6 +179,33 @@ export interface StaffLink {
   expiresAt: string;
 }
 
+export interface MenuItemInput {
+  /** Empty for a new item */
+  id: Uuid | null;
+  name: string;
+  categoryId: Uuid;
+  stationId: Uuid;
+  description: string;
+  unit: MenuUnit;
+  /** Paisa; used when there are no sizes */
+  price: number | null;
+  /** Small / Medium / Large …; empty = one price. A size id is kept when the size is only renamed or repriced. */
+  sizes: { id: Uuid | null; name: string; price: number | null }[];
+  modifierGroupIds: Uuid[];
+  isAvailable: boolean;
+  isOnline: boolean;
+  /** Display order inside the category, 1 = first; empty = last (new) or unchanged */
+  position: number | null;
+}
+
+export interface AddonGroupInput {
+  id: Uuid | null;
+  name: string;
+  minSelect: number;
+  maxSelect: number;
+  addons: { id: Uuid | null; name: string; price: number | null; isAvailable: boolean }[];
+}
+
 export interface ApiClient {
   /** The logged-in staff member, or null. Phases 1–3: DEMO login; Phase 4: phone + password. */
   getSession(): Promise<Session | null>;
@@ -253,6 +285,24 @@ export interface ApiClient {
   updateTicket(ticketId: Uuid, to: TicketStatus): Promise<void>;
   /** Out of stock ON/OFF for a menu item (Owner, Manager, Cashier, Kitchen). */
   setItemAvailable(menuItemId: Uuid, available: boolean): Promise<void>;
+
+  /** Menu screen (Preview 5). Changes reach POS, Waiter Orders and the kitchen at once; old orders keep their copies. */
+  getMenuSetup(): Promise<MenuSetup>;
+  saveMenuCategory(input: { id: Uuid | null; name: string }): Promise<MenuCategory>;
+  /** A hidden category and its items are not offered in POS, Waiter Orders or online. */
+  setMenuCategoryActive(categoryId: Uuid, active: boolean): Promise<void>;
+  /** Display order, 1 = first */
+  moveMenuCategory(categoryId: Uuid, position: number): Promise<void>;
+  /** Only an empty category can be deleted (hide it otherwise). */
+  removeMenuCategory(categoryId: Uuid): Promise<void>;
+  saveMenuItem(input: MenuItemInput): Promise<MenuItem>;
+  /** Shown in the Customer App or not (Phase 2) */
+  setItemOnline(menuItemId: Uuid, online: boolean): Promise<void>;
+  /** An item that was ever ordered or held is archived (old bills keep it); a never-used one is deleted. */
+  removeMenuItem(menuItemId: Uuid): Promise<'ARCHIVED' | 'DELETED'>;
+  saveAddonGroup(input: AddonGroupInput): Promise<ModifierGroup>;
+  /** Removes the group from every item; returns how many items had it. */
+  removeAddonGroup(groupId: Uuid): Promise<number>;
 
   /** Food ready, bill requested, bill accepted — only the ones meant for the logged-in user. */
   listNotifications(): Promise<StaffNotification[]>;

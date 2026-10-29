@@ -624,7 +624,7 @@ never deleted.
 | `areas` | name, sort, is_active | Pilot |
 | `dining_tables` | area_id, name (unique per area among tables that are not archived), seats (1–50), is_active (false = out of service), sort (display order in the area), cleaning, archived_at (order status is derived, not stored) | Pilot |
 | `menu_categories` | branch_id (empty = all branches), name, sort, is_active | Pilot |
-| `menu_items` | category_id, station_id, name, description, base_price, unit (piece / kg / plate / litre), is_available, is_online, sort, image_url (P7) | Pilot |
+| `menu_items` | category_id, station_id, name, description, base_price, unit (piece / kg / plate / litre), is_available, is_online, sort, archived_at (removed but ordered before), image_url (P7) | Pilot |
 | `item_variants` | menu_item_id, name (Small / Medium / Large), price, sort | Pilot |
 | `modifier_groups`, `modifiers` | group: name, min_select, max_select · modifier: group_id, name, price, is_available | Pilot |
 | `menu_item_modifier_groups` | menu_item_id, group_id, sort | Pilot |
@@ -1182,3 +1182,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-29 | §4, §6.6, §7.1 Tables, §9: area and table setup on the Tables screen (owner) — Manage Areas, Add Table (one or many), edit, display order, Cleaning and Out of service states, open-bill locks, archive instead of delete; search and status filters; permission "mark a table for cleaning". |
 | 2026-10-29 | §4, §9, §10.3: Staff upgrade (owner) — only the Owner manages staff (Manager read-only), last active Owner protected, email and branch on staff, single-use expiring activation and PIN-reset links, own PIN, PIN unlock on enrolled devices, Disable ends sessions and real-time access; tables `staff_invites`, `staff_devices`. Phase 1: DEMO frontend; real parts in Phases 4–6. |
 | 2026-10-29 | §4: editable permissions — Role Permissions matrix and per-person custom permissions within each role's allowed set ("ceiling"); view permissions per screen; Staff screen redesign (employee list with Employee ID and last login, 3-step Add Staff wizard). |
+| 2026-10-30 | §7.1 Menu built in Preview 5: items (one price or up to 6 sizes, add-on groups, station, unit, in stock, online, display order), categories (hide / show, delete when empty), add-on groups (choose min–max, free add-ons allowed); removed items that were ordered are archived (`menu_items.archived_at`). |

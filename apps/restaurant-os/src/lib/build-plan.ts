@@ -5,7 +5,6 @@ import type { OsSectionKey } from '@restaurant-saas/shared';
  * which preview brings them. Removed entry = the screen is built.
  */
 export const PREVIEW_FOR_SECTION: Partial<Record<OsSectionKey, number>> = {
-  menu: 5,
   'online-app': 5,
   riders: 5,
   summary: 5,
