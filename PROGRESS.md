@@ -222,9 +222,8 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 - Call Waiter voice: the owner asked for speech; he has not yet confirmed how it sounds on a real phone or
   whether the wording is right. His other idea — the **waiter calling the cashier at any time, without a
   table** (today a waiter can only send Request Bill on a table bill) — was offered and not answered.
-- Tables: Cleaning is set by hand (sparkle button on a free table). Open question for the owner: should a
-  table go to Cleaning **automatically** after its bill is paid? (Not done, because it changes what everyone
-  sees after payment.) Settings (Preview 5) no longer needs areas/tables — they live on the Tables screen.
+- Tables: Cleaning stays **manual** (owner, 2026-10-29): staff press the sparkle button on a free table; a
+  paid table does not go to Cleaning by itself. Settings (Preview 5) no longer needs areas/tables — they live on the Tables screen.
 - Real food photos: owner may want them before Phase 7 (needs his own photos; never use other people's).
 - Table bills no longer capture guests or a customer name at the POS (owner removed those fields).
 - "Dine-in" still appears on the Orders list, receipts and reports (only the POS button says "Table").
