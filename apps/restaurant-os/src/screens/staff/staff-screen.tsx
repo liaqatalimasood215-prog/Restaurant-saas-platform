@@ -195,7 +195,8 @@ export function StaffScreen() {
                             {t('staff.revoke')}
                           </Button>
                         )}
-                        {user.isActive && user.activatedAt && (
+                        {/* Not on your own account: resetting it would lock you out (and the last Owner out of the restaurant). */}
+                        {user.isActive && user.activatedAt && user.id !== me.id && (
                           <Button variant="ghost" disabled={busy} onClick={() => setConfirm({ kind: 'resetPin', user })} aria-label={t('staff.resetPinName', { name: user.name })}>
                             <KeyRound className="size-4" aria-hidden />
                             {t('staff.resetPin')}

@@ -63,7 +63,7 @@ export const en = {
   },
   roleHints: {
     OWNER: 'Everything, all branches',
-    MANAGER: 'Runs the shift; staff except Owner/Manager',
+    MANAGER: 'Runs the shift; can see staff but not change them',
     CASHIER: 'Bills, payments, online orders',
     WAITER: 'Takes orders, sends them to the kitchen, requests the bill',
     SERVICE_WAITER: 'Serves ready food on assigned tables, calls the cashier',

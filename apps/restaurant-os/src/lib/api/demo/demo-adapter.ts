@@ -1717,6 +1717,9 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return this.request(() =>
       this.store.update((data) => {
         const target = this.manageableStaff(data, userId);
+        // Resetting your own PIN here would log you out with no way back in (the last Owner would lock the
+        // restaurant out). Changing your own PIN while logged in comes with the server (Phase 4).
+        if (target.id === this.currentUser(data)?.id) throw new ApiError('FORBIDDEN', 'You cannot reset your own PIN here.');
         if (!target.activatedAt) {
           throw new ApiError('CONFLICT', `${target.name} has no PIN yet. Use Resend link instead.`);
         }
