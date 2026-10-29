@@ -431,3 +431,4 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-30 | Owner approves the Staff design (employee list, 3-step Add Staff wizard, Role Permissions, per-person permissions) as the DEMO frontend; backend parts stay in Phases 4–6 | Active |
 | 2026-10-30 | Owner approves POS / New Bill, Preview 4 (Orders, Online Orders) and Tables management ("Haan, sab approved"). Next: Preview 5 after "shuru karo" | Active |
 | 2026-10-30 | Owner starts Preview 5 ("shuru karo"), in this order: Menu, Settings, Today's Summary, Online App, Riders, then refunds. Menu is built first | Active |
+| 2026-10-30 | Settings (Preview 5 step 2): bill settings (tax, service charge, rounding, delivery fee) apply to new bills only — every order keeps the settings it was made with; the Manager money-reports switch now lives in Role Permissions | Active |

@@ -15,8 +15,10 @@ export type {
   RecordPaymentInput,
   SendRoundInput,
   Session,
+  SettingsInput,
   StaffInput,
   StaffLink,
+  StationInput,
   TableInput,
 } from './client';
 

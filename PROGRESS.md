@@ -62,7 +62,7 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | POS / New Bill (rebuilt many times at the owner's request) | **Approved** 2026-10-30 |
 | Tables management (Manage Areas, Add Table, Cleaning, Out of service — owner request 2026-10-29) | **Approved** 2026-10-30 (Cleaning stays manual — owner) |
 | Staff upgrade + redesign (Owner-only, activation links, PIN, Deactivate ends sessions, employee list, 3-step wizard, Role Permissions — owner requests 2026-10-29) | **Approved** 2026-10-30 (DEMO frontend); backend parts wait for Phase 4–6 |
-| Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Started** 2026-10-30 ("shuru karo"). Step 1 **Menu: built**; next Settings, Today's Summary, Online App, Riders, then refunds |
+| Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Started** 2026-10-30 ("shuru karo"). Steps 1 **Menu** and 2 **Settings: built**; next Today's Summary, Online App, Riders, then refunds |
 
 ## 4. What is built (all DEMO / PROTOTYPE unless noted)
 
@@ -82,7 +82,7 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 - Data layer: `ApiClient` interface (`src/lib/api/client.ts`) + `DemoAdapter` (`src/lib/api/demo/*`).
   Screens use `getApi()`; an ESLint rule blocks importing the demo folder anywhere else. Demo data in
   localStorage + BroadcastChannel (the message carries the data); the login session is per tab in
-  sessionStorage. **Demo data version is 12** (changing it resets everyone's demo data once).
+  sessionStorage. **Demo data version is 13** (changing it resets everyone's demo data once).
 - All UI text lives in `apps/restaurant-os/src/i18n/en.ts` (Urdu UI is Phase 7).
 - Installable PWA (manifest, icons, no-cache service worker, Install App in the profile menu); no offline
   data. One small "Demo mode" indicator in the header explains that sync works only between tabs of one
@@ -101,7 +101,8 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 | Staff | Redesigned like the owner's picture (panels 1–3, app colours): **Employees** tab (initials, #EMP…, role, branch, contact, Active / Inactive / Invited, last login, ⋯ menu: Edit details, Edit permissions, Resend / Cancel link, Reset PIN, Deactivate / Reactivate, Delete; search and filters; tap a name to open) and **Role Permissions** tab (matrix View / Create / Edit / Delete / Approve, copy from role, use recommended, turn all off). **3-step wizard** for Add and Edit (personal → role & branch → permissions). Per-person permissions within each role's allowed set; Staff management and Settings Owner only; Manager read-only. Activation links, own PIN (`/activate`), PIN reset, last-Owner protection as before. Rules: `packages/shared/src/access.ts`, `staff.ts`, `phone.ts`; screens: `apps/restaurant-os/src/screens/staff/` |
 | POS / New Bill | See §5 |
 | Menu | Items tab (picture, category, station, unit, one price or sizes, add-ons, In stock and Online switches, search and filters, edit, delete = archive when ever ordered), Categories tab (add, rename, reorder, hide / show, delete when empty), Add-ons tab (groups with "choose min–max" and add-ons, free or priced). Changes reach POS, Waiter Orders and the kitchen at once; old bills keep their prices. Rules: `packages/shared/src/menu.ts`; screens: `apps/restaurant-os/src/screens/menu/` |
-| Placeholders | Online App, Riders, Today's Summary, Settings (Preview 5); Dashboard, Customers, Finance & Reports, Inventory, Payroll, AI Manager (Coming Soon) |
+| Settings | Owner only: restaurant and branch (name, phone, address), tax rate and switches (prices include tax, tax on service / delivery), dine-in service charge, round to rupee, live example bill, delivery fee, minimum order, usual prep time, business day start, receipt top / bottom text with preview, kitchen stations (add, edit warn / late minutes and "ready at once", reorder, remove only when unused). **Every order keeps the bill settings it was made with** (`order.pricing`): a Settings change affects new bills only. Rules: `packages/shared/src/settings.ts` |
+| Placeholders | Online App, Riders, Today's Summary (Preview 5); Dashboard, Customers, Finance & Reports, Inventory, Payroll, AI Manager (Coming Soon) |
 
 DEMO accounts (restaurant "Aziz Pizza — DEMO"): Aziz Ahmed 101 OWNER · Sana Khan 102 MANAGER · Bilal
 Hussain 103 CASHIER · Imran Ali 104 Super WAITER · Usman Tariq 105 SERVICE_WAITER (T1–T8) · Kashif Raza
@@ -159,7 +160,7 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 
 ## 7. Test status (last run, all green)
 
-- `pnpm test` — 78 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-29, Staff
+- `pnpm test` — 82 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-29, Staff
   upgrade).
 - Automated walkthroughs (Edge through `playwright-core`, while `pnpm dev` runs), all pass:
   - `pnpm --filter @restaurant-saas/restaurant-os walkthrough` — waiter → kitchen → cashier workflow, Test A
@@ -181,6 +182,9 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
   - `... walkthrough:menu` — categories (add, duplicate refused, reorder, hide → gone from POS, show), add-on group
     (rule check), new item with sizes and add-ons (on the POS at once), a new price keeps the old bill on T1,
     out of stock / online switches, delete (deleted vs archived), Manager edits, Kitchen "No access".
+  - `... walkthrough:settings` — tax 60 % refused, 16 % + 5 % saved (example Rs. 1,210), the running T1 bill
+    keeps its old settings (Rs. 250) while a new T2 bill uses the new ones (Rs. 151), branch / receipt / business
+    day, kitchen stations (times checked, in-use station locked), Manager "No access".
 - Screenshots go to `screenshots/` (git-ignored). `... screenshots` retakes the standard set.
 - **Not verified:** the actual spoken voice (only the text handed to the speech engine is tested); real
   phones/tablets (sync is DEMO); PWA install on a phone (needs HTTPS hosting = owner approval); no test of

@@ -10,6 +10,13 @@ import {
   calculateBill,
   canManageStaffAccount,
   checkPin,
+  checkBranchSettings,
+  checkStation,
+  MAX_TAX_PERCENT,
+  MAX_SERVICE_PERCENT,
+  MAX_PREP_MINUTES,
+  MAX_RECEIPT_TEXT,
+  MAX_STATION_MINUTES,
   checkAddonGroup,
   checkMenuItem,
   MENU_UNITS,
@@ -29,6 +36,9 @@ import {
   type ActivationInfo,
   type InviteKind,
   type PinProblem,
+  type OrderPricing,
+  type SettingsView,
+  type KitchenStation,
   type ItemVariant,
   type MenuCategory,
   type MenuCheck,
@@ -88,6 +98,8 @@ import {
   ApiError,
   type ApiClient,
   type AddonGroupInput,
+  type SettingsInput,
+  type StationInput,
   type AreaInput,
   type MenuItemInput,
   type BulkTablesInput,
@@ -153,6 +165,19 @@ const PIN_MESSAGES: Record<PinProblem, string> = {
 
 const PHONE_MESSAGE = 'Enter a mobile number, for example 0300-1234567 or 03001234567.';
 
+const SETTINGS_MESSAGES = {
+  NAME_REQUIRED: 'Enter the restaurant and branch names.',
+  NAME_TOO_LONG: `Names can have at most ${MAX_NAME_LENGTH} letters.`,
+  PHONE_INVALID: 'Enter a mobile number, for example 0300-1234567 or 03001234567.',
+  ADDRESS_REQUIRED: 'Enter the branch address.',
+  PERCENT_INVALID: `Tax must be 0–${MAX_TAX_PERCENT} % and service charge 0–${MAX_SERVICE_PERCENT} %.`,
+  MONEY_INVALID: 'Enter the delivery fee and minimum order in rupees (0 is fine).',
+  MINUTES_INVALID: `Preparation time must be 1–${MAX_PREP_MINUTES} minutes.`,
+  DAY_START_INVALID: 'The business day start must look like 06:00.',
+  TEXT_TOO_LONG: `Receipt texts can have at most ${MAX_RECEIPT_TEXT} letters.`,
+  STATION_TIMES: `"Late" must be after "warn": 1 ≤ warn < late ≤ ${MAX_STATION_MINUTES} minutes.`,
+} as const;
+
 /** Menu setup mistakes; `where` is the category name for items, or 'category' / 'group'. */
 function menuMessage(check: NonNullable<MenuCheck>, name: string, where: string): string {
   const detail = check.detail ?? name;
@@ -211,13 +236,20 @@ function ruleError(reason: TransitionFailure | TicketTransitionFailure): ApiErro
   return new ApiError(code, RULE_MESSAGES[reason]);
 }
 
-function recalculate(order: Order, branch: Branch): void {
+/** The branch's bill settings now; a new order keeps them for life. */
+function pricingOf(branch: Branch): OrderPricing {
+  return { tax: branch.tax, serviceChargeBps: branch.serviceChargeBps, roundToRupee: branch.roundToRupee, deliveryFee: branch.deliveryFee };
+}
+
+/** Always with the order's own settings, so a Settings change never changes a running or old bill. */
+function recalculate(order: Order): void {
+  const { tax, serviceChargeBps, roundToRupee, deliveryFee } = order.pricing;
   order.totals = calculateBill({
     orderType: order.type,
     lines: order.items.map((i) => ({ unitPrice: i.unitPrice, quantity: i.quantity, isVoid: i.isVoid })),
     discount: order.discount?.input ?? null,
-    deliveryFee: branch.deliveryFee,
-    settings: { tax: branch.tax, serviceChargeBps: branch.serviceChargeBps, roundToRupee: branch.roundToRupee },
+    deliveryFee,
+    settings: { tax, serviceChargeBps, roundToRupee },
   });
   const money = summarizeMoney(order.payments);
   order.paidTotal = money.paidTotal;
@@ -739,6 +771,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
             tickets: [],
             payments: [],
             discount: null,
+            pricing: pricingOf(data.branch),
             totals: calculateBill({
               orderType: 'DINE_IN',
               lines: [],
@@ -773,7 +806,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const lines = input.items.map((draft) => this.priceDraft(data, draft, target, roundNo));
         addKitchenTickets(data, target, lines, roundNo, now);
         target.items.push(...lines);
-        recalculate(target, data.branch);
+        recalculate(target);
         if (input.discount) this.giveDiscount(data, this.require(data, 'order.discount'), target, input.discount);
         data.idempotency[input.idempotencyKey] = target.id;
         return target;
@@ -851,7 +884,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         item.voidReason = reason.trim();
         item.voidedBy = user.id;
         item.voidedAt = nowIso();
-        recalculate(order, data.branch);
+        recalculate(order);
         return order;
       }),
     );
@@ -999,7 +1032,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           createdAt: nowIso(),
         };
         order.payments.push(payment);
-        recalculate(order, data.branch);
+        recalculate(order);
         if (order.billRequest && !order.billRequest.acceptedAt) {
           order.billRequest.acceptedBy = user.id;
           order.billRequest.acceptedAt = nowIso();
@@ -1043,7 +1076,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (discount) this.giveDiscount(data, user, order, { input: discount, reason });
         else {
           order.discount = null;
-          recalculate(order, data.branch);
+          recalculate(order);
           order.history.push({ fromStatus: order.status, toStatus: order.status, changedBy: user.id, reason: 'Discount removed', changedAt: nowIso() });
         }
         return order;
@@ -1057,7 +1090,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
     if (!reason) throw ruleError('REASON_REQUIRED');
     order.discount = { input: choice.input, reason, givenBy: user.id };
     try {
-      recalculate(order, data.branch);
+      recalculate(order);
     } catch (err) {
       throw new ApiError('VALIDATION', err instanceof Error ? err.message : 'Invalid discount.');
     }
@@ -1242,6 +1275,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       tickets: [],
       payments: [],
       discount: null,
+      pricing: pricingOf(data.branch),
       totals: calculateBill({ orderType: fields.type, lines: [], settings: { tax: data.branch.tax, serviceChargeBps: 0, roundToRupee: false } }),
       paidTotal: 0,
       refundedTotal: 0,
@@ -1299,7 +1333,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const lines = input.items.map((draft) => this.priceDraft(data, draft, order, 1));
         addKitchenTickets(data, order, lines, 1, order.createdAt);
         order.items.push(...lines);
-        recalculate(order, data.branch);
+        recalculate(order);
         applyAutomaticSteps(order);
         data.orders.push(order);
         if (input.discount) this.giveDiscount(data, this.require(data, 'order.discount'), order, input.discount);
@@ -1778,6 +1812,133 @@ export class DemoAdapter implements ApiClient, DemoControls {
     );
   }
 
+  // ── Settings (Preview 5: Owner only) ───────────────────────────────────────────────────────
+
+  getSettings(): Promise<SettingsView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'settings.manage');
+      const openTickets = (stationId: string) =>
+        data.orders.flatMap((o) => o.tickets).filter((tk) => tk.stationId === stationId && tk.status !== 'SERVED' && !this.isClosed(data, tk.orderId)).length;
+      return {
+        restaurant: data.restaurant,
+        branch: data.branch,
+        stations: [...data.stations]
+          .sort((a, b) => a.sort - b.sort)
+          .map((station) => ({
+            station,
+            itemCount: data.items.filter((i) => i.stationId === station.id && !i.archivedAt).length,
+            openTickets: openTickets(station.id),
+            chefCount: data.staff.filter((s) => s.isActive && !s.archivedAt && s.stationIds.includes(station.id)).length,
+          })),
+      };
+    });
+  }
+
+  private isClosed(data: DemoData, orderId: string): boolean {
+    const status = data.orders.find((o) => o.id === orderId)?.status;
+    return status === undefined || ['PAID', 'DELIVERED', 'PICKED_UP', 'REJECTED', 'CANCELLED'].includes(status);
+  }
+
+  saveSettings(input: SettingsInput): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'settings.manage');
+        const check = checkBranchSettings({
+          restaurantName: input.restaurantName,
+          branchName: input.branchName,
+          phone: input.phone,
+          address: input.address,
+          taxBps: input.tax.rateBps,
+          serviceChargeBps: input.serviceChargeBps,
+          deliveryFee: input.deliveryFee,
+          minOrder: input.minOrder,
+          defaultPrepMinutes: input.defaultPrepMinutes,
+          businessDayStart: input.businessDayStart,
+          receiptHeader: input.receiptHeader,
+          receiptFooter: input.receiptFooter,
+        });
+        if (check) throw new ApiError('VALIDATION', SETTINGS_MESSAGES[check.problem]);
+        if (!Number.isInteger(input.tax.rateBps) || !Number.isInteger(input.serviceChargeBps)) throw new ApiError('VALIDATION', SETTINGS_MESSAGES.PERCENT_INVALID);
+        data.restaurant.name = cleanName(input.restaurantName);
+        Object.assign(data.branch, {
+          name: cleanName(input.branchName),
+          phone: normalizePhone(input.phone) ?? input.phone,
+          address: input.address.trim(),
+          tax: {
+            rateBps: input.tax.rateBps,
+            pricesIncludeTax: input.tax.pricesIncludeTax,
+            appliesToServiceCharge: input.tax.appliesToServiceCharge,
+            appliesToDeliveryFee: input.tax.appliesToDeliveryFee,
+          },
+          serviceChargeBps: input.serviceChargeBps,
+          roundToRupee: input.roundToRupee,
+          deliveryFee: input.deliveryFee,
+          minOrder: input.minOrder,
+          defaultPrepMinutes: input.defaultPrepMinutes,
+          businessDayStart: input.businessDayStart.trim(),
+          receiptHeader: input.receiptHeader.trim(),
+          receiptFooter: input.receiptFooter.trim(),
+        });
+      }),
+    );
+  }
+
+  saveStation(input: StationInput): Promise<KitchenStation> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'settings.manage');
+        const existing = input.id ? data.stations.find((s) => s.id === input.id) : null;
+        if (input.id && !existing) throw new ApiError('NOT_FOUND', 'Kitchen station not found.');
+        const name = cleanName(input.name);
+        const problem = checkStation({ name, warnMinutes: input.warnMinutes, lateMinutes: input.lateMinutes }, data.stations.filter((s) => s.id !== input.id).map((s) => s.name));
+        if (problem) throw new ApiError('VALIDATION', problem === 'TIMES_INVALID' ? SETTINGS_MESSAGES.STATION_TIMES : setupMessage(problem, name));
+        const fields = { name, autoReady: input.autoReady, warnMinutes: input.warnMinutes, lateMinutes: input.lateMinutes };
+        if (existing) {
+          Object.assign(existing, fields);
+          return existing;
+        }
+        const station: KitchenStation = {
+          id: newId(),
+          restaurantId: data.restaurant.id,
+          branchId: data.branch.id,
+          ...fields,
+          sort: Math.max(0, ...data.stations.map((s) => s.sort)) + 1,
+        };
+        data.stations.push(station);
+        return station;
+      }),
+    );
+  }
+
+  moveStation(stationId: string, position: number): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'settings.manage');
+        if (!data.stations.some((s) => s.id === stationId)) throw new ApiError('NOT_FOUND', 'Kitchen station not found.');
+        data.stations = placeAt(data.stations, stationId, position);
+      }),
+    );
+  }
+
+  removeStation(stationId: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'settings.manage');
+        const station = data.stations.find((s) => s.id === stationId);
+        if (!station) throw new ApiError('NOT_FOUND', 'Kitchen station not found.');
+        const items = data.items.filter((i) => i.stationId === stationId && !i.archivedAt).length;
+        const chefs = data.staff.filter((s) => !s.archivedAt && s.stationIds.includes(stationId)).length;
+        const tickets = data.orders.flatMap((o) => o.tickets).filter((tk) => tk.stationId === stationId && tk.status !== 'SERVED' && !this.isClosed(data, tk.orderId)).length;
+        if (items > 0 || chefs > 0 || tickets > 0) {
+          throw new ApiError('CONFLICT', `${station.name} is still used (${items} menu items, ${chefs} chefs, ${tickets} open tickets). Move them to another station first.`);
+        }
+        if (data.stations.length <= 1) throw new ApiError('VALIDATION', 'Keep at least one kitchen station.');
+        data.stations = data.stations.filter((s) => s.id !== stationId);
+      }),
+    );
+  }
+
   // ── Notifications ──────────────────────────────────────────────────────────────────────────
 
   listNotifications(): Promise<StaffNotification[]> {
@@ -2212,7 +2373,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         ];
         if (count % 2 === 1) drafts.push({ menuItemId: item('Zinger Burger')?.id ?? '', variantId: null, modifierIds: [], note: 'No mayo', quantity: 2 });
         order.items.push(...drafts.map((draft) => this.priceDraft(data, draft, order, 1)));
-        recalculate(order, data.branch);
+        recalculate(order);
         data.orders.push(order);
         return order;
       }),
@@ -2250,7 +2411,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
               reason: null,
               createdAt: nowIso(),
             });
-            recalculate(order, data.branch);
+            recalculate(order);
             giveInvoiceNumber(data, order);
           }
         }

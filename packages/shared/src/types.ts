@@ -303,6 +303,8 @@ export interface Order extends BranchScoped {
   tickets: KitchenTicket[];
   payments: PaymentEntry[];
   discount: OrderDiscount | null;
+  /** Tax, service charge, rounding and delivery fee as they were when the order was made (Settings changes never touch it) */
+  pricing: OrderPricing;
   /** Calculated with calculateBill() — never typed in by a person */
   totals: BillTotals;
   paidTotal: Paisa;
@@ -318,6 +320,23 @@ export interface Order extends BranchScoped {
   history: StatusHistoryEntry[];
   createdBy: Uuid | null;
   createdAt: IsoDateTime;
+}
+
+/** The bill settings an order keeps for its whole life. */
+export interface OrderPricing {
+  tax: TaxSettings;
+  /** Dine-in service charge in basis points */
+  serviceChargeBps: number;
+  roundToRupee: boolean;
+  /** Delivery orders only */
+  deliveryFee: Paisa;
+}
+
+/** Settings screen (Owner): the restaurant, its branch and the kitchen stations with what blocks removing them. */
+export interface SettingsView {
+  restaurant: Restaurant;
+  branch: Branch;
+  stations: { station: KitchenStation; itemCount: number; openTickets: number; chefCount: number }[];
 }
 
 /** One card on the live table board; the table status is derived from its open order. */

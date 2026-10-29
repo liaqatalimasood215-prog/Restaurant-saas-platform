@@ -17,7 +17,8 @@ import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
 import { ProductArt } from '../pos/product-art';
 import { MenuItemDialog } from './menu-item-dialog';
-import { AddonGroupsPanel, CategoriesPanel, Switch, priceText } from './menu-parts';
+import { Switch } from '@/components/ui/switch';
+import { AddonGroupsPanel, CategoriesPanel, priceText } from './menu-parts';
 
 type Tab = 'items' | 'categories' | 'addons';
 type StockFilter = 'ALL' | 'AVAILABLE' | 'OUT' | 'NOT_ONLINE';

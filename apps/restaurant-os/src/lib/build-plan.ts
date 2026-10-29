@@ -8,5 +8,4 @@ export const PREVIEW_FOR_SECTION: Partial<Record<OsSectionKey, number>> = {
   'online-app': 5,
   riders: 5,
   summary: 5,
-  settings: 5,
 };

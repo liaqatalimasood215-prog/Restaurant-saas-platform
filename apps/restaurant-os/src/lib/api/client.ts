@@ -10,8 +10,11 @@ import type {
   HeldBill,
   DraftItemInput,
   FloorPlan,
+  KitchenStation,
   KitchenTicketView,
   MenuCategory,
+  SettingsView,
+  TaxSettings,
   MenuItem,
   MenuSetup,
   MenuSnapshot,
@@ -206,6 +209,32 @@ export interface AddonGroupInput {
   addons: { id: Uuid | null; name: string; price: number | null; isAvailable: boolean }[];
 }
 
+export interface SettingsInput {
+  restaurantName: string;
+  branchName: string;
+  phone: string;
+  address: string;
+  tax: TaxSettings;
+  serviceChargeBps: number;
+  roundToRupee: boolean;
+  deliveryFee: number;
+  minOrder: number;
+  defaultPrepMinutes: number;
+  /** "HH:MM" */
+  businessDayStart: string;
+  receiptHeader: string;
+  receiptFooter: string;
+}
+
+export interface StationInput {
+  id: Uuid | null;
+  name: string;
+  /** Drinks and similar: ready as soon as they are sent */
+  autoReady: boolean;
+  warnMinutes: number;
+  lateMinutes: number;
+}
+
 export interface ApiClient {
   /** The logged-in staff member, or null. Phases 1–3: DEMO login; Phase 4: phone + password. */
   getSession(): Promise<Session | null>;
@@ -332,6 +361,15 @@ export interface ApiClient {
   getRolePermissions(): Promise<RolePermissionsEntry[]>;
   /** Owner only. null = back to the recommended set. Everyone of that role without own permissions follows at once. */
   saveRolePermissions(role: StaffRole, permissions: Permission[] | null): Promise<void>;
+
+  /** Settings (Owner only). Tax, service charge and delivery fee apply to new bills; old and running bills keep theirs. */
+  getSettings(): Promise<SettingsView>;
+  saveSettings(input: SettingsInput): Promise<void>;
+  saveStation(input: StationInput): Promise<KitchenStation>;
+  /** Display order, 1 = first */
+  moveStation(stationId: Uuid, position: number): Promise<void>;
+  /** Only a station with no menu items, chefs or open tickets can be removed. */
+  removeStation(stationId: Uuid): Promise<void>;
 
   /** Activation page (no login): who the link is for, or an error when it is used, revoked or expired. */
   getActivation(token: string): Promise<ActivationInfo>;

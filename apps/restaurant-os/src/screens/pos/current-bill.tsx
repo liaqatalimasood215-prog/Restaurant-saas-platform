@@ -136,8 +136,9 @@ export function CurrentBill({
       orderType: draft.type,
       lines: views.map((v) => ({ unitPrice: v.unitPrice, quantity: v.line.quantity })),
       discount,
-      deliveryFee: branch.deliveryFee,
-      settings: { tax: branch.tax, serviceChargeBps: branch.serviceChargeBps, roundToRupee: branch.roundToRupee },
+      // A running bill keeps the settings it was made with; a new bill uses today's Settings.
+      deliveryFee: order?.pricing.deliveryFee ?? branch.deliveryFee,
+      settings: order?.pricing ?? { tax: branch.tax, serviceChargeBps: branch.serviceChargeBps, roundToRupee: branch.roundToRupee },
     });
   // A fixed discount can become bigger than the items after a removal: show it, never crash.
   let discountTooBig = false;

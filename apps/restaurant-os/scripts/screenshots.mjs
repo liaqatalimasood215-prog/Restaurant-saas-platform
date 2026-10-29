@@ -52,6 +52,7 @@ const SHOTS = [
   { name: '21-desktop-owner-role-permissions', size: 'desktop', role: 'OWNER', path: '/staff', click: 'button[role="tab"]:has-text("Role Permissions")' },
   { name: '22-desktop-owner-menu', size: 'desktop', role: 'OWNER', path: '/menu' },
   { name: '23-desktop-owner-menu-add-item', size: 'desktop', role: 'OWNER', path: '/menu', click: 'button:has-text("Add Item")' },
+  { name: '24-desktop-owner-settings', size: 'desktop', role: 'OWNER', path: '/settings' },
 ];
 
 const browser = await chromium.launch({ channel: 'msedge' });

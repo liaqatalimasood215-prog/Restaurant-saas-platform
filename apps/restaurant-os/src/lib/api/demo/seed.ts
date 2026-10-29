@@ -25,7 +25,7 @@ import {
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 12;
+export const DEMO_DATA_VERSION = 13;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {

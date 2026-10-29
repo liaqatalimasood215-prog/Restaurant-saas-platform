@@ -14,6 +14,7 @@ import { MenuScreen } from './menu/menu-screen';
 import { OnlineOrdersScreen } from './online-orders/online-orders-screen';
 import { OrdersScreen } from './orders/orders-screen';
 import { PosScreen } from './pos/pos-screen';
+import { SettingsScreen } from './settings/settings-screen';
 import { StaffScreen } from './staff/staff-screen';
 import { TablesScreen } from './tables/tables-screen';
 import { UpcomingScreen } from './upcoming-screen';
@@ -33,6 +34,7 @@ function renderSection(section: OsSection, options: SectionOptions) {
   if (section.key === 'pos') return <PosScreen tableId={options.tableId} />;
   if (section.key === 'staff') return <StaffScreen />;
   if (section.key === 'menu') return <MenuScreen />;
+  if (section.key === 'settings') return <SettingsScreen />;
   if (section.key === 'online-orders') return <OnlineOrdersScreen />;
   if (section.key === 'orders') return <OrdersScreen key={options.query ?? ''} query={options.query} />;
   if (section.key === 'online-app') return <AppPreviewScreen section={section} app="customer" />;

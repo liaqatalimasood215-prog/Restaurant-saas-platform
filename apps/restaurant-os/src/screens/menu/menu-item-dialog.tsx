@@ -18,7 +18,8 @@ import { Dialog } from '@/components/ui/dialog';
 import { t } from '@/i18n';
 import { getApi, type MenuItemInput } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { menuProblemText, Switch } from './menu-parts';
+import { Switch } from '@/components/ui/switch';
+import { menuProblemText } from './menu-parts';
 
 type SizeRow = { id: string | null; name: string; price: string };
 
