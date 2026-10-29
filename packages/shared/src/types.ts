@@ -5,6 +5,7 @@ import type { BillTotals, DiscountInput, TaxSettings } from './pricing';
 import type { StaffRole } from './roles';
 import type { InviteKind, InviteStatus } from './staff';
 import type { Permission } from './permissions';
+import type { DaySummary } from './reports';
 import type { MenuUnit } from './units';
 
 /**
@@ -337,6 +338,20 @@ export interface SettingsView {
   restaurant: Restaurant;
   branch: Branch;
   stations: { station: KitchenStation; itemCount: number; openTickets: number; chefCount: number }[];
+}
+
+/** Today's Summary screen: one business day, with the names of the people in it. */
+export interface DaySummaryView {
+  /** YYYY-MM-DD */
+  businessDate: string;
+  today: string;
+  /** Business days that have orders (and today), newest first */
+  dates: string[];
+  summary: DaySummary;
+  /** Staff names for the ids in the summary (waiters, who gave a discount, voided, refunded, cancelled) */
+  names: Record<Uuid, string>;
+  /** Cash for delivered orders still with the riders (not settled yet) */
+  withRiders: Paisa;
 }
 
 /** One card on the live table board; the table status is derived from its open order. */

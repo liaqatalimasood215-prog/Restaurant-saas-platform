@@ -247,5 +247,24 @@ assert.ok((await owner.locator(`a[href*="${TABLE.t5}"]`).innerText()).includes('
 ok('Tables board: T5 is Free again; T1 still open (Rs. 3,050)');
 await shot(owner, '12-desktop-owner-tables-after-payment');
 
+console.log("10. Today's Summary (Test A step 7)");
+await owner.goto(`${BASE_URL}/summary`, { waitUntil: 'networkidle' });
+await owner.locator('[data-kpi="sales"]').getByText('Rs. 5,900').waitFor();
+assert.equal((await owner.locator('[data-kpi="cash"]').innerText()).trim(), 'Rs. 6,000');
+assert.equal((await owner.locator('[data-kpi="tips"]').innerText()).trim(), 'Rs. 100');
+const dineIn = await owner.locator('[data-type-row="DINE_IN"]').innerText();
+assert.ok(dineIn.includes('1') && dineIn.includes('Rs. 5,900'), dineIn);
+assert.ok((await owner.locator('[data-method-row="CASH"]').innerText()).includes('Rs. 5,900'));
+assert.ok((await owner.locator('[data-tip-row="Imran Ali"]').innerText()).includes('Rs. 100'), 'the tip is credited to the waiter of Table 5');
+const top = (await owner.locator('[data-top-item]').allInnerTexts()).map((r) => r.replace(/\s+/g, ' ').trim());
+assert.ok(top[0]?.includes('Chicken Karahi') && top[0].includes('1 kg') && top[0].includes('Rs. 2,600'), top[0]);
+assert.ok(top[1]?.includes('Zinger Burger') && top[1].includes('5') && top[1].includes('Rs. 2,250'), top[1]);
+assert.ok((await owner.locator('[data-kpi="open"]').innerText()).includes('1 open'), 'T1 is still running');
+await shot(owner, '13-desktop-owner-todays-summary');
+const manager = await openAs(id(102), '/summary', DESKTOP);
+await waitText(manager, 'No access');
+await manager.close();
+ok('Summary: sales Rs. 5,900 (cash), cash received Rs. 6,000, tip Rs. 100 to Imran Ali, 1 dine-in paid bill, top items by sales: 1 kg Chicken Karahi Rs. 2,600, 5 Zinger Burger Rs. 2,250; T1 still open; Manager without the Reports permission gets "No access"');
+
 await browser.close();
-console.log('The full waiter → kitchen → cashier workflow and Test A steps 1–6 passed in the DEMO prototype.');
+console.log('The full waiter → kitchen → cashier workflow and Test A steps 1–7 passed in the DEMO prototype.');

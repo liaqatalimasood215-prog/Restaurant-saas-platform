@@ -24,13 +24,13 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - **Built (DEMO / PROTOTYPE):** layout and sidebar, DEMO login, Tables, Waiter Orders (Super + Service
   Waiter), Kitchen / KDS, Staff, Online Orders, Orders, installable PWA, notifications (message, beep,
   vibration), the full **POS / New Bill** (see below) and **Tables management** (Manage Areas, Add Table,
-  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 82 unit tests
+  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 84 unit tests
   and the seven walkthroughs (`walkthrough`, `walkthrough:online`, `walkthrough:pos`, `walkthrough:tables`,
   `walkthrough:staff`, `walkthrough:menu`, `walkthrough:settings`) pass.
 - **Approved by the owner:** documents, Phase 1 plan, Preview 1, the waiter → kitchen → cashier workflow,
   and on 2026-10-30 the final POS, Preview 4 (Online Orders, Orders), Tables management and the Staff design.
-- **Preview 5 started** 2026-10-30. Steps 1 **Menu** and 2 **Settings** built (`walkthrough:menu`,
-  `walkthrough:settings`); next Today's Summary, Online App, Riders, then refunds. Every order keeps its own bill
+- **Preview 5 started** 2026-10-30. Steps 1 **Menu**, 2 **Settings** and 3 **Today's Summary** built (`walkthrough:menu`,
+  `walkthrough:settings`; Test A step 7 in `walkthrough`); next Online App, Riders, then refunds. Every order keeps its own bill
   settings (`order.pricing`): Settings changes affect new bills only.
 - **Next (only after approval and "shuru karo"):** Preview 5 — Menu, Online App, Riders, Today's Summary,
   Settings; then refunds. Details and open questions: `PROGRESS.md` §9–§10.

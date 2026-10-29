@@ -327,5 +327,14 @@ await waitText(cashier, 'Paid · Invoice #7');
 await waitText(bill(cashier), 'Takeaway · Order #7');
 ok('a new bill starts as Takeaway and stays so after opening and closing the Table box; Beef Burger + Bill Now with no table and no customer → order #7 paid, invoice #7');
 
+console.log("Today's Summary shows the discounts with who and why");
+await owner.goto(`${BASE_URL}/summary`, { waitUntil: 'networkidle' });
+await owner.locator('[data-kpi="sales"]').waitFor();
+const summaryText = await owner.locator('main').innerText();
+assert.ok(summaryText.includes('Staff meal') && summaryText.includes('Aziz Ahmed'), 'discount reason and who gave it');
+assert.match(summaryText, /\d+ open/, 'open / pending bills are counted apart');
+await shot(owner, '10-desktop-owner-summary-after-pos');
+ok('Summary lists the "Staff meal" discount given by Aziz Ahmed; open / pending bills are counted apart');
+
 await browser.close();
 console.log('POS walkthrough passed: Flow A (dine-in, takeaway, hold, discounts, split / pending payment, Bill Now) and Flow B (Call Waiter, payment), many tables at once and a quick sale.');

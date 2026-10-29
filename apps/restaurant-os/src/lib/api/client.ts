@@ -10,6 +10,7 @@ import type {
   HeldBill,
   DraftItemInput,
   FloorPlan,
+  DaySummaryView,
   KitchenStation,
   KitchenTicketView,
   MenuCategory,
@@ -361,6 +362,9 @@ export interface ApiClient {
   getRolePermissions(): Promise<RolePermissionsEntry[]>;
   /** Owner only. null = back to the recommended set. Everyone of that role without own permissions follows at once. */
   saveRolePermissions(role: StaffRole, permissions: Permission[] | null): Promise<void>;
+
+  /** Today's Summary (permission "reports.money"); null = today's business day. */
+  getDaySummary(businessDate: string | null): Promise<DaySummaryView>;
 
   /** Settings (Owner only). Tax, service charge and delivery fee apply to new bills; old and running bills keep theirs. */
   getSettings(): Promise<SettingsView>;

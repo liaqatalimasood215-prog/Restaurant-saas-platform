@@ -53,6 +53,7 @@ const SHOTS = [
   { name: '22-desktop-owner-menu', size: 'desktop', role: 'OWNER', path: '/menu' },
   { name: '23-desktop-owner-menu-add-item', size: 'desktop', role: 'OWNER', path: '/menu', click: 'button:has-text("Add Item")' },
   { name: '24-desktop-owner-settings', size: 'desktop', role: 'OWNER', path: '/settings' },
+  { name: '25-desktop-owner-todays-summary', size: 'desktop', role: 'OWNER', path: '/summary' },
 ];
 
 const browser = await chromium.launch({ channel: 'msedge' });

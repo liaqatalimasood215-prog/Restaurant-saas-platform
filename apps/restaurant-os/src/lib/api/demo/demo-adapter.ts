@@ -10,6 +10,7 @@ import {
   calculateBill,
   canManageStaffAccount,
   checkPin,
+  summarizeDay,
   checkBranchSettings,
   checkStation,
   MAX_TAX_PERCENT,
@@ -36,6 +37,7 @@ import {
   type ActivationInfo,
   type InviteKind,
   type PinProblem,
+  type DaySummaryView,
   type OrderPricing,
   type SettingsView,
   type KitchenStation,
@@ -1810,6 +1812,35 @@ export class DemoAdapter implements ApiClient, DemoControls {
         return count;
       }),
     );
+  }
+
+  // ── Today's Summary (Preview 5) ─────────────────────────────────────────────────────────
+
+  getDaySummary(date: string | null): Promise<DaySummaryView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'reports.money');
+      const today = businessDate(new Date(), data.branch.timezone, data.branch.businessDayStart);
+      const businessDay = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : today;
+      const orders = data.orders.filter((o) => o.businessDate === businessDay);
+      const summary = summarizeDay(orders);
+      const ids = new Set<string>([
+        ...summary.tipsByWaiter.map((t) => t.waiterId ?? ''),
+        ...summary.discounts.map((d) => d.by),
+        ...summary.voids.map((v) => v.by ?? ''),
+        ...summary.refunds.map((r) => r.by),
+        ...summary.cancelled.map((c) => c.by ?? ''),
+      ]);
+      const names: Record<string, string> = {};
+      for (const id of ids) {
+        const name = this.staffName(data, id || null);
+        if (name) names[id] = name;
+      }
+      const riders = [...new Set(orders.map((o) => o.riderId).filter((r): r is string => r !== null))];
+      const withRiders = riders.reduce((sum, riderId) => sum + this.riderCashAmount(this.riderCashOrders(data, riderId).filter((o) => o.businessDate === businessDay), riderId), 0);
+      const dates = [...new Set([today, ...data.orders.map((o) => o.businessDate)])].sort().reverse();
+      return { businessDate: businessDay, today, dates, summary, names, withRiders };
+    });
   }
 
   // ── Settings (Preview 5: Owner only) ───────────────────────────────────────────────────────
