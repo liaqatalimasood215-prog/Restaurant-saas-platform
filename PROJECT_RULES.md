@@ -203,6 +203,9 @@ Details: MASTER_PROMPT.md §6 (order engine) and §8 (money).
 - Restaurant, branch and role checks on the server for every API call and every real-time room.
 - Staff and riders log in with phone + password (hashed with bcrypt or argon2); login is
   rate-limited. A per-user `token_version` logs a disabled user out everywhere.
+- Staff accounts start with a single-use, expiring activation link; the person creates their own PIN.
+  PIN unlock only on an enrolled, verified device; PINs hashed; failed attempts limited. A PIN is never
+  sent, shown or logged (MASTER_PROMPT.md §10.3).
 - Input validation on every endpoint; safe error messages; rate limits on login, order placement
   and tracking.
 - Customer tracking links use long random tokens.
@@ -292,7 +295,7 @@ Details: MASTER_PROMPT.md §6 (order engine) and §8 (money).
   it explains that the data is sample data ("Aziz Pizza — DEMO") and that sync works only between
   tabs of one browser. PLACEHOLDER screens keep their own badge (owner, 2026-10-28).
 - A simple DEMO login (pick your account, no password) replaces real login during Phases 1–3 and is
-  labelled DEMO. Staff cannot change their own role; the Owner or a Manager does it in Staff.
+  labelled DEMO. Staff cannot change their own role; only the Owner does it in Staff (owner, 2026-10-29).
 - Screen-to-screen updates in the prototype are "DEMO sync — not real-time"; nothing may be labelled
   live before Phase 5.
 - Mobile-first for Waiter, Customer and Rider; tablet layout for Kitchen and Cashier; follow the
@@ -422,3 +425,4 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-29 | POS (owner): "Find a bill by table number" is removed (it replaced an earlier owner request to keep it); a bill is opened from the Table box or Running bills. A new bill starts as Takeaway — a counter sale with no table and no customer, product then Bill Now; Delivery keeps its required customer details | Active (replaces the 2026-10-28 request to keep Find bill by table number) |
 | 2026-10-29 | Tables (owner): Owner/Manager set up areas and tables on the Tables screen (moved forward from Settings / Preview 5) — Manage Areas (add, rename, reorder, deactivate), + Add Table (one or many, e.g. T1–T10 with 4 seats), edit name / area / seats / display order; search and filters Free, Occupied, Bill requested, Cleaning, Out of service; "guests / capacity" on occupied cards; tables with open bills cannot be removed, taken out of service or moved; areas with open bills cannot be deactivated; used tables are archived. Same table data in Tables, POS and Waiter Orders. UI/DEMO only; reservations, table merging and split bills stay later | Active |
 | 2026-10-29 | Tables (owner): Cleaning stays manual — floor staff mark a table for cleaning and press "Table is clean"; a table does not go to Cleaning automatically after its bill is paid | Active |
+| 2026-10-29 | Staff (owner): only the Owner manages staff, roles, links and Enable / Disable (replaces "Owner or Manager"; the Manager sees the list); last active Owner protected; add staff with mobile, optional email, branch, role, tables / station; single-use 48-hour activation and PIN-reset links, resend / cancel; own PIN; PIN unlock on enrolled devices; Disable ends sessions. Owner: "frontend first, backend last" — Phase 1 builds the DEMO screens; real login, PIN hashing, devices, sessions, email and HTTPS hosting in Phases 4–6 | Active |

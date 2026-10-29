@@ -14,6 +14,7 @@ export type {
   SendRoundInput,
   Session,
   StaffInput,
+  StaffLink,
   TableInput,
 } from './client';
 

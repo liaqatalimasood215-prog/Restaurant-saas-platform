@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { ToastProvider } from '@/components/ui/toast';
 import { useSession } from '@/lib/session';
@@ -18,8 +19,12 @@ import { Sidebar } from './sidebar';
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { data: session, error, reload } = useSession();
+  const pathname = usePathname();
 
   useEffect(() => registerServiceWorker(), []);
+
+  // The activation page is opened from the Owner's link before the person can log in.
+  if (pathname === '/activate') return <ToastProvider>{children}</ToastProvider>;
 
   if (session === undefined) {
     return (

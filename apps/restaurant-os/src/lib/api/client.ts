@@ -1,4 +1,5 @@
 import type {
+  ActivationInfo,
   Area,
   Branch,
   DiningTable,
@@ -21,7 +22,9 @@ import type {
   Restaurant,
   StaffNotification,
   StaffRole,
+  StaffMember,
   StaffUser,
+  InviteKind,
   TicketStatus,
   Uuid,
 } from '@restaurant-saas/shared';
@@ -124,6 +127,10 @@ export interface StaffInput {
   id: Uuid | null;
   name: string;
   phone: string;
+  /** Optional */
+  email: string;
+  /** null = all branches (Owner only) */
+  branchId: Uuid | null;
   role: StaffRole;
   stationIds: Uuid[];
   tableIds: Uuid[];
@@ -152,6 +159,13 @@ export interface BulkTablesInput {
   from: number;
   to: number;
   seats: number;
+}
+
+/** A single-use link to send to a staff member (activation or PIN reset). */
+export interface StaffLink {
+  token: string;
+  kind: InviteKind;
+  expiresAt: string;
 }
 
 export interface ApiClient {
@@ -237,10 +251,26 @@ export interface ApiClient {
   /** Food ready, bill requested, bill accepted — only the ones meant for the logged-in user. */
   listNotifications(): Promise<StaffNotification[]>;
 
-  /** Staff management (Owner, Manager; Managers not for Owner/Manager accounts). */
-  listStaff(): Promise<StaffUser[]>;
-  saveStaff(input: StaffInput): Promise<StaffUser>;
+  /** Staff list with each person's latest activation / PIN-reset link (Owner; Manager read-only). */
+  listStaff(): Promise<StaffMember[]>;
+  /**
+   * Owner only. A new account gets a single-use activation link (expires in 48 hours); its token is
+   * returned only here, once — the server keeps only a hash of it.
+   */
+  saveStaff(input: StaffInput): Promise<{ user: StaffUser; link: StaffLink | null }>;
+  /** Disabling ends every session of that person at once; enabling again needs a fresh login. */
   setStaffActive(userId: Uuid, active: boolean): Promise<StaffUser>;
+  /** A new activation link; the old one stops working. */
+  resendInvite(userId: Uuid): Promise<StaffLink>;
+  /** Cancels the person's pending activation or PIN-reset link. */
+  revokeInvite(userId: Uuid): Promise<void>;
+  /** The old PIN and all sessions stop working; the person sets a new PIN with this single-use link. */
+  resetStaffPin(userId: Uuid): Promise<StaffLink>;
+
+  /** Activation page (no login): who the link is for, or an error when it is used, revoked or expired. */
+  getActivation(token: string): Promise<ActivationInfo>;
+  /** The person creates their own PIN; the link is used up. */
+  activateAccount(token: string, pin: string, confirmPin: string): Promise<void>;
 
   /**
    * Called whenever data may have changed, so screens reload from the API.

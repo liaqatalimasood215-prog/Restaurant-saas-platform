@@ -1,24 +1,26 @@
 'use client';
 
 import { useState } from 'react';
-import { Pencil, UserPlus } from 'lucide-react';
+import { Copy, KeyRound, Link2, Pencil, Send, UserPlus, XCircle } from 'lucide-react';
 import {
   STAFF_ROLES,
+  can,
   canManageStaffAccount,
   type DiningTable,
   type KitchenStation,
+  type StaffMember,
   type StaffRole,
   type StaffUser,
 } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
-import { Badge } from '@/components/ui/badge';
+import { Badge, type Tone } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
-import { t } from '@/i18n';
-import { getApi, type StaffInput } from '@/lib/api';
+import { t, type MessageKey } from '@/i18n';
+import { getApi, type Session, type StaffInput, type StaffLink } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
@@ -27,10 +29,18 @@ import { useSession } from '@/lib/session';
 const STAFF_FORM_ROLES = STAFF_ROLES.filter((r) => r !== 'RIDER');
 const isWaiter = (role: StaffRole) => role === 'WAITER' || role === 'SERVICE_WAITER';
 
+type Confirm = { kind: 'disable' | 'resetPin' | 'revoke'; user: StaffUser } | null;
+type ShownLink = { link: StaffLink; name: string } | null;
+
+/** "30 Oct, 18:05" */
+const shortDateTime = (iso: string) =>
+  new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
 /**
- * Staff (owner workflow 2026-10-28): add and edit staff, choose Super Waiter or Service Waiter and
- * their tables, kitchen stations for chefs, disable accounts. Managers cannot touch Owner/Manager
- * accounts, and nobody changes their own role.
+ * Staff (owner, 2026-10-29): only the Owner adds and edits staff, gives roles, sends activation and
+ * PIN-reset links and enables / disables accounts; the Manager sees the list read-only. The last active
+ * Owner is protected. Links are single-use and expire; nobody ever sees a PIN.
+ * DEMO: links are not emailed (no email service yet) — the Owner copies or shares them.
  */
 export function StaffScreen() {
   const { data: session } = useSession();
@@ -39,6 +49,10 @@ export function StaffScreen() {
   const menu = useApiQuery(() => getApi().getMenu(), []);
   const toast = useToast();
   const [editing, setEditing] = useState<StaffInput | null>(null);
+  const [confirm, setConfirm] = useState<Confirm>(null);
+  const [shownLink, setShownLink] = useState<ShownLink>(null);
+  const [busy, setBusy] = useState(false);
+  const canManage = session ? can(session.user.role, 'staff.manage') : false;
 
   const header = (
     <ScreenHeader
@@ -46,13 +60,17 @@ export function StaffScreen() {
       status="DEMO_PROTOTYPE"
       description={t('staff.description')}
       actions={
-        <Button
-          onClick={() => setEditing({ id: null, name: '', phone: '', role: 'WAITER', stationIds: [], tableIds: [] })}
-          disabled={!floor.data || !menu.data}
-        >
-          <UserPlus className="size-5" aria-hidden />
-          {t('staff.add')}
-        </Button>
+        canManage && (
+          <Button
+            onClick={() =>
+              setEditing({ id: null, name: '', phone: '', email: '', branchId: session?.branch.id ?? null, role: 'WAITER', stationIds: [], tableIds: [] })
+            }
+            disabled={!floor.data || !menu.data}
+          >
+            <UserPlus className="size-5" aria-hidden />
+            {t('staff.add')}
+          </Button>
+        )
       }
     />
   );
@@ -79,31 +97,55 @@ export function StaffScreen() {
   const stationNames = (ids: string[]) =>
     ids.length === 0 ? t('staff.allStations') : stations.filter((s) => ids.includes(s.id)).map((s) => s.name).join(', ');
 
-  const toggleActive = async (user: StaffUser) => {
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true);
     try {
-      await getApi().setStaffActive(user.id, !user.isActive);
+      await work();
     } catch (err) {
       toast.show({ tone: 'error', title: err instanceof Error ? err.message : t('states.errorBody') });
+    } finally {
+      setBusy(false);
+      setConfirm(null);
     }
   };
+
+  const toggleActive = (user: StaffUser) =>
+    run(async () => {
+      await getApi().setStaffActive(user.id, !user.isActive);
+      toast.show({ tone: 'success', title: t(user.isActive ? 'staff.disabledToast' : 'staff.enabledToast', { name: user.name }) });
+    });
+  const resend = (user: StaffUser) => run(async () => setShownLink({ link: await getApi().resendInvite(user.id), name: user.name }));
+  const revoke = (user: StaffUser) =>
+    run(async () => {
+      await getApi().revokeInvite(user.id);
+      toast.show({ tone: 'success', title: t('staff.revokedToast', { name: user.name }) });
+    });
+  const resetPin = (user: StaffUser) => run(async () => setShownLink({ link: await getApi().resetStaffPin(user.id), name: user.name }));
 
   return (
     <>
       {header}
+      {!canManage && <p className="mb-3 rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">{t('staff.ownerOnly')}</p>}
       <Card>
         <CardBody className="p-0">
           <ul className="divide-y divide-slate-100">
             {staff.data
-              .filter((u) => u.role !== 'RIDER')
-              .map((user) => {
+              .filter((m) => m.user.role !== 'RIDER')
+              .map((member) => {
+                const { user } = member;
                 const editable = canManageStaffAccount(me.role, user.role);
+                const pending = member.invite?.status === 'PENDING';
                 return (
                   <li key={user.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <div className="min-w-48 flex-1">
                       <p className={cn('font-bold', user.isActive ? 'text-slate-900' : 'text-slate-400 line-through')}>
                         {user.name} {user.id === me.id && <span className="text-xs font-semibold text-slate-500">{t('staff.you')}</span>}
                       </p>
-                      <p className="text-xs text-slate-500">{user.phone}</p>
+                      <p className="text-xs text-slate-500">
+                        {user.phone}
+                        {user.email && ` · ${user.email}`}
+                      </p>
+                      <p className="text-xs text-slate-500">{user.branchId ? session.branch.name : t('staff.allBranches')}</p>
                     </div>
                     <div className="min-w-48 flex-1 text-sm">
                       <Badge tone={user.role === 'SERVICE_WAITER' ? 'blue' : user.role === 'WAITER' ? 'brand' : 'grey'}>
@@ -114,9 +156,12 @@ export function StaffScreen() {
                         <p className="mt-1 text-xs text-slate-600">{t('staff.stations', { list: stationNames(user.stationIds) })}</p>
                       )}
                     </div>
-                    <Badge tone={user.isActive ? 'green' : 'red'}>{user.isActive ? t('staff.active') : t('staff.disabled')}</Badge>
+                    <div className="flex flex-col items-start gap-1">
+                      <Badge tone={user.isActive ? 'green' : 'red'}>{user.isActive ? t('staff.active') : t('staff.disabled')}</Badge>
+                      <AccountBadge member={member} />
+                    </div>
                     {editable && (
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-1">
                         <Button
                           variant="secondary"
                           onClick={() =>
@@ -124,6 +169,8 @@ export function StaffScreen() {
                               id: user.id,
                               name: user.name,
                               phone: user.phone,
+                              email: user.email ?? '',
+                              branchId: user.branchId,
                               role: user.role,
                               stationIds: user.stationIds,
                               tableIds: user.tableIds,
@@ -134,8 +181,31 @@ export function StaffScreen() {
                           <Pencil className="size-4" aria-hidden />
                           {t('staff.edit')}
                         </Button>
+                        {user.isActive && !user.activatedAt && (
+                          <Button variant="ghost" disabled={busy} onClick={() => void resend(user)} aria-label={t('staff.resendName', { name: user.name })}>
+                            <Send className="size-4" aria-hidden />
+                            {t('staff.resend')}
+                          </Button>
+                        )}
+                        {user.isActive && pending && (
+                          <Button variant="ghost" disabled={busy} onClick={() => setConfirm({ kind: 'revoke', user })} aria-label={t('staff.revokeName', { name: user.name })}>
+                            <XCircle className="size-4" aria-hidden />
+                            {t('staff.revoke')}
+                          </Button>
+                        )}
+                        {user.isActive && user.activatedAt && (
+                          <Button variant="ghost" disabled={busy} onClick={() => setConfirm({ kind: 'resetPin', user })} aria-label={t('staff.resetPinName', { name: user.name })}>
+                            <KeyRound className="size-4" aria-hidden />
+                            {t('staff.resetPin')}
+                          </Button>
+                        )}
                         {user.id !== me.id && (
-                          <Button variant="ghost" onClick={() => toggleActive(user)}>
+                          <Button
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() => (user.isActive ? setConfirm({ kind: 'disable', user }) : void toggleActive(user))}
+                            aria-label={`${user.isActive ? t('staff.disable') : t('staff.enable')} ${user.name}`}
+                          >
                             {user.isActive ? t('staff.disable') : t('staff.enable')}
                           </Button>
                         )}
@@ -147,28 +217,136 @@ export function StaffScreen() {
           </ul>
         </CardBody>
       </Card>
-      <p className="mt-3 text-xs text-slate-500">{t('staff.passwordNote')}</p>
+      <p className="mt-3 text-xs text-slate-500">{t('staff.securityNote')}</p>
 
       {editing && (
         <StaffDialog
           initial={editing}
           me={me}
+          session={session}
           tables={tables}
           stations={stations}
           onClose={() => setEditing(null)}
-          onSaved={(saved) => {
+          onSaved={(saved, link) => {
             setEditing(null);
             toast.show({ tone: 'success', title: t('staff.saved', { name: saved.name }) });
+            if (link) setShownLink({ link, name: saved.name });
           }}
         />
       )}
+
+      {confirm && (
+        <Dialog
+          open
+          onClose={() => setConfirm(null)}
+          title={t(`staff.confirm.${confirm.kind}Title`, { name: confirm.user.name })}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setConfirm(null)}>
+                {t('nav.close')}
+              </Button>
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  void (confirm.kind === 'disable' ? toggleActive(confirm.user) : confirm.kind === 'resetPin' ? resetPin(confirm.user) : revoke(confirm.user))
+                }
+              >
+                {t(`staff.confirm.${confirm.kind}Button`)}
+              </Button>
+            </>
+          }
+        >
+          {t(`staff.confirm.${confirm.kind}Body`, { name: confirm.user.name })}
+        </Dialog>
+      )}
+
+      {shownLink && <LinkDialog shown={shownLink} onClose={() => setShownLink(null)} />}
     </>
+  );
+}
+
+const INVITE_BADGES: Record<string, { tone: Tone; key: MessageKey }> = {
+  'ACTIVATION-PENDING': { tone: 'amber', key: 'staff.invite.activationPending' },
+  'ACTIVATION-EXPIRED': { tone: 'red', key: 'staff.invite.expired' },
+  'ACTIVATION-REVOKED': { tone: 'grey', key: 'staff.invite.revoked' },
+  'PIN_RESET-PENDING': { tone: 'amber', key: 'staff.invite.pinResetPending' },
+  'PIN_RESET-EXPIRED': { tone: 'red', key: 'staff.invite.expired' },
+  'PIN_RESET-REVOKED': { tone: 'grey', key: 'staff.invite.revoked' },
+};
+
+/** Activated, or where the person's activation / PIN-reset link stands. */
+function AccountBadge({ member }: { member: StaffMember }) {
+  if (member.user.activatedAt) return <Badge tone="green">{t('staff.invite.activated')}</Badge>;
+  const invite = member.invite;
+  const badge = invite && INVITE_BADGES[`${invite.kind}-${invite.status}`];
+  if (!invite || !badge) return <Badge tone="grey">{t('staff.invite.notActivated')}</Badge>;
+  return (
+    <Badge tone={badge.tone} className="whitespace-normal">
+      {t(badge.key, { time: shortDateTime(invite.expiresAt) })}
+    </Badge>
+  );
+}
+
+/**
+ * Shown once after Add / Resend / Reset PIN. Email is NOT CONNECTED yet, so the Owner sends the link
+ * himself (copy, or his own WhatsApp — no paid service). A PIN is never shown or sent.
+ */
+function LinkDialog({ shown, onClose }: { shown: NonNullable<ShownLink>; onClose: () => void }) {
+  const toast = useToast();
+  const url = `${window.location.origin}/activate?token=${shown.link.token}`;
+  const message = t(shown.link.kind === 'PIN_RESET' ? 'staff.link.whatsappPinReset' : 'staff.link.whatsappActivation', { name: shown.name, url });
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.show({ tone: 'success', title: t('staff.link.copied') });
+    } catch {
+      toast.show({ tone: 'error', title: t('staff.link.copyFailed') });
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={t(shown.link.kind === 'PIN_RESET' ? 'staff.link.pinResetTitle' : 'staff.link.activationTitle', { name: shown.name })}
+      footer={
+        <Button variant="secondary" onClick={onClose}>
+          {t('nav.close')}
+        </Button>
+      }
+    >
+      <div className="space-y-3">
+        <p>{t('staff.link.body', { time: shortDateTime(shown.link.expiresAt) })}</p>
+        <label className="block">
+          <span className="mb-1 flex items-center gap-1 font-bold text-slate-900">
+            <Link2 className="size-4" aria-hidden />
+            {t('staff.link.label')}
+          </span>
+          <input readOnly value={url} onFocus={(e) => e.target.select()} className="min-h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-xs" />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => void copy()}>
+            <Copy className="size-4" aria-hidden />
+            {t('staff.link.copy')}
+          </Button>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(message)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-12 items-center gap-2 rounded-xl border-2 border-green-600 px-4 text-sm font-semibold text-green-700 hover:bg-green-50"
+          >
+            {t('staff.link.whatsapp')}
+          </a>
+        </div>
+        <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{t('staff.link.notConnected')}</p>
+      </div>
+    </Dialog>
   );
 }
 
 function StaffDialog({
   initial,
   me,
+  session,
   tables,
   stations,
   onClose,
@@ -176,10 +354,11 @@ function StaffDialog({
 }: {
   initial: StaffInput;
   me: StaffUser;
+  session: Session;
   tables: DiningTable[];
   stations: KitchenStation[];
   onClose: () => void;
-  onSaved: (user: StaffUser) => void;
+  onSaved: (user: StaffUser, link: StaffLink | null) => void;
 }) {
   const [form, setForm] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -194,7 +373,8 @@ function StaffDialog({
     setBusy(true);
     setError(null);
     try {
-      onSaved(await getApi().saveStaff(form));
+      const saved = await getApi().saveStaff({ ...form, branchId: form.role === 'OWNER' ? null : (form.branchId ?? session.branch.id) });
+      onSaved(saved.user, saved.link);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('states.errorBody'));
       setBusy(false);
@@ -206,7 +386,7 @@ function StaffDialog({
       'min-h-11 rounded-xl border-2 px-3 text-sm font-bold',
       selected ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 text-slate-700',
     );
-  const field = 'min-h-12 w-full rounded-xl border border-slate-300 px-3 text-base';
+  const field = 'min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-base disabled:bg-slate-100 disabled:text-slate-500';
 
   return (
     <Dialog
@@ -219,7 +399,7 @@ function StaffDialog({
             {t('nav.close')}
           </Button>
           <Button onClick={save} disabled={busy}>
-            {t('staff.save')}
+            {initial.id ? t('staff.save') : t('staff.saveAndInvite')}
           </Button>
         </>
       }
@@ -229,15 +409,39 @@ function StaffDialog({
           <span className="mb-1 block font-bold text-slate-900">{t('staff.name')}</span>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={field} />
         </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block font-bold text-slate-900">{t('staff.mobile')}</span>
+            <input
+              value={form.phone}
+              inputMode="tel"
+              placeholder="0300-1234567"
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              className={field}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-bold text-slate-900">{t('staff.email')}</span>
+            <input
+              value={form.email}
+              type="email"
+              inputMode="email"
+              placeholder={t('staff.emailPlaceholder')}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              className={field}
+            />
+          </label>
+        </div>
         <label className="block">
-          <span className="mb-1 block font-bold text-slate-900">{t('staff.phone')}</span>
-          <input
-            value={form.phone}
-            inputMode="tel"
-            placeholder="0300-1234567"
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          <span className="mb-1 block font-bold text-slate-900">{t('staff.branch')}</span>
+          <select
+            value={form.role === 'OWNER' ? '' : (form.branchId ?? session.branch.id)}
+            disabled={form.role === 'OWNER'}
+            onChange={(e) => setForm({ ...form, branchId: e.target.value })}
             className={field}
-          />
+          >
+            {form.role === 'OWNER' ? <option value="">{t('staff.allBranches')}</option> : <option value={session.branch.id}>{session.branch.name}</option>}
+          </select>
         </label>
 
         <fieldset disabled={ownAccount}>
@@ -292,6 +496,7 @@ function StaffDialog({
           </fieldset>
         )}
 
+        {!initial.id && <p className="text-xs text-slate-500">{t('staff.inviteHint')}</p>}
         {error && (
           <p role="alert" className="font-semibold text-red-700">
             {error}

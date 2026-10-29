@@ -5,6 +5,8 @@ import {
   type Branch,
   type DiningTable,
   type HeldBill,
+  type InviteKind,
+  type InviteState,
   type ItemVariant,
   type KitchenStation,
   type MenuCategory,
@@ -21,7 +23,7 @@ import {
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 8;
+export const DEMO_DATA_VERSION = 9;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -52,7 +54,23 @@ export interface DemoData {
   riderSettlements: RiderCashSettlement[];
   heldBills: HeldBill[];
   waiterCalls: WaiterCall[];
+  /** Activation and PIN-reset links (DEMO: the token is kept here; the server keeps only its hash) */
+  invites: DemoInvite[];
+  /** DEMO stand-in for the server's per-user token_version: a higher number ends older sessions */
+  sessionVersions: Record<string, number>;
 }
+
+export interface DemoInvite {
+  userId: string;
+  kind: InviteKind;
+  token: string;
+  state: InviteState;
+  sentAt: string;
+  expiresAt: string;
+}
+
+/** The sample staff were "activated" when the demo data was made. */
+const SEEDED_AT = '2026-10-27T06:00:00.000Z';
 
 const scoped = { restaurantId: RESTAURANT_ID, branchId: BRANCH_ID };
 
@@ -72,6 +90,8 @@ function staff(
     isActive: true,
     stationIds,
     tableIds,
+    email: null,
+    activatedAt: SEEDED_AT,
   };
 }
 
@@ -272,5 +292,7 @@ export function createSeed(): DemoData {
     riderSettlements: [],
     heldBills: [],
     waiterCalls: [],
+    invites: [],
+    sessionVersions: {},
   };
 }

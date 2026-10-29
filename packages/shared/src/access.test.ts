@@ -35,7 +35,7 @@ test('Service Waiter serves food and asks for the bill, but never changes orders
   assert.equal(can('WAITER', 'table.order'), true);
   assert.equal(can('WAITER', 'bill.accept'), false);
   assert.equal(can('CASHIER', 'bill.accept'), true);
-  assert.equal(canManageStaffAccount('MANAGER', 'SERVICE_WAITER'), true);
+  assert.equal(canManageStaffAccount('OWNER', 'SERVICE_WAITER'), true);
 });
 
 test('permission matrix follows MASTER_PROMPT §4', () => {
@@ -68,13 +68,14 @@ test('managers see money reports only when the owner allows it', () => {
   assert.equal(can('CASHIER', 'reports.money', { managerCanSeeMoneyReports: true }), false);
 });
 
-test('managers manage staff, but not Owner or Manager accounts', () => {
-  assert.equal(canManageStaffAccount('MANAGER', 'WAITER'), true);
-  assert.equal(canManageStaffAccount('MANAGER', 'RIDER'), true);
-  assert.equal(canManageStaffAccount('MANAGER', 'MANAGER'), false);
-  assert.equal(canManageStaffAccount('MANAGER', 'OWNER'), false);
-  assert.equal(canManageStaffAccount('OWNER', 'MANAGER'), true);
+test('only the Owner manages staff (2026-10-29); the Manager may only look at the list', () => {
+  assert.equal(canManageStaffAccount('MANAGER', 'WAITER'), false);
+  assert.equal(canManageStaffAccount('MANAGER', 'RIDER'), false);
   assert.equal(canManageStaffAccount('CASHIER', 'WAITER'), false);
+  assert.equal(canManageStaffAccount('OWNER', 'MANAGER'), true);
+  assert.equal(canManageStaffAccount('OWNER', 'OWNER'), true);
+  assert.equal(can('MANAGER', 'staff.view'), true);
+  assert.equal(can('CASHIER', 'staff.view'), false);
 });
 
 test('sidebar order matches the owner decision: most-used sections first (2026-10-27)', () => {

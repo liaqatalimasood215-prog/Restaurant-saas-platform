@@ -24,10 +24,11 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - **Built (DEMO / PROTOTYPE):** layout and sidebar, DEMO login, Tables, Waiter Orders (Super + Service
   Waiter), Kitchen / KDS, Staff, Online Orders, Orders, installable PWA, notifications (message, beep,
   vibration), the full **POS / New Bill** (see below) and **Tables management** (Manage Areas, Add Table,
-  Cleaning, Out of service). 64 unit tests and the four walkthroughs (`walkthrough`, `walkthrough:online`,
-  `walkthrough:pos`, `walkthrough:tables`) pass.
+  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 68 unit tests
+  and the five walkthroughs (`walkthrough`, `walkthrough:online`, `walkthrough:pos`, `walkthrough:tables`,
+  `walkthrough:staff`) pass.
 - **Approved by the owner:** documents, Phase 1 plan, Preview 1, the waiter → kitchen → cashier workflow.
-  **Waiting for his approval:** Preview 4 (Online Orders, Orders), the final POS and Tables management.
+  **Waiting for his approval:** Preview 4 (Online Orders, Orders), the final POS, Tables management and the Staff upgrade.
 - **Next (only after approval and "shuru karo"):** Preview 5 — Menu, Online App, Riders, Today's Summary,
   Settings; then refunds. Details and open questions: `PROGRESS.md` §9–§10.
 - Customer App (Phase 2) and Rider App (Phase 3) stay PLACEHOLDERS inside Restaurant OS.
@@ -56,6 +57,15 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
   out of service or remove) and its area (no deactivate); used tables are archived, never deleted.
 - Shared rules: `packages/shared/src/tables.ts`; screens: `apps/restaurant-os/src/screens/tables/`.
 
+## Staff — owner decisions (2026-10-29)
+
+- Only the **Owner** manages staff (add, edit, roles, tables / station, links, Enable / Disable); the Manager
+  sees the list. The last active Owner is protected. Single-use activation / PIN-reset links (48 hours); the
+  person creates their own PIN; nobody else sees it.
+- Owner: **"front end first, back end last."** Phase 1 has the DEMO screens only. Real login (phone +
+  password), hashed PINs, device enrolment, attempt limits, server sessions, real-time revoke, email sending
+  and HTTPS hosting are Phases 4–6 (MASTER_PROMPT.md §10.3). Never treat the DEMO login or localStorage as security.
+
 ## Every session
 
 1. Inspect the repository and README.md before changing anything. Never restart the project and
@@ -70,7 +80,8 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
    through the owner workflow and Test A steps 1–6 (each person in their own tab);
    `walkthrough:online` covers Test D, takeaway, phone orders and the Orders timeline;
    `walkthrough:pos` covers the POS (new bills, hold, discounts, payments, many tables, quick sale, Call Waiter);
-   `walkthrough:tables` covers areas and tables (add one / many, edit, locks, cleaning, out of service, remove).
+   `walkthrough:tables` covers areas and tables (add one / many, edit, locks, cleaning, out of service, remove);
+   `walkthrough:staff` covers staff links, activation + PIN, PIN reset, Disable / Enable and Manager read-only.
 6. Report with the template in MASTER_PROMPT.md §15.4, in Roman Urdu.
 7. If something is unclear, ask one short question with a recommended answer. Never connect a
    paid service without explaining the cost and getting approval.

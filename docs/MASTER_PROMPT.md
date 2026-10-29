@@ -217,7 +217,10 @@ Inventory Staff, Finance Staff) are a future idea and need an explicit update of
   tables and gets their food-ready notifications (owner, 2026-10-28).
 - Riders can use only the Rider App; staff can use only Restaurant OS.
 - A disabled user cannot log in, and their existing sessions stop working immediately (checked on
-  every request). Nobody changes their own role; the Owner or a Manager does it in Staff.
+  every request). Nobody changes their own role. **Only the Owner** manages staff: add, edit, roles,
+  assigned tables and stations, activation / PIN-reset links, Enable / Disable (owner, 2026-10-29); the
+  Manager sees the staff list read-only. The last active Owner can never be disabled or given another
+  role.
 - Each role sees only its own sections. Home screen by role: Super Waiter → Tables, Service
   Waiter → Ready to Serve, Kitchen → Kitchen Display, Cashier → POS, Owner/Manager → POS / New Bill
   (owner, 2026-10-28).
@@ -240,7 +243,7 @@ Inventory Staff, Finance Staff) are a future idea and need an explicit update of
 | Settle rider cash | ✓ | ✓ | ✓ | | | | |
 | Mark a table for cleaning / clean again | ✓ | ✓ | ✓ | ✓ | ✓ (own tables) | | |
 | Menu, areas and tables (Manage Areas, Add Table, edit, out of service, remove), stations; Online App and Riders pages | ✓ | ✓ | | | | | |
-| Staff management (incl. waiter type and assigned tables) | ✓ | ✓ (not Owner/Manager accounts) | | | | | |
+| Staff management (add, edit, roles, tables / stations, activation and PIN-reset links, Enable / Disable) | ✓ | see the list only | | | | | |
 | Payroll (Phase 8) | ✓ | | | | | | |
 | Money reports | ✓ | if the Owner allows | | own tips | own tips | | own cash |
 | Settings (tax, service charge, receipt, business day) | ✓ | | | | | | |
@@ -601,7 +604,9 @@ never deleted.
 |---|---|---|
 | `restaurants` | name, slug, status | Pilot |
 | `branches` | name, slug, phone, address, timezone, business_day_start, tax settings, service_charge_pct, receipt_header, receipt_footer, online_orders_enabled, delivery_fee, min_order, default_prep_minutes | Pilot |
-| `staff_users` | branch_id (empty = all branches, Owner only), name, phone, password_hash, role (incl. WAITER = Super Waiter, SERVICE_WAITER), is_active, token_version | Pilot |
+| `staff_users` | branch_id (empty = all branches, Owner only), name, phone, email (optional), password_hash, pin_hash (slow hash, never plain), activated_at, failed_pin_attempts, locked_until, role (incl. WAITER = Super Waiter, SERVICE_WAITER), is_active, token_version | Pilot |
+| `staff_invites` | staff_user_id, kind (ACTIVATION / PIN_RESET), token_hash (the link token itself is never stored), sent_at, expires_at (48 h), used_at, revoked_at, created_by — single-use | Pilot |
+| `staff_devices` | staff_user_id, device_id_hash, name, enrolled_at, verified_at, last_seen_at, revoked_at — PIN unlock only on an enrolled, verified device | Pilot |
 | `staff_tables` | staff_user_id, table_id — assigned tables of a waiter (none = all tables) | Pilot |
 | `kitchen_stations` | name, auto_ready, warn_minutes, late_minutes, sort | Pilot |
 | `staff_stations` | staff_user_id, station_id | Pilot |
@@ -667,8 +672,21 @@ own backend may be used for visual mockups only, never to rebuild this system.
   the API use sub-domains of one domain (e.g. `os.`, `order.`, `rider.`, `api.`) so cookies work
   safely.
 - `token_version` on each user: disabling a user or changing a password logs them out everywhere.
-- Owner and Manager reset staff passwords (Pilot). Owner password reset by email (P7). Two-step
-  verification for owners (P7) and platform admins (P9).
+- **Staff accounts (owner, 2026-10-29):** the Owner adds a person (name, mobile, optional email, branch,
+  role, tables / station). The server creates a **single-use activation link** (random token, only its
+  hash stored, expires after 48 hours); the person opens it and creates their own **PIN** (6 digits, not
+  too simple). Resend makes a new link and cancels the old one; the Owner can cancel a pending link.
+  **PIN reset** by the Owner: the old PIN and every session stop working at once, and a new single-use
+  link lets the person set a new PIN. A PIN is never emailed, shown or logged.
+- **PIN unlock** works only on an enrolled, verified device and only while its session is valid; a new
+  device or an expired session needs the primary login (phone + password). PINs are hashed (argon2);
+  failed PIN attempts are limited, then the device needs the primary login again.
+- Disable: `token_version` + 1 ends every session and real-time connection at once; Enable needs a
+  fresh login. Historical records stay. Private data is never put in offline / PWA caches.
+- Sending activation links by email needs an email service (cost and approval first, PROJECT_RULES.md
+  §18); without it the Owner copies the link or shares it with his own WhatsApp.
+- Phase 1 builds this as a DEMO screen only (no real PIN storage, sessions or email). Owner password
+  reset by email (P7). Two-step verification for owners (P7) and platform admins (P9).
 - Customers: no account in the pilot (guest checkout); optional accounts with phone OTP in P7 (paid
   SMS — needs approval).
 - Restaurant owner accounts are created during onboarding (P9); until then by the seed script.
@@ -1151,3 +1169,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-29 | §7.1 POS: Phone Call order button (takeaway, channel PHONE) and Bill Now (send, then take payment); `held_bills.phone_order`. |
 | 2026-10-29 | §7.1 POS: Phone Call replaced by Call Waiter (`waiter_calls`, notification WAITER_CALLED); §8 Owner/Manager discount also on a new bill before sending (saved with the new order); `held_bills.discount` instead of `phone_order`. |
 | 2026-10-29 | §4, §6.6, §7.1 Tables, §9: area and table setup on the Tables screen (owner) — Manage Areas, Add Table (one or many), edit, display order, Cleaning and Out of service states, open-bill locks, archive instead of delete; search and status filters; permission "mark a table for cleaning". |
+| 2026-10-29 | §4, §9, §10.3: Staff upgrade (owner) — only the Owner manages staff (Manager read-only), last active Owner protected, email and branch on staff, single-use expiring activation and PIN-reset links, own PIN, PIN unlock on enrolled devices, Disable ends sessions and real-time access; tables `staff_invites`, `staff_devices`. Phase 1: DEMO frontend; real parts in Phases 4–6. |

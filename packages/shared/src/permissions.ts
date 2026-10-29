@@ -36,8 +36,10 @@ export const PERMISSIONS = {
   'riderCash.settle': ['OWNER', 'MANAGER', 'CASHIER'],
   /** Menu, areas and tables (Manage Areas, Add Table), stations; Online App and Riders pages */
   'setup.manage': ['OWNER', 'MANAGER'],
-  /** Staff management (Managers: not Owner/Manager accounts) */
-  'staff.manage': ['OWNER', 'MANAGER'],
+  /** See the staff list (read-only for the Manager) */
+  'staff.view': ['OWNER', 'MANAGER'],
+  /** Add / edit staff, roles, invitations, PIN reset, Enable / Disable — the Owner only (owner, 2026-10-29) */
+  'staff.manage': ['OWNER'],
   /** Money reports (Managers: only if the Owner allows) */
   'reports.money': ['OWNER', 'MANAGER'],
   /** Settings: tax, service charge, receipt, business day */
@@ -58,9 +60,7 @@ export function can(role: StaffRole, permission: Permission, ctx: PermissionCont
   return true;
 }
 
-/** Managers manage staff, but not Owner or Manager accounts. */
-export function canManageStaffAccount(actor: StaffRole, target: StaffRole): boolean {
-  if (!can(actor, 'staff.manage')) return false;
-  if (actor === 'MANAGER') return target !== 'OWNER' && target !== 'MANAGER';
-  return true;
+/** Only the Owner manages staff accounts, of every role (owner, 2026-10-29). */
+export function canManageStaffAccount(actor: StaffRole, _target: StaffRole): boolean {
+  return can(actor, 'staff.manage');
 }

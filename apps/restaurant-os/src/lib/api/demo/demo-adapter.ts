@@ -3,12 +3,22 @@ import {
   MAX_NAME_LENGTH,
   MAX_QUANTITY_PER_LINE,
   MAX_TABLE_SEATS,
+  PIN_LENGTH,
   amountDue,
   automaticOrderSteps,
   businessDate,
   calculateBill,
   can,
   canManageStaffAccount,
+  checkPin,
+  inviteExpiresAt,
+  inviteStatus,
+  isValidEmail,
+  removesLastOwner,
+  type ActivationInfo,
+  type InviteKind,
+  type PinProblem,
+  type StaffMember,
   canUseApp,
   cashChange,
   checkBulkTables,
@@ -67,9 +77,10 @@ import {
   type SendRoundInput,
   type Session,
   type StaffInput,
+  type StaffLink,
   type TableInput,
 } from '../client';
-import type { DemoData } from './seed';
+import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
 
 /** A short random delay so loading states are visible, like a real network. */
@@ -111,6 +122,12 @@ const RULE_MESSAGES: Record<TransitionFailure | TicketTransitionFailure, string>
   DINE_IN_ONLY: 'Served is used for dine-in only.',
   UNDO_EXPIRED: 'Undo is only possible within 2 minutes of Ready.',
   ORDER_CLOSED: 'The order has already left the kitchen.',
+};
+
+const PIN_MESSAGES: Record<PinProblem, string> = {
+  PIN_FORMAT: `The PIN must be exactly ${PIN_LENGTH} digits.`,
+  PIN_TOO_SIMPLE: 'This PIN is too easy to guess (like 111111 or 123456). Choose another.',
+  PIN_MISMATCH: 'The two PINs are not the same.',
 };
 
 /** Area and table setup mistakes, in the words the screens show. */
@@ -253,10 +270,13 @@ export class DemoAdapter implements ApiClient, DemoControls {
   }
 
   private currentUser(data: DemoData = this.store.read()): StaffUser | null {
-    const userId = this.store.getSessionUserId();
-    const user = data.staff.find((s) => s.id === userId);
-    // A disabled user is logged out at the next action (PROJECT_RULES.md §7).
-    return user?.isActive && canUseApp(user.role, 'restaurant-os') ? user : null;
+    const session = this.store.getSession();
+    const user = data.staff.find((s) => s.id === session?.userId);
+    if (!session || !user) return null;
+    // A disabled user is logged out at the next action, and a session from before a Disable / Enable,
+    // role change or PIN reset no longer counts (PROJECT_RULES.md §7). DEMO only: the real check is on the server.
+    const fresh = (data.sessionVersions[user.id] ?? 0) === session.version;
+    return user.isActive && user.activatedAt && fresh && canUseApp(user.role, 'restaurant-os') ? user : null;
   }
 
   private requireUser(data: DemoData): StaffUser {
@@ -298,7 +318,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   }
 
   logout(): Promise<void> {
-    return this.request(() => this.store.setSessionUserId(null));
+    return this.request(() => this.store.setSession(null));
   }
 
   subscribe(listener: () => void): () => void {
@@ -1554,17 +1574,33 @@ export class DemoAdapter implements ApiClient, DemoControls {
     });
   }
 
-  // ── Staff ──────────────────────────────────────────────────────────────────────────────────
+  // ── Staff (Owner only; Manager may look) ───────────────────────────────────────────────────
 
-  listStaff(): Promise<StaffUser[]> {
+  listStaff(): Promise<StaffMember[]> {
     return this.request(() => {
       const data = this.store.read();
-      this.require(data, 'staff.manage');
-      return [...data.staff].sort((a, b) => a.name.localeCompare(b.name));
+      this.require(data, 'staff.view');
+      const now = Date.now();
+      return [...data.staff]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((user) => {
+          const latest = data.invites.filter((i) => i.userId === user.id).at(-1);
+          return {
+            user,
+            invite: latest
+              ? {
+                  kind: latest.kind,
+                  status: inviteStatus(latest.state, Date.parse(latest.expiresAt), now),
+                  sentAt: latest.sentAt,
+                  expiresAt: latest.expiresAt,
+                }
+              : null,
+          };
+        });
     });
   }
 
-  saveStaff(input: StaffInput): Promise<StaffUser> {
+  saveStaff(input: StaffInput): Promise<{ user: StaffUser; link: StaffLink | null }> {
     return this.request(() =>
       this.store.update((data) => {
         const actor = this.require(data, 'staff.manage');
@@ -1580,12 +1616,23 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (existing && existing.id === actor.id && existing.role !== input.role) {
           throw new ApiError('FORBIDDEN', 'You cannot change your own role.');
         }
+        if (existing && removesLastOwner(data.staff, existing.id, { role: input.role, isActive: existing.isActive })) {
+          throw new ApiError('CONFLICT', 'The restaurant needs at least one active Owner.');
+        }
         const name = input.name.trim();
         if (name.length < 2) throw new ApiError('VALIDATION', 'Enter the full name.');
         if (!PHONE_PATTERN.test(input.phone.trim())) throw new ApiError('VALIDATION', 'Phone must look like 0300-1234567.');
         if (data.staff.some((s) => s.phone === input.phone.trim() && s.id !== input.id)) {
           throw new ApiError('VALIDATION', 'Another staff member already uses this phone number.');
         }
+        const email = input.email.trim().toLowerCase() || null;
+        if (email && !isValidEmail(email)) throw new ApiError('VALIDATION', 'Email must look like name@example.com.');
+        if (email && data.staff.some((s) => s.email === email && s.id !== input.id)) {
+          throw new ApiError('VALIDATION', 'Another staff member already uses this email.');
+        }
+        // The Owner works in all branches; everyone else belongs to one branch of this restaurant.
+        const branchId = input.role === 'OWNER' ? null : input.branchId;
+        if (input.role !== 'OWNER' && branchId !== data.branch.id) throw new ApiError('VALIDATION', 'Choose a branch.');
         if (input.stationIds.some((id) => !data.stations.some((s) => s.id === id))) {
           throw new ApiError('VALIDATION', 'Unknown kitchen station.');
         }
@@ -1596,23 +1643,27 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const fields = {
           name,
           phone: input.phone.trim(),
+          email,
+          branchId,
           role: input.role,
           stationIds: input.role === 'KITCHEN' ? input.stationIds : [],
           tableIds: isWaiter ? input.tableIds : [],
         };
         if (existing) {
+          // A new role applies at once: the person's open sessions end and they log in again.
+          if (existing.role !== input.role) this.endSessions(data, existing.id);
           Object.assign(existing, fields);
-          return existing;
+          return { user: existing, link: null };
         }
         const created: StaffUser = {
           id: newId(),
           restaurantId: data.restaurant.id,
-          branchId: input.role === 'OWNER' ? null : data.branch.id,
           isActive: true,
+          activatedAt: null,
           ...fields,
         };
         data.staff.push(created);
-        return created;
+        return { user: created, link: this.newInvite(data, created.id, 'ACTIVATION') };
       }),
     );
   }
@@ -1625,21 +1676,128 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (!target) throw new ApiError('NOT_FOUND', 'Staff member not found.');
         if (target.id === actor.id) throw new ApiError('FORBIDDEN', 'You cannot disable your own account.');
         if (!canManageStaffAccount(actor.role, target.role)) throw new ApiError('FORBIDDEN', 'You cannot change this account.');
+        if (removesLastOwner(data.staff, target.id, { role: target.role, isActive: active })) {
+          throw new ApiError('CONFLICT', 'The restaurant needs at least one active Owner.');
+        }
         target.isActive = active;
+        // Disable: every open session ends now. Enable: old sessions stay ended, so a fresh login is needed.
+        this.endSessions(data, target.id);
         return target;
       }),
     );
+  }
+
+  resendInvite(userId: string): Promise<StaffLink> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const target = this.manageableStaff(data, userId);
+        const kind = data.invites.filter((i) => i.userId === target.id).at(-1)?.kind ?? 'ACTIVATION';
+        if (target.activatedAt) throw new ApiError('CONFLICT', `${target.name} is already activated.`);
+        return this.newInvite(data, target.id, kind);
+      }),
+    );
+  }
+
+  revokeInvite(userId: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const target = this.manageableStaff(data, userId);
+        for (const invite of data.invites) if (invite.userId === target.id && invite.state === 'PENDING') invite.state = 'REVOKED';
+      }),
+    );
+  }
+
+  resetStaffPin(userId: string): Promise<StaffLink> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const target = this.manageableStaff(data, userId);
+        if (!target.activatedAt) {
+          throw new ApiError('CONFLICT', `${target.name} has no PIN yet. Use Resend link instead.`);
+        }
+        // The old PIN stops working and every session ends until the person sets a new PIN.
+        target.activatedAt = null;
+        this.endSessions(data, target.id);
+        return this.newInvite(data, target.id, 'PIN_RESET');
+      }),
+    );
+  }
+
+  getActivation(token: string): Promise<ActivationInfo> {
+    return this.request(() => {
+      const data = this.store.read();
+      const { invite, user } = this.openInvite(data, token);
+      return { kind: invite.kind, name: user.name, role: user.role, restaurantName: data.restaurant.name };
+    });
+  }
+
+  activateAccount(token: string, pin: string, confirmPin: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const { invite, user } = this.openInvite(data, token);
+        const problem = checkPin(pin, confirmPin);
+        if (problem) throw new ApiError('VALIDATION', PIN_MESSAGES[problem]);
+        // DEMO: the PIN is checked and then thrown away — it is never stored in the browser. The server
+        // (Phase 4) keeps only a slow hash of it and unlocks only on an enrolled device.
+        invite.state = 'USED';
+        user.activatedAt = nowIso();
+        this.endSessions(data, user.id);
+      }),
+    );
+  }
+
+  /** The Owner may act on this account (the server checks the same). */
+  private manageableStaff(data: DemoData, userId: string): StaffUser {
+    const actor = this.require(data, 'staff.manage');
+    const target = data.staff.find((s) => s.id === userId);
+    if (!target) throw new ApiError('NOT_FOUND', 'Staff member not found.');
+    if (!canManageStaffAccount(actor.role, target.role)) throw new ApiError('FORBIDDEN', 'You cannot change this account.');
+    if (!target.isActive) throw new ApiError('CONFLICT', `${target.name} is disabled. Enable the account first.`);
+    return target;
+  }
+
+  /** A new single-use link; any older pending link of the person stops working. */
+  private newInvite(data: DemoData, userId: string, kind: InviteKind): StaffLink {
+    for (const invite of data.invites) if (invite.userId === userId && invite.state === 'PENDING') invite.state = 'REVOKED';
+    const sent = Date.now();
+    const invite: DemoInvite = {
+      userId,
+      kind,
+      token: trackingToken(),
+      state: 'PENDING',
+      sentAt: new Date(sent).toISOString(),
+      expiresAt: new Date(inviteExpiresAt(sent)).toISOString(),
+    };
+    data.invites.push(invite);
+    return { token: invite.token, kind, expiresAt: invite.expiresAt };
+  }
+
+  private openInvite(data: DemoData, token: string): { invite: DemoInvite; user: StaffUser } {
+    const invite = data.invites.find((i) => i.token === token);
+    const user = data.staff.find((s) => s.id === invite?.userId);
+    if (!invite || !user) throw new ApiError('NOT_FOUND', 'This link is not valid. Ask the Owner for a new link.');
+    const status = inviteStatus(invite.state, Date.parse(invite.expiresAt), Date.now());
+    if (status === 'USED') throw new ApiError('CONFLICT', 'This link was already used. Each link works only once.');
+    if (status === 'REVOKED') throw new ApiError('CONFLICT', 'This link was cancelled. Ask the Owner for a new link.');
+    if (status === 'EXPIRED') throw new ApiError('CONFLICT', 'This link has expired. Ask the Owner for a new link.');
+    if (!user.isActive) throw new ApiError('FORBIDDEN', 'This account is disabled.');
+    return { invite, user };
+  }
+
+  /** DEMO stand-in for the server's token_version: every open session of the person ends. */
+  private endSessions(data: DemoData, userId: string): void {
+    data.sessionVersions[userId] = (data.sessionVersions[userId] ?? 0) + 1;
   }
 
   // ── DEMO controls ──────────────────────────────────────────────────────────────────────────
 
   listLoginAccounts(): StaffUser[] {
     // Riders use the separate Rider App (Phase 3), never Restaurant OS.
-    return this.store.read().staff.filter((s) => s.isActive && canUseApp(s.role, 'restaurant-os'));
+    // Only activated accounts can log in; an invited person first opens their activation link.
+    return this.store.read().staff.filter((s) => s.isActive && s.activatedAt && canUseApp(s.role, 'restaurant-os'));
   }
 
   demoLogin(userId: string): void {
-    this.store.setSessionUserId(userId);
+    this.store.setSession(userId, this.store.read().sessionVersions[userId] ?? 0);
   }
 
   simulateCustomerOrder(type: 'DELIVERY' | 'TAKEAWAY'): Promise<Order> {

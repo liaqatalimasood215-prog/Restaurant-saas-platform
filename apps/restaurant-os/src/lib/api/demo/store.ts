@@ -36,6 +36,8 @@ function loadData(): DemoData | null {
 
 interface DemoSessionState {
   userId: string;
+  /** The account's session version at login (DEMO stand-in for the server's token_version); missing = 0 */
+  version?: number;
 }
 
 export class DemoStore {
@@ -86,13 +88,13 @@ export class DemoStore {
     this.emit();
   }
 
-  getSessionUserId(): string | null {
-    return this.session?.userId ?? null;
+  getSession(): { userId: string; version: number } | null {
+    return this.session ? { userId: this.session.userId, version: this.session.version ?? 0 } : null;
   }
 
   /** null = logged out */
-  setSessionUserId(userId: string | null): void {
-    this.session = userId ? { userId } : null;
+  setSession(userId: string | null, version = 0): void {
+    this.session = userId ? { userId, version } : null;
     if (this.session) {
       writeJson(() => window.sessionStorage, SESSION_KEY, this.session);
     } else {

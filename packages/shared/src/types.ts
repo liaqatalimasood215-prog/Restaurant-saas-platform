@@ -3,6 +3,7 @@ import type { OrderChannel, OrderStatus, OrderType, TableStatus } from './order-
 import type { PaymentKind, PaymentMethod } from './payments';
 import type { BillTotals, DiscountInput, TaxSettings } from './pricing';
 import type { StaffRole } from './roles';
+import type { InviteKind, InviteStatus } from './staff';
 import type { MenuUnit } from './units';
 
 /**
@@ -65,6 +66,32 @@ export interface StaffUser extends RestaurantScoped {
   stationIds: Uuid[];
   /** Waiters: their assigned tables; empty = all tables */
   tableIds: Uuid[];
+  /** Optional; used for activation links once an email service is approved (Phase 4) */
+  email: string | null;
+  /** When the person opened their activation link and created a PIN; null = not activated yet */
+  activatedAt: IsoDateTime | null;
+}
+
+/** The latest activation or PIN-reset link of a staff member, as the Owner sees it (never the token). */
+export interface StaffInviteView {
+  kind: InviteKind;
+  status: InviteStatus;
+  sentAt: IsoDateTime;
+  expiresAt: IsoDateTime;
+}
+
+/** One row on the Staff page. */
+export interface StaffMember {
+  user: StaffUser;
+  invite: StaffInviteView | null;
+}
+
+/** What the activation page shows before the person creates a PIN (no login needed). */
+export interface ActivationInfo {
+  kind: InviteKind;
+  name: string;
+  role: StaffRole;
+  restaurantName: string;
 }
 
 export interface KitchenStation extends BranchScoped {

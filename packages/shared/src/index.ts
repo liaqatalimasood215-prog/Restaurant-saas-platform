@@ -12,3 +12,4 @@ export * from './realtime';
 export * from './types';
 export * from './units';
 export * from './tables';
+export * from './staff';
