@@ -61,7 +61,7 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | Preview 4 (Online Orders + Orders) | **Waiting for the owner's approval** (he asked to see it, never said approved) |
 | POS / New Bill (rebuilt many times at the owner's request) | **Waiting for the owner's final approval** — the last answer he gave was feedback on Call Waiter |
 | Tables management (Manage Areas, Add Table, Cleaning, Out of service — owner request 2026-10-29) | **Built, waiting for the owner's review** (Cleaning stays manual — owner) |
-| Staff upgrade, frontend only (Owner-only, activation links, PIN, Disable ends sessions — owner request 2026-10-29) | **Built as DEMO, waiting for the owner's review**; backend parts wait for Phase 4–6 |
+| Staff upgrade + redesign (Owner-only, activation links, PIN, Deactivate ends sessions, employee list, 3-step wizard, Role Permissions — owner requests 2026-10-29) | **Approved** 2026-10-30 (DEMO frontend); backend parts wait for Phase 4–6 |
 | Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Not started** — start only after the owner approves and says "shuru karo" |
 
 ## 4. What is built (all DEMO / PROTOTYPE unless noted)
