@@ -5,7 +5,7 @@
 > mein sab se pehle likhein: **"PROGRESS.md aur CLAUDE.md padho, phir wahin se jaari rakho."**
 > Naya project mat banana, code mat badalna jab tak kaam na diya jaye.
 
-**Last updated:** 2026-10-30 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
+**Last updated:** 2026-10-31 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
 everything in very easy Roman Urdu, code and documents in English)
 
 ---
@@ -63,7 +63,7 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | Tables management (Manage Areas, Add Table, Cleaning, Out of service — owner request 2026-10-29) | **Approved** 2026-10-30 (Cleaning stays manual — owner) |
 | Staff upgrade + redesign (Owner-only, activation links, PIN, Deactivate ends sessions, employee list, 3-step wizard, Role Permissions — owner requests 2026-10-29) | **Approved** 2026-10-30 (DEMO frontend); backend parts wait for Phase 4–6 |
 | Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Started** 2026-10-30 ("shuru karo"). Steps 1 **Menu**, 2 **Settings**, 3 **Today's Summary** and 4 **Online App: built**; Riders and refunds **paused** (owner: website first) |
-| Phase 2 customer website (`apps/customer`) | **Built, waiting for the owner's review** 2026-10-30 (owner: "first making website … then rider") |
+| Phase 2 customer website (`apps/customer`) | **Redesigned from the owner's six-screen picture, plan and five decisions approved, built 2026-10-31, waiting for the owner's review** (owner, 2026-10-30: "first making website … then rider") |
 | Online App / Website rework (owner's brief, steps A–H) | Step A inspection **approved** 2026-10-30 with its four decisions; step B **built, waiting for the owner's review**; steps C–H not started |
 
 ## 4. What is built (all DEMO / PROTOTYPE unless noted)
@@ -110,15 +110,20 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 
 ### 4.3 Customer website (`apps/customer`, Phase 2, DEMO / PROTOTYPE)
 
-One Next.js app on port 3001 serves every restaurant at `/<restaurant>/<branch>`; name, colour, logo letters and
-menu are data (`StoreBrand`, `--store-primary`). Sample brands: `aziz-pizza/main` (red) and `demo-karahi/main`
-(teal). Screens: start page, home + menu (Delivery / Pickup, search, category chips, sold out, hidden items never
-shown, side cart on desktop, cart bar on phones), product details (size, add-ons, note, quantity), cart (edit,
-minimum order), checkout (details, address, cash only), tracking (private link, steps, DEMO buttons standing in for
-the restaurant, order again), account (DEMO sign-in, details, addresses, orders on this device; signing out forgets
-the details). Same pattern as Restaurant OS: `getApi()`, DemoAdapter in `src/lib/api/demo` (localStorage
-`lala-store-demo-v1`), text in `src/i18n/en.ts`, rules in `packages/shared/src/online-order.ts`. Run and publish
-notes: `apps/customer/README.md`. **Not connected to Restaurant OS** (separate sample data) until Phase 4.
+One Next.js app on port 3001 serves every restaurant at `/<restaurant>/<branch>`; name, colours, logo and menu are data
+(`CustomerBrand`, `--store-primary`, `--store-accent`). Sample brands: `lala-restaurant/main` (the owner's design, red and
+yellow, crust; second branch `lala-restaurant/gulberg` starts closed), `aziz-pizza/main` and `demo-karahi/main` (teal).
+Redesigned 2026-10-31 from the owner's six-screen picture. Screens: Home `/` (address, time, search, categories, Deal
+slider, Popular Now, branch selector, closed banner, install offer), Menu `/menu` (category tabs, grid, heart, Favourites
+tab, sold out, hidden items never shown, side cart on desktop), Product `/item/<id>` (size, required crust, extras, note,
+quantity, price on the button; `?line=` edits a cart line), Cart `/cart` (Delivery / Pickup / Dine-in, details remembered,
+Complete your meal, payment choices, bill; `/checkout` redirects here), Tracking `/track/<token>` (private link, steps, DEMO
+buttons, rider card, map area, order again), Orders `/orders` (Reorder), Account `/account`, Login `/login`, bottom bar below
+1024 px. **NOT CONNECTED screens only:** OTP, Google, JazzCash / Easypaisa / Card, map, rider contact. Dine-in is DEMO only
+(borrows the pickup steps, `lib/order-rules.ts`). Same pattern as Restaurant OS: `getApi()`, DemoAdapter and all mock data in
+`src/lib/api/demo` (marked `// DEMO`, localStorage `lala-store-demo-v2`, cart `lala-store-cart-v2`), text in `src/i18n/en.ts`,
+rules and money only from `packages/shared` (not changed by the redesign). Run and publish notes: `apps/customer/README.md`.
+**Not connected to Restaurant OS** (separate sample data) until Phase 4. The Online App preview still opens Aziz Pizza.
 
 DEMO accounts (restaurant "Aziz Pizza — DEMO"): Aziz Ahmed 101 OWNER · Sana Khan 102 MANAGER · Bilal
 Hussain 103 CASHIER · Imran Ali 104 Super WAITER · Usman Tariq 105 SERVICE_WAITER (T1–T8) · Kashif Raza
@@ -179,10 +184,14 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 - `pnpm test` — 93 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-30, Online App
   rework step B; the build covers both apps). All eight Restaurant OS walkthroughs and the customer walkthrough ran
   after step B and pass. A full-page screenshot leaves the website frames empty although they show on screen: use viewport screenshots.
-- `pnpm --filter @restaurant-saas/customer walkthrough` — 43 checks on phone, tablet and desktop sizes, on the dev
-  server and on the production build (`CUSTOMER_URL=http://localhost:3011`): delivery and pickup orders, minimum
-  order, sold out, hidden item, double tap makes one order, tracking steps, reject, not taking orders, account,
-  second brand, wrong link, no sideways scroll. Screenshots in `screenshots/customer`.
+- Customer App redesign (2026-10-31): `pnpm --filter @restaurant-saas/customer lint`, `typecheck` and `build` pass.
+- `pnpm --filter @restaurant-saas/customer walkthrough` — 169 checks on phone, tablet and desktop sizes, on the dev
+  server and on the production build (after `build`: preview `customer-production` in `.claude/launch.json`, port 3012,
+  then `CUSTOMER_URL=http://localhost:3012`): the six screens, delivery / pickup / Dine-in orders, required crust, minimum
+  order, sold out, hidden item, favourites, double tap makes one order, tracking, rider and map labels, Reorder, reject,
+  login, branches, closed and not taking orders, offline, install offer, empty screens, wrong links, three brands, 44 px and
+  accessible names on 8 screens, no sideways scroll. Screenshots in `screenshots/customer`. Not verified: a real phone; the
+  real browser install prompt (a simulated browser event is used); the network-failure error state (demo data cannot fail).
 - Automated walkthroughs (Edge through `playwright-core`, while `pnpm dev` runs), all pass:
   - `pnpm --filter @restaurant-saas/restaurant-os walkthrough` — waiter → kitchen → cashier workflow, Test A
     steps 1–7 (step 7 = Today's Summary: Rs. 5,900 cash, Rs. 6,000 received, Rs. 100 tip to the waiter), permission checks.
@@ -219,7 +228,7 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 ```bash
 pnpm install
 pnpm dev                                   # Restaurant OS on http://localhost:3000, website on :3001
-pnpm test                                  # shared rules (88 unit tests)
+pnpm test                                  # shared rules (93 unit tests)
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -237,12 +246,17 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
-**Now (owner, 2026-10-30): Online App / Website rework, steps A–H.** Frontend and demo data only. Without separate
+**Now (owner, 2026-10-31): the owner reviews the redesigned Customer App** (§4.3) and approves it or asks for changes.
+Decided in the plan: Home opens first, login never forced; Dine-in DEMO only (open decision #19, MASTER_PROMPT.md §16);
+COD default, other payments take no money; LALA is sample data; food pictures stay emoji, no photos from the internet.
+
+**Then (owner, 2026-10-30): Online App / Website rework, steps A–H.** Frontend and demo data only. Without separate
 approval: no real backend, custom domain, image upload, Google Play or publishing.
 
-- A inspection: done, approved. B Overview, tabs, status header: built, owner reviews it next.
+- A inspection: done, approved. B Overview, tabs, status header: built, the owner has not answered yet (Phase C was asked).
 - C connect the preview to the Restaurant OS menu (the website keeps its own sample data today; a direct website link stays
-  on its sample data until Phase 4). Add LALA Restaurant as a sample restaurant. D Website tab: branding, homepage, menu display,
+  on its sample data until Phase 4). Offer the LALA sample restaurant on the Online App page (it now exists on the website, not
+  yet in Restaurant OS). D Website tab: branding, homepage, menu display,
   delivery and pickup switches, opening hours, contact, SEO, domain screens, Download QR. E PWA screens. F Android screens
   (mock states, no real tooling). G tenant by domain with mock data; the "One website, every restaurant" start page becomes a
   developer page only. H full check, screenshots, documents.

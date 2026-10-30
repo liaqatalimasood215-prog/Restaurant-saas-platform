@@ -1,7 +1,9 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { calculateBill, unitPriceFor, type BillTotals, type DraftItemInput, type MenuItem, type OnlineOrderKind, type PublicStore } from '@restaurant-saas/shared';
+import { calculateBill, unitPriceFor, type BillTotals, type DraftItemInput, type MenuItem, type PublicStore } from '@restaurant-saas/shared';
+import type { OrderMode } from './api/client';
+import { deviceStore } from './device-store';
 
 /**
  * The cart lives on this device, one per restaurant branch. The totals here are for showing only:
@@ -13,59 +15,18 @@ export interface CartLine extends DraftItemInput {
 
 export interface CartState {
   lines: CartLine[];
-  kind: OnlineOrderKind;
+  mode: OrderMode;
 }
 
-const EMPTY: CartState = { lines: [], kind: 'DELIVERY' };
-const snapshots = new Map<string, CartState>();
-const listeners = new Set<() => void>();
-const storageKey = (key: string) => `lala-store-cart:${key}`;
-let listening = false;
-
-function load(key: string): CartState {
-  const cached = snapshots.get(key);
-  if (cached) return cached;
-  let state = EMPTY;
-  try {
-    const raw = window.localStorage.getItem(storageKey(key));
-    if (raw) state = JSON.parse(raw) as CartState;
-  } catch {
-    // Storage blocked or broken: an empty cart.
-  }
-  snapshots.set(key, state);
-  return state;
-}
-
-function save(key: string, state: CartState): void {
-  snapshots.set(key, state);
-  try {
-    window.localStorage.setItem(storageKey(key), JSON.stringify(state));
-  } catch {
-    // Storage blocked: the cart still works in this tab.
-  }
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void): () => void {
-  if (!listening) {
-    listening = true;
-    // Another tab changed a cart.
-    window.addEventListener('storage', (event) => {
-      if (!event.key?.startsWith('lala-store-cart:')) return;
-      snapshots.clear();
-      for (const l of listeners) l();
-    });
-  }
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+const EMPTY: CartState = { lines: [], mode: 'DELIVERY' };
+const device = deviceStore<CartState>('lala-store-cart-v2', EMPTY);
 
 export function useCart(key: string) {
-  const state = useSyncExternalStore(subscribe, () => load(key), () => EMPTY);
-  const update = (change: (s: CartState) => CartState) => save(key, change(load(key)));
+  const state = useSyncExternalStore(device.subscribe, () => device.load(key), () => EMPTY);
+  const update = (change: (s: CartState) => CartState) => device.save(key, change(device.load(key)));
   return {
     ...state,
-    setKind: (kind: OnlineOrderKind) => update((s) => ({ ...s, kind })),
+    setMode: (mode: OrderMode) => update((s) => ({ ...s, mode })),
     /** A new line, or more of the same when item, size, add-ons and note all match. */
     addLine: (line: DraftItemInput) =>
       update((s) => {
@@ -110,11 +71,16 @@ export function describeCart(store: PublicStore, lines: readonly CartLine[]): { 
   return { views, left: lines.length - views.length };
 }
 
-export function cartTotals(store: PublicStore, kind: OnlineOrderKind, views: readonly CartView[]): BillTotals {
+export function cartTotals(store: PublicStore, mode: OrderMode, views: readonly CartView[]): BillTotals {
   return calculateBill({
-    orderType: kind,
+    orderType: mode,
     lines: views.map((v) => ({ unitPrice: v.lineTotal / v.line.quantity, quantity: v.line.quantity })),
     deliveryFee: store.deliveryFee,
     settings: store.pricing,
   });
+}
+
+/** A size or a required choice needs the product page; anything else can go straight into the cart. */
+export function needsChoice(store: PublicStore, item: MenuItem): boolean {
+  return item.variants.length > 0 || store.addonGroups.some((g) => item.modifierGroupIds.includes(g.id) && g.minSelect > 0);
 }

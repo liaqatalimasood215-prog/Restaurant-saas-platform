@@ -2,8 +2,8 @@ import type { DemoControls, StoreApi } from './client';
 import { DemoAdapter } from './demo/demo-adapter';
 import { DEMO_STORES } from './demo/seed';
 
-export { ApiError } from './client';
-export type { CustomerProfile, DemoControls, PlaceOrderInput, StoreApi } from './client';
+export { ApiError, ORDER_MODES } from './client';
+export type { BranchLink, CustomerBrand, CustomerOrder, CustomerProfile, CustomerStore, DemoControls, OrderMode, PaymentChoice, PlaceOrderInput, SampleRider, StoreApi, StoreDeal } from './client';
 
 let adapter: DemoAdapter | null = null;
 
@@ -28,9 +28,10 @@ export function storeIdentity(restaurantSlug: string, branchSlug: string) {
   return seed ? { name: seed.restaurant.name, tagline: seed.brand.tagline, primaryColor: seed.brand.primaryColor } : null;
 }
 
-/** The demo restaurants for the start page. On the real platform each restaurant only shares its own link. */
+/** The demo restaurants for the start page, once each. On the real platform each restaurant only shares its own link. */
 export function demoStoreList() {
-  return DEMO_STORES.map((s) => ({
+  const first = DEMO_STORES.filter((s, i) => DEMO_STORES.findIndex((other) => other.restaurant.slug === s.restaurant.slug) === i);
+  return first.map((s) => ({
     name: s.restaurant.name,
     path: `/${s.restaurant.slug}/${s.branch.slug}`,
     tagline: s.brand.tagline,

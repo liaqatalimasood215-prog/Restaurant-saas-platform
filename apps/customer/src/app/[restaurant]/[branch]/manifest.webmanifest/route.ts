@@ -7,6 +7,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ res
   if (!store) return new Response('Not found', { status: 404 });
   const start = `/${restaurant}/${branch}`;
   return Response.json({
+    id: start,
     name: store.name,
     short_name: store.name.slice(0, 12),
     description: store.tagline,

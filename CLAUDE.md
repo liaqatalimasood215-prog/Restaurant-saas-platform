@@ -36,9 +36,10 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - **Preview 5 started** 2026-10-30. Steps 1 **Menu**, 2 **Settings**, 3 **Today's Summary** and 4 **Online App** built (`walkthrough:menu`,
   `walkthrough:settings`, `walkthrough:online-app`; Test A step 7 in `walkthrough`); Riders and refunds are paused. Every order keeps its own bill
   settings (`order.pricing`): Settings changes affect new bills only.
-- **Phase 2 customer website built, waiting for the owner's review** (owner, 2026-10-30: "first website, then rider"):
-  `apps/customer`, port 3001, DEMO, not connected to Restaurant OS until Phase 4; `pnpm --filter @restaurant-saas/customer
-  walkthrough`. Run and publish notes: `apps/customer/README.md`.
+- **Phase 2 customer website, redesigned on 2026-10-31 from the owner's six-screen picture, waiting for the owner's review**
+  (owner, 2026-10-30: "first website, then rider"): `apps/customer`, port 3001, DEMO, not connected to Restaurant OS until
+  Phase 4; `pnpm --filter @restaurant-saas/customer walkthrough`. OTP, payments except cash, map and rider contact are screens
+  only, marked NOT CONNECTED. Run and publish notes: `apps/customer/README.md`.
 - **Next (only after approval and "shuru karo"):** Rider App (Phase 3). The Riders page and refunds in Phase 1 are paused.
   Details and open questions: `PROGRESS.md` §9–§10.
 - The Online App page previews the real customer website; the Rider App (Phase 3) stays a PLACEHOLDER inside Restaurant OS.

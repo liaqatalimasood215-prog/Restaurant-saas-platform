@@ -12,6 +12,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@restaurant-saas/customer", "dev"],
       "port": 3001
+    },
+    {
+      "name": "customer-production",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@restaurant-saas/customer", "exec", "next", "start", "--port", "3012"],
+      "port": 3012
     }
   ]
 }

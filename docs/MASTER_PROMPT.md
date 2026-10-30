@@ -525,6 +525,12 @@ Navigation (owner, 2026-10-27):
 - Fast on slow internet (§10.6). English first; Urdu in P7.
 - Later: accounts with phone OTP (paid SMS — needs approval), saved addresses, reorder (P7); online
   payment, loyalty and coupons (P11).
+- Owner's design (2026-10-31), built as DEMO screens from one codebase: Login (+92 phone, WhatsApp / SMS code, Google;
+  never forced), Home (address, time, search, categories, deals, popular), Menu (category tabs, grid, favourites), Product
+  (size, required crust, extras), one-page Cart (Delivery / Pickup / Dine-in, Complete your meal, Cash / JazzCash / Easypaisa /
+  Card, bill), Tracking (steps, rider card, map area), Orders with Reorder, bottom bar, branch selector. OTP, Google, online
+  payments, map and rider contact are NOT CONNECTED screens only; the real ones stay in their phases and need approval. Deals
+  are ordinary menu items with their own price. Dine-in is open decision #19.
 
 ### 7.3 Rider App (PWA) — Pilot
 
@@ -1085,6 +1091,7 @@ decision in `PROJECT_RULES.md` §20.
 | 16 | Rider availability status (online/offline): who sees it, does it block assignment? | Decide before Phase 3 |
 | 17 | Extra staff roles (Admin, Inventory Staff, Finance Staff) | Not in the permission model; decide before the phase that needs them |
 | 18 | Separately branded Android apps per restaurant (Publishing Stage B) | Evaluated in P11 after a Google Play policy and cost review; no approval is guaranteed |
+| 19 | Dine-in orders from the customer's phone (table ordering): how does a table number reach the waiter and the kitchen? | DEMO screen only since 2026-10-31; decide before Phase 4 joins the website to Restaurant OS |
 
 ## 17. Ready-to-use Claude Code prompts (copy and paste)
 
@@ -1194,3 +1201,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-30 | §5.5 Online App page built in Preview 5: orders ON/OFF, delivery fee, minimum order, prep time, link, QR code, product Online ON/OFF; link and QR NOT CONNECTED and preview PLACEHOLDER until Phase 2. |
 | 2026-10-30 | §7.2 Customer website built as a DEMO (Phase 2, owner: website before the Riders page, refunds and Rider App): two sample brands from one app, menu, product details, cart, checkout, tracking, account screens. Not connected to Restaurant OS until Phase 4. §5.5 Online App page shows the website preview and Open Full App. Branding and customer account screens moved forward as DEMO (§7.6). |
 | 2026-10-30 | §5.5 Online App / Website rework (owner's brief): five tabs, status header, previews, two separate publishing flows; custom domain and Android moved forward as DEMO screens only; §14 custom domain row changed from Overkill to Later. Real work stays P9 and P11 (§7.6). |
+| 2026-10-31 | §7.2 Customer App redesigned from the owner's six-screen picture as DEMO screens; OTP, Google, online payments, map and rider contact are NOT CONNECTED screens only; open decision #19 (Dine-in from the customer's phone). |

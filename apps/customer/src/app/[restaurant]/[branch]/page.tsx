@@ -1,5 +1,5 @@
-import { MenuScreen } from '@/screens/menu-screen';
+import { HomeScreen } from '@/screens/home-screen';
 
 export default function Page() {
-  return <MenuScreen />;
+  return <HomeScreen />;
 }

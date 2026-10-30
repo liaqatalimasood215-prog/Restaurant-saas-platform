@@ -13,8 +13,9 @@ Read before changing anything:
 
 ## Current stage
 
-**Phase 2 — Customer website: built, waiting for the owner's review (DEMO / PROTOTYPE).** The owner asked for the
-website first, then the Rider App; Riders page and refunds in Phase 1 wait. See [apps/customer/README.md](apps/customer/README.md).
+**Phase 2 — Customer website: redesigned from the owner's six-screen picture on 2026-10-31, waiting for the owner's
+review (DEMO / PROTOTYPE).** The owner asked for the website first, then the Rider App; Riders page and refunds in
+Phase 1 wait. See [apps/customer/README.md](apps/customer/README.md).
 
 **Online App / Website rework (owner's brief, 2026-10-30):** step A (inspection) approved, step B (Overview, tabs, status
 header) built, DEMO only. Next steps C–H wait for the owner's approval.
@@ -71,7 +72,8 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | Online App: online orders ON/OFF, delivery fee, minimum order, prep time, customer link and QR code, product Online ON/OFF | DEMO / PROTOTYPE — Preview 5 step 4; switches and link NOT CONNECTED to the website until Phase 4 |
 | Online App / Website page: tabs (Overview, Website, Mobile App, Android App, Settings), status header, Publish Website apart from Android, website and phone previews, View Website | DEMO / PROTOTYPE — publishing states are demo only, nothing goes online; previews show the real `apps/customer` with its own sample data; domain, PWA and Android tabs show plans and honest states only (PLACEHOLDER until later steps) |
 | Riders page: app preview + Open Full App | PLACEHOLDER — Rider App in Phase 3 |
-| Customer website: home, menu, search, product details, cart, checkout, tracking steps, account screens; two sample brands; phone, tablet, desktop | DEMO / PROTOTYPE — `walkthrough` in `apps/customer` (43 checks) passes on dev and on the production build; orders NOT CONNECTED to Restaurant OS until Phase 4; real sign-in, payment, photos and live tracking not built |
+| Customer website: Login, Home, Menu, Product, Cart with checkout, Tracking, Orders, Account, bottom bar; three sample brands, branch selector, install offer, offline message; phone, tablet, desktop | DEMO / PROTOTYPE — `walkthrough` in `apps/customer` (169 checks) passes on dev and on the production build; orders NOT CONNECTED to Restaurant OS until Phase 4 |
+| Customer website: OTP and Google login, JazzCash / Easypaisa / Card, map and rider contact | NOT CONNECTED — screens only, clearly labelled; no paid service, no money moves |
 | Dashboard, Customers, Finance & Reports (P7), Inventory & Suppliers, Payroll (P8), AI Manager (P10) | PLACEHOLDER — Coming Soon |
 | Sync between phones, tablets and laptops | Not started — needs the shared backend (Phase 4) and Socket.IO (Phase 5) |
 
@@ -126,6 +128,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-30 | Phase 2 customer website (owner: website first, then rider): `apps/customer` with home, menu, product details, cart, checkout, tracking, account screens, one app with two sample brands. Shared rules in `online-order.ts`. Online App page now previews the website | 88 tests (3 new), typecheck, lint, build pass; website walkthrough 43 checks passes on dev and on the production build; all eight Restaurant OS walkthroughs pass; not tested on a real phone; not pushed, not deployed |
 | 2026-10-30 | Online App / Website rework step B (owner's brief and reference picture): page split into five tabs, status header, three setup cards, website and phone previews, demo Publish Website (Owner only, new permission `onlineApp.publish`), publishing states in `packages/shared/src/online-app.ts`. Existing switches, fee form, link, QR and item list kept, moved into tabs. Demo data version 14 | 93 tests (5 new), typecheck, lint, build pass; `walkthrough:online-app` now checks the website inside the preview frames, on 4 sizes; all eight Restaurant OS walkthroughs and the customer walkthrough pass; not tested on a real phone; not pushed, not deployed |
 | 2026-10-31 | Menu redesign (owner's reference picture): category cards on top; tapping one shows only its products, search stays inside the category, size filter added, the category drop-down is replaced by the cards, prices line up in one column. App's light colours kept; food pictures stay emoji (Phase 7) | `walkthrough:menu` passes with a new card check; typecheck and lint pass; not pushed, not deployed |
+| 2026-10-31 | Customer App redesign (owner's six-screen picture, frontend only in `apps/customer`): Login, Home, Menu, Product, one-page Cart with Delivery / Pickup / Dine-in and payment choices, Tracking with rider card and map area, Orders with Reorder, bottom bar; new sample restaurant LALA with two branches and required crust; skeletons, empty and error states, branch selector, closed banner, install offer, offline message, "Rs 1,300", 44 px tap targets. `packages/shared`, Restaurant OS and backend untouched | Customer lint, type-check and build pass; website walkthrough 169 checks on dev and on the production build (includes 44 px and accessible-name audits on 8 screens); `walkthrough:online-app` passes; 93 shared tests pass; install offer tested with a simulated browser event, not on a real phone; not pushed, not deployed |
 
 ## Commands
 

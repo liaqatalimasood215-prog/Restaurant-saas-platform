@@ -8,9 +8,10 @@ const font = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-store', d
 export const metadata: Metadata = {
   title: 'Lala Online Ordering (DEMO)',
   description: 'Order food online. Phase 2 UI prototype with sample data.',
+  icons: { icon: '/icons/icon-192.png', apple: '/icons/icon-192.png' },
 };
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1 };
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

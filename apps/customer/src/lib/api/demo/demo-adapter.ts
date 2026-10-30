@@ -1,29 +1,21 @@
-import {
-  amountToMinimum,
-  calculateBill,
-  checkCheckout,
-  formatPaisa,
-  nextTrackingStep,
-  normalizePhone,
-  unitPriceFor,
-  type DraftItemInput,
-  type PublicStore,
-  type TrackedOrder,
-} from '@restaurant-saas/shared';
-import { ApiError, type CustomerProfile, type DemoControls, type PlaceOrderInput, type StoreApi } from '../client';
-import { DEMO_STORES } from './seed';
+// DEMO
+import { amountToMinimum, calculateBill, nextTrackingStep, normalizePhone, unitPriceFor, type DraftItemInput } from '@restaurant-saas/shared';
+import { rs } from '../../format';
+import { checkOrderDetails, stepsKind } from '../../order-rules';
+import { ApiError, type CustomerOrder, type CustomerProfile, type CustomerStore, type DemoControls, type PlaceOrderInput, type StoreApi } from '../client';
+import { DEMO_CLOSED_AT_START, DEMO_RIDER, DEMO_STORES } from './seed';
 
 /**
  * Phase 2 implementation of the StoreApi: sample data in this browser (localStorage), shared with its other tabs.
  * It behaves like the future server — prices are worked out here from the menu, never taken from the screen —
  * but it is NOT a security boundary, and it is not joined to Restaurant OS until the backend exists (Phase 4).
  */
-const KEY = 'lala-store-demo-v1';
+const KEY = 'lala-store-demo-v2';
 
 interface DemoState {
   /** "restaurant/branch" → switches */
   switches: Record<string, { online: boolean; open: boolean }>;
-  orders: TrackedOrder[];
+  orders: CustomerOrder[];
   /** Idempotency key → order token */
   idempotency: Record<string, string>;
   dailyCounters: Record<string, number>;
@@ -33,6 +25,7 @@ interface DemoState {
 const empty = (): DemoState => ({ switches: {}, orders: [], idempotency: {}, dailyCounters: {}, profiles: {} });
 const wait = () => new Promise<void>((resolve) => setTimeout(resolve, 120 + Math.random() * 180));
 const clone = <T>(value: T): T => structuredClone(value);
+const startSwitches = (key: string) => ({ online: true, open: !DEMO_CLOSED_AT_START.includes(key) });
 
 export class DemoAdapter implements StoreApi, DemoControls {
   private state: DemoState = empty();
@@ -80,15 +73,26 @@ export class DemoAdapter implements StoreApi, DemoControls {
     return store;
   }
 
-  private publicStore(restaurantSlug: string, branchSlug: string): PublicStore {
+  private publicStore(restaurantSlug: string, branchSlug: string): CustomerStore {
     const seed = this.seed(restaurantSlug, branchSlug);
-    const switches = this.read().switches[`${restaurantSlug}/${branchSlug}`] ?? { online: true, open: true };
+    const key = `${restaurantSlug}/${branchSlug}`;
+    const switches = this.read().switches[key] ?? startSwitches(key);
+    // Item OFF = hidden: the website never receives it, also not through a deal or a suggestion.
+    const items = seed.items.filter((i) => i.isOnline && !i.archivedAt);
+    const onMenu = (itemId: string) => items.some((i) => i.id === itemId);
     return {
       ...seed,
       isOpen: switches.open,
       onlineOrdersEnabled: switches.online,
-      // Item OFF = hidden: the website never receives it.
-      items: seed.items.filter((i) => i.isOnline && !i.archivedAt),
+      items,
+      deals: seed.deals.filter((d) => onMenu(d.itemId)),
+      popularItemIds: seed.popularItemIds.filter(onMenu),
+      bestsellerItemIds: seed.bestsellerItemIds.filter(onMenu),
+      suggestedItemIds: seed.suggestedItemIds.filter(onMenu),
+      branches: DEMO_STORES.filter((s) => s.restaurant.slug === restaurantSlug).map((s) => {
+        const branchKey = `${restaurantSlug}/${s.branch.slug}`;
+        return { name: s.branch.name, slug: s.branch.slug, address: s.branch.address, isOpen: (this.read().switches[branchKey] ?? startSwitches(branchKey)).open };
+      }),
     };
   }
 
@@ -98,7 +102,7 @@ export class DemoAdapter implements StoreApi, DemoControls {
     return () => this.listeners.delete(listener);
   }
 
-  async getStore(restaurantSlug: string, branchSlug: string): Promise<PublicStore> {
+  async getStore(restaurantSlug: string, branchSlug: string): Promise<CustomerStore> {
     await wait();
     return clone(this.publicStore(restaurantSlug, branchSlug));
   }
@@ -111,18 +115,18 @@ export class DemoAdapter implements StoreApi, DemoControls {
     const store = this.publicStore(input.restaurantSlug, input.branchSlug);
     if (!store.onlineOrdersEnabled || !store.isOpen) throw new ApiError('CONFLICT', 'Not taking orders right now.');
     if (input.lines.length === 0) throw new ApiError('VALIDATION', 'Your cart is empty.');
-    const problem = checkCheckout(input);
-    if (problem) throw new ApiError('VALIDATION', 'Please check your name, phone and address.');
+    const problem = checkOrderDetails(input);
+    if (problem) throw new ApiError('VALIDATION', 'Please check your details.');
 
     const items = input.lines.map((line) => this.priceLine(store, line));
     const totals = calculateBill({
-      orderType: input.kind,
+      orderType: input.mode,
       lines: items.map((i) => ({ unitPrice: i.unitPrice, quantity: i.quantity })),
       deliveryFee: store.deliveryFee,
       settings: store.pricing,
     });
     if (amountToMinimum(totals.itemsSubtotal, store.minOrder) > 0) {
-      throw new ApiError('CONFLICT', `The minimum order is ${formatPaisa(store.minOrder)}.`);
+      throw new ApiError('CONFLICT', `The minimum order is ${rs(store.minOrder)}.`);
     }
     const today = new Date().toISOString().slice(0, 10);
     const counterKey = `${input.restaurantSlug}/${input.branchSlug}/${today}`;
@@ -135,12 +139,16 @@ export class DemoAdapter implements StoreApi, DemoControls {
       branchSlug: input.branchSlug,
       restaurantName: store.restaurant.name,
       restaurantPhone: store.branch.phone,
-      kind: input.kind,
+      kind: stepsKind(input.mode),
+      mode: input.mode,
+      tableNumber: input.mode === 'DINE_IN' ? input.tableNumber.trim() : '',
+      payment: input.payment,
+      rider: null,
       status: 'PLACED',
       dailyNumber,
       customerName: input.name.trim(),
       customerPhone: normalizePhone(input.phone) ?? input.phone,
-      customerAddress: input.kind === 'DELIVERY' ? input.address.trim() : '',
+      customerAddress: input.mode === 'DELIVERY' ? input.address.trim() : '',
       note: input.note.trim(),
       items: items.map((i) => ({ name: i.name, variantName: i.variantName, modifiers: i.modifiers, quantity: i.quantity, unit: i.unit, lineTotal: i.lineTotal, note: i.note })),
       lines: input.lines,
@@ -154,7 +162,7 @@ export class DemoAdapter implements StoreApi, DemoControls {
   }
 
   /** Name, size, add-ons and price come from the menu; the screen only says what was chosen. */
-  private priceLine(store: PublicStore, line: DraftItemInput) {
+  private priceLine(store: CustomerStore, line: DraftItemInput) {
     const item = store.items.find((i) => i.id === line.menuItemId);
     if (!item) throw new ApiError('CONFLICT', 'An item in your cart is no longer available.');
     if (!item.isAvailable) throw new ApiError('CONFLICT', `${item.name} is sold out.`);
@@ -177,14 +185,14 @@ export class DemoAdapter implements StoreApi, DemoControls {
     };
   }
 
-  async getTrackedOrder(token: string): Promise<TrackedOrder> {
+  async getTrackedOrder(token: string): Promise<CustomerOrder> {
     await wait();
     const order = this.read().orders.find((o) => o.token === token);
     if (!order) throw new ApiError('NOT_FOUND', 'This tracking link was not found.');
     return clone(order);
   }
 
-  async listMyOrders(restaurantSlug: string, branchSlug: string): Promise<TrackedOrder[]> {
+  async listMyOrders(restaurantSlug: string, branchSlug: string): Promise<CustomerOrder[]> {
     await wait();
     return clone(this.read().orders.filter((o) => o.restaurantSlug === restaurantSlug && o.branchSlug === branchSlug));
   }
@@ -205,7 +213,7 @@ export class DemoAdapter implements StoreApi, DemoControls {
   private switches(restaurantSlug: string, branchSlug: string) {
     const key = `${restaurantSlug}/${branchSlug}`;
     const all = this.read().switches;
-    return (all[key] ??= { online: true, open: true });
+    return (all[key] ??= startSwitches(key));
   }
 
   setOnlineOrders(restaurantSlug: string, branchSlug: string, enabled: boolean): void {
@@ -224,6 +232,7 @@ export class DemoAdapter implements StoreApi, DemoControls {
     const next = nextTrackingStep(order.kind, order.status);
     if (!next) return;
     order.status = next;
+    if (next === 'RIDER_ASSIGNED') order.rider = DEMO_RIDER;
     order.history.push({ status: next, at: new Date().toISOString() });
     this.write();
   }
