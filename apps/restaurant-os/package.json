@@ -16,12 +16,14 @@
     "walkthrough:tables": "node scripts/walkthrough-tables.mjs",
     "walkthrough:staff": "node scripts/walkthrough-staff.mjs",
     "walkthrough:menu": "node scripts/walkthrough-menu.mjs",
-    "walkthrough:settings": "node scripts/walkthrough-settings.mjs"
+    "walkthrough:settings": "node scripts/walkthrough-settings.mjs",
+    "walkthrough:online-app": "node scripts/walkthrough-online-app.mjs"
   },
   "dependencies": {
     "@restaurant-saas/shared": "workspace:*",
     "lucide-react": "^1.62.0",
     "next": "^16.4.3",
+    "qrcode-generator": "1.4.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

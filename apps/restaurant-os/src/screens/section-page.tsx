@@ -11,6 +11,7 @@ import { AppPreviewScreen } from './app-preview-screen';
 import { ComingSoonScreen } from './coming-soon-screen';
 import { KitchenScreen } from './kitchen/kitchen-screen';
 import { MenuScreen } from './menu/menu-screen';
+import { OnlineAppScreen } from './online-app/online-app-screen';
 import { OnlineOrdersScreen } from './online-orders/online-orders-screen';
 import { OrdersScreen } from './orders/orders-screen';
 import { PosScreen } from './pos/pos-screen';
@@ -39,7 +40,7 @@ function renderSection(section: OsSection, options: SectionOptions) {
   if (section.key === 'summary') return <SummaryScreen />;
   if (section.key === 'online-orders') return <OnlineOrdersScreen />;
   if (section.key === 'orders') return <OrdersScreen key={options.query ?? ''} query={options.query} />;
-  if (section.key === 'online-app') return <AppPreviewScreen section={section} app="customer" />;
+  if (section.key === 'online-app') return <OnlineAppScreen />;
   if (section.key === 'riders') return <AppPreviewScreen section={section} app="rider" />;
   if (section.group === 'COMING_SOON') return <ComingSoonScreen section={section} />;
   return <UpcomingScreen section={section} preview={PREVIEW_FOR_SECTION[section.key] ?? 1} />;

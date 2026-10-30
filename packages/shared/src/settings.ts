@@ -99,6 +99,18 @@ export function checkBranchSettings(s: BranchSettingsRule): SettingsCheck {
   return null;
 }
 
+/** Online App page: delivery fee and minimum order (null = not an amount), usual preparation time. */
+export function checkOnlineSettings(s: { deliveryFee: number | null; minOrder: number | null; defaultPrepMinutes: number }): 'MONEY_INVALID' | 'MINUTES_INVALID' | null {
+  if (s.deliveryFee === null || s.minOrder === null || s.deliveryFee > MAX_MENU_PRICE || s.minOrder > MAX_MENU_PRICE) return 'MONEY_INVALID';
+  const prep = s.defaultPrepMinutes;
+  return Number.isInteger(prep) && prep >= 1 && prep <= MAX_PREP_MINUTES ? null : 'MINUTES_INVALID';
+}
+
+/** Where a branch's Customer App lives: one deployment for all restaurants (PROJECT_RULES.md §6). */
+export function customerAppPath(restaurantSlug: string, branchSlug: string): string {
+  return `/${restaurantSlug}/${branchSlug}`;
+}
+
 export type StationProblem = 'NAME_REQUIRED' | 'NAME_TOO_LONG' | 'NAME_TAKEN' | 'TIMES_INVALID';
 
 /** A kitchen station needs a new name, and "late" after "warn": 1 ≤ warn < late ≤ 240 minutes. */

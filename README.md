@@ -62,6 +62,7 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | Menu: items (one price or sizes, add-ons, station, unit, In stock / Online switches, search, filters, edit, delete or archive), categories (add, rename, reorder, hide, delete when empty), add-on groups | DEMO / PROTOTYPE — Preview 5 step 1; changes reach POS, Waiter Orders and the kitchen at once, old bills keep their prices |
 | Settings: restaurant and branch, tax and service charge (with live example), rounding, delivery fee, minimum order, prep time, business day, receipt texts with preview, kitchen stations | DEMO / PROTOTYPE — Preview 5 step 2; Owner only; changes apply to new bills only (each order keeps its own bill settings) |
 | Today's Summary: sales, average bill, cash received, tips, open bills, refunds, tax + service; sales by order type, payments by method, top items, tips per waiter, discounts / voids / refunds / cancellations with who and why; earlier business days | DEMO / PROTOTYPE — Preview 5 step 3; Test A step 7 passes in the walkthrough |
+| Online App: online orders ON/OFF, delivery fee, minimum order, prep time, customer link and QR code, product Online ON/OFF | DEMO / PROTOTYPE — Preview 5 step 4; link and QR NOT CONNECTED, Customer App preview PLACEHOLDER (Phase 2) |
 | Online App and Riders pages: app preview + Open Full App | PLACEHOLDER — Customer App in Phase 2, Rider App in Phase 3 |
 | Dashboard, Customers, Finance & Reports (P7), Inventory & Suppliers, Payroll (P8), AI Manager (P10) | PLACEHOLDER — Coming Soon |
 | Sync between phones, tablets and laptops | Not started — needs the shared backend (Phase 4) and Socket.IO (Phase 5) |
@@ -113,6 +114,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-30 | Preview 5 started ("shuru karo"). Step 1 Menu: items, categories and add-on groups on the Menu screen (Owner / Manager); hidden categories and removed items leave POS and Waiter Orders; a removed item that was ever ordered is archived; prices typed in rupees, kept in paisa. Demo data version 12 | 78 tests (3 new), typecheck, lint, build pass; all six walkthroughs pass (new `walkthrough:menu`); screenshots in `screenshots/menu` |
 | 2026-10-30 | Preview 5 step 2 Settings (Owner only): restaurant and branch, tax and service charge, rounding, delivery, receipt, business day, kitchen stations. Each order now keeps the bill settings it was made with, so a Settings change never changes a running or old bill. Demo data version 13 | 82 tests (4 new), typecheck, lint, build pass; all seven walkthroughs pass (new `walkthrough:settings`); screenshots in `screenshots/settings` |
 | 2026-10-30 | Preview 5 step 3 Today's Summary (Reports permission): one business day's sales, payments, tips per waiter, top items (by sales, because kg and pieces cannot be added up), and discounts, voids, refunds and cancellations with who and why. Shared `summarizeDay` | 84 tests (2 new: Test A step 7, open / discount / void / refund / cancel), typecheck, lint, build pass; all seven walkthroughs pass (Test A now steps 1–7; the POS walkthrough checks the "Staff meal" discount in the summary). One POS walkthrough run timed out while the dev server was recompiling and passed on the next runs |
+| 2026-10-30 | Preview 5 step 4 Online App page: orders ON/OFF, delivery fee, minimum order, prep time, customer link and QR code (free browser library `qrcode-generator`), product Online ON/OFF. DEMO customer orders now also refuse items that are not online and orders below the minimum | 85 tests (1 new), typecheck, lint, build pass; all eight walkthroughs pass (new `walkthrough:online-app`); QR picture decoded with jsQR once = same link; no real phone scan |
 
 ## Commands
 
@@ -134,6 +136,7 @@ pnpm --filter @restaurant-saas/restaurant-os walkthrough:tables   # areas, add /
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:staff    # staff list, wizard, permissions, links, PIN, Deactivate, Delete
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:menu     # categories, items with sizes / add-ons, prices, stock, delete
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:settings # tax / service for new bills only, branch, receipt, day, stations
+pnpm --filter @restaurant-saas/restaurant-os walkthrough:online-app # online ON/OFF, fee, minimum, link and QR
 ```
 
 Screenshots are written to `screenshots/` (git-ignored).

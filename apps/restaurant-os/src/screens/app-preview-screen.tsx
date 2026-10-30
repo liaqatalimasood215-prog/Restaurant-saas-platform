@@ -16,9 +16,6 @@ import { t, tList } from '@/i18n';
  * preview and the button are PLACEHOLDERS for now; the management controls arrive in Preview 5.
  */
 export function AppPreviewScreen({ section, app }: { section: OsSection; app: 'customer' | 'rider' }) {
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const AppIcon = app === 'customer' ? Smartphone : Bike;
-
   return (
     <>
       <ScreenHeader
@@ -43,6 +40,19 @@ export function AppPreviewScreen({ section, app }: { section: OsSection; app: 'c
           </CardBody>
         </Card>
 
+        <AppPreviewCard app={app} />
+      </div>
+    </>
+  );
+}
+
+/** The phone-shaped preview of a separate app and its "Open Full App" button: PLACEHOLDERS until the app exists. */
+export function AppPreviewCard({ app }: { app: 'customer' | 'rider' }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const AppIcon = app === 'customer' ? Smartphone : Bike;
+
+  return (
+    <>
         <Card>
           <CardHeader>
             <CardTitle>
@@ -64,7 +74,6 @@ export function AppPreviewScreen({ section, app }: { section: OsSection; app: 'c
             </Button>
           </CardBody>
         </Card>
-      </div>
 
       <Dialog
         open={dialogOpen}

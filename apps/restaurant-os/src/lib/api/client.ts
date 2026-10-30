@@ -11,6 +11,7 @@ import type {
   DraftItemInput,
   FloorPlan,
   DaySummaryView,
+  OnlineAppView,
   KitchenStation,
   KitchenTicketView,
   MenuCategory,
@@ -362,6 +363,12 @@ export interface ApiClient {
   getRolePermissions(): Promise<RolePermissionsEntry[]>;
   /** Owner only. null = back to the recommended set. Everyone of that role without own permissions follows at once. */
   saveRolePermissions(role: StaffRole, permissions: Permission[] | null): Promise<void>;
+
+  /** Online App page (Preview 5). The switches work now; the Customer App that obeys them comes in Phase 2. */
+  getOnlineApp(): Promise<OnlineAppView>;
+  /** OFF: the server refuses every new customer order. */
+  setOnlineOrdersEnabled(enabled: boolean): Promise<void>;
+  saveOnlineSettings(input: { deliveryFee: number; minOrder: number; defaultPrepMinutes: number }): Promise<void>;
 
   /** Today's Summary (permission "reports.money"); null = today's business day. */
   getDaySummary(businessDate: string | null): Promise<DaySummaryView>;

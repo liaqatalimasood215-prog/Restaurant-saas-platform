@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bpsToInput, calculateBill, checkBranchSettings, checkStation, isValidDayStart, parsePercent } from './index';
+import { bpsToInput, calculateBill, checkBranchSettings, checkOnlineSettings, checkStation, customerAppPath, isValidDayStart, parsePercent } from './index';
 
 test('percentages are typed as "16" or "7.5" and kept in basis points', () => {
   assert.equal(parsePercent('16'), 1600);
@@ -37,6 +37,13 @@ test('settings: names, a mobile number, an address and sensible amounts', () => 
   assert.deepEqual(checkBranchSettings({ ...good, defaultPrepMinutes: 0 }), { field: 'prepMinutes', problem: 'MINUTES_INVALID' });
   assert.deepEqual(checkBranchSettings({ ...good, businessDayStart: '6' }), { field: 'dayStart', problem: 'DAY_START_INVALID' });
   assert.deepEqual(checkBranchSettings({ ...good, receiptFooter: 'x'.repeat(201) }), { field: 'receiptFooter', problem: 'TEXT_TOO_LONG' });
+});
+
+test('Online App page: fee and minimum order may be 0; preparation time 1–180 minutes; one link per branch', () => {
+  assert.equal(checkOnlineSettings({ deliveryFee: 0, minOrder: 0, defaultPrepMinutes: 30 }), null);
+  assert.equal(checkOnlineSettings({ deliveryFee: null, minOrder: 0, defaultPrepMinutes: 30 }), 'MONEY_INVALID');
+  assert.equal(checkOnlineSettings({ deliveryFee: 0, minOrder: 0, defaultPrepMinutes: 0 }), 'MINUTES_INVALID');
+  assert.equal(customerAppPath('aziz-pizza', 'main'), '/aziz-pizza/main');
 });
 
 test('kitchen station: a new name and warn before late', () => {

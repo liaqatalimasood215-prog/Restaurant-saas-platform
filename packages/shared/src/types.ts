@@ -340,6 +340,18 @@ export interface SettingsView {
   stations: { station: KitchenStation; itemCount: number; openTickets: number; chefCount: number }[];
 }
 
+/** Online App page: the switches and the items with their online state. */
+export interface OnlineAppView {
+  onlineOrdersEnabled: boolean;
+  deliveryFee: Paisa;
+  minOrder: Paisa;
+  defaultPrepMinutes: number;
+  /** "/restaurant-slug/branch-slug" on the Customer App */
+  customerPath: string;
+  categories: MenuCategory[];
+  items: MenuItem[];
+}
+
 /** Today's Summary screen: one business day, with the names of the people in it. */
 export interface DaySummaryView {
   /** YYYY-MM-DD */

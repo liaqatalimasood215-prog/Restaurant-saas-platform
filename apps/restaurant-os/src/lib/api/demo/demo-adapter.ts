@@ -10,6 +10,9 @@ import {
   calculateBill,
   canManageStaffAccount,
   checkPin,
+  checkOnlineSettings,
+  customerAppPath,
+  formatPaisa,
   summarizeDay,
   checkBranchSettings,
   checkStation,
@@ -37,6 +40,7 @@ import {
   type ActivationInfo,
   type InviteKind,
   type PinProblem,
+  type OnlineAppView,
   type DaySummaryView,
   type OrderPricing,
   type SettingsView,
@@ -1814,6 +1818,52 @@ export class DemoAdapter implements ApiClient, DemoControls {
     );
   }
 
+  // ── Online App page (Preview 5) ─────────────────────────────────────────────────────────
+
+  getOnlineApp(): Promise<OnlineAppView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'onlineApp.view');
+      const { branch, restaurant } = data;
+      const categories = data.categories.filter((c) => c.isActive).sort((a, b) => a.sort - b.sort);
+      const rank = (categoryId: string) => categories.findIndex((c) => c.id === categoryId);
+      return {
+        onlineOrdersEnabled: branch.onlineOrdersEnabled,
+        deliveryFee: branch.deliveryFee,
+        minOrder: branch.minOrder,
+        defaultPrepMinutes: branch.defaultPrepMinutes,
+        customerPath: customerAppPath(restaurant.slug, branch.slug),
+        categories,
+        items: data.items
+          .filter((i) => !i.archivedAt && rank(i.categoryId) >= 0)
+          .sort((a, b) => rank(a.categoryId) - rank(b.categoryId) || a.sort - b.sort),
+      };
+    });
+  }
+
+  setOnlineOrdersEnabled(enabled: boolean): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        data.branch.onlineOrdersEnabled = enabled;
+      }),
+    );
+  }
+
+  saveOnlineSettings(input: { deliveryFee: number; minOrder: number; defaultPrepMinutes: number }): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        const problem = checkOnlineSettings(input);
+        if (problem) throw new ApiError('VALIDATION', SETTINGS_MESSAGES[problem]);
+        if (!Number.isSafeInteger(input.deliveryFee) || !Number.isSafeInteger(input.minOrder) || input.deliveryFee < 0 || input.minOrder < 0) {
+          throw new ApiError('VALIDATION', SETTINGS_MESSAGES.MONEY_INVALID);
+        }
+        Object.assign(data.branch, input);
+      }),
+    );
+  }
+
   // ── Today's Summary (Preview 5) ─────────────────────────────────────────────────────────
 
   getDaySummary(date: string | null): Promise<DaySummaryView> {
@@ -2403,8 +2453,16 @@ export class DemoAdapter implements ApiClient, DemoControls {
           { menuItemId: item('Cold Drink')?.id ?? '', variantId: null, modifierIds: [], note: '', quantity: 1 },
         ];
         if (count % 2 === 1) drafts.push({ menuItemId: item('Zinger Burger')?.id ?? '', variantId: null, modifierIds: [], note: 'No mayo', quantity: 2 });
+        // Like the server at checkout: only items shown online, and at least the minimum order.
+        for (const draft of drafts) {
+          const offered = data.items.find((i) => i.id === draft.menuItemId);
+          if (offered && !offered.isOnline) throw new ApiError('CONFLICT', `${offered.name} is not available online.`);
+        }
         order.items.push(...drafts.map((draft) => this.priceDraft(data, draft, order, 1)));
         recalculate(order);
+        if (order.totals.itemsSubtotal < data.branch.minOrder) {
+          throw new ApiError('CONFLICT', `The minimum online order is ${formatPaisa(data.branch.minOrder)}.`);
+        }
         data.orders.push(order);
         return order;
       }),
