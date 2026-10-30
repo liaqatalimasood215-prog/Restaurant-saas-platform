@@ -21,7 +21,7 @@ const EXTRA_GRANTS: Partial<Record<Permission, readonly StaffRole[]>> = {
 };
 
 /** Only the Owner, never anybody else (owner decision 2026-10-29). */
-export const OWNER_ONLY_PERMISSIONS: readonly Permission[] = ['staff.manage', 'settings.manage'];
+export const OWNER_ONLY_PERMISSIONS: readonly Permission[] = ['staff.manage', 'settings.manage', 'onlineApp.publish'];
 
 /** Roles whose permissions the Owner can edit. The Owner role always has everything it is allowed. */
 export const EDITABLE_ROLES = ['MANAGER', 'CASHIER', 'WAITER', 'SERVICE_WAITER', 'KITCHEN'] as const satisfies readonly StaffRole[];
@@ -137,7 +137,11 @@ export const PERMISSION_ROWS: readonly PermissionRow[] = [
       EDIT: cell('item.outOfStock', 'Out of stock ON / OFF'),
     },
   },
-  { key: 'onlineApp', label: 'Online App', cells: { VIEW: cell('onlineApp.view', 'Open the Online App page') } },
+  {
+    key: 'onlineApp',
+    label: 'Online App',
+    cells: { VIEW: cell('onlineApp.view', 'Open the Online App page'), APPROVE: cell('onlineApp.publish', 'Publish the website and the Android app') },
+  },
   {
     key: 'staff',
     label: 'Staff Management',

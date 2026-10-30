@@ -70,7 +70,7 @@ Development ports: restaurant-os `3000`, customer `3001`, rider `3002`, api `400
 
 | Page in Restaurant OS | What it does | Separate real app |
 |---|---|---|
-| Online App | Product online ON/OFF, online orders ON/OFF, link, QR code, **live preview of the Customer App**, **Open Full App** button | `apps/customer` |
+| Online App / Website | Tabs Overview, Website, Mobile App (PWA), Android App, Settings; publishing status; product online ON/OFF, online orders ON/OFF, link, QR code, **preview of the Customer App**, **View Website** button | `apps/customer` |
 | Riders | Add/disable riders, assignments, cash to settle, **preview of the Rider App**, **Open Full App** button | `apps/rider` |
 
 These pages manage and preview the real apps; they never replace them. The real apps stay separate
@@ -435,3 +435,6 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-30 | Owner: "first making website, beautiful and UI clean … then rider". Phase 2 (customer website, `apps/customer`) starts before the Phase 1 gate; the Riders page and refunds wait; the Rider App (Phase 3) comes after the website | Active (replaces the Preview 5 order for Riders and refunds) |
 | 2026-10-30 | Owner's website brief: public website frontend only, in its own folder, easy to publish on its own, for mobile, tablet and desktop; backend, real accounts, orders, payments, POS connection and live tracking later; no push or deploy without approval | Active |
 | 2026-10-30 | Moved forward into Phase 2 as DEMO, because the brief asks for a branded website with customer accounts: per-restaurant name and colour (from P7 branding, logo letters only; logo upload stays P7) and customer account screens (from P7; no password or code is checked, real sign-in needs a phone code by SMS, a paid service needing approval). Ordering never needs an account | Active |
+| 2026-10-30 | Owner's Online App / Website brief, steps A–H: Online App becomes the control panel of each restaurant's own branded website, PWA and optional Android app. Each restaurant looks like its own website to customers (not "One website, every restaurant"), from one shared codebase, backend, database, menu, pricing and order system. Website and Android are two separate publishing flows; Publish Website never needs Android. The restaurant buys and owns its domain; a suspended subscription never takes it | Active |
+| 2026-10-30 | Moved forward as DEMO screens only, by that brief: custom domain (real work stays P9) and Android / Google Play publishing (real work stays P11, Publishing Stage B). No real domain, image upload, deployment, Android tooling, signing keys or Google Play without separate approval | Active |
+| 2026-10-30 | Owner approves the inspection report with its four decisions: the website work is committed locally first; Aziz Pizza stays the Restaurant OS demo, LALA Restaurant comes as a sample restaurant on the Online App; Publish, domain and Android are Owner only (permission `onlineApp.publish`), the Manager keeps orders ON/OFF, fee and minimum order; food pictures stay emoji, upload shown as Planned, real photos P7 | Active |

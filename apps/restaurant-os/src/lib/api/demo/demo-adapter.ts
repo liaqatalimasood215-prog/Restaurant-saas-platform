@@ -10,7 +10,9 @@ import {
   calculateBill,
   canManageStaffAccount,
   checkPin,
+  canPublishWebsite,
   checkOnlineSettings,
+  publishedWebsite,
   customerAppPath,
   formatPaisa,
   summarizeDay,
@@ -1833,6 +1835,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         minOrder: branch.minOrder,
         defaultPrepMinutes: branch.defaultPrepMinutes,
         customerPath: customerAppPath(restaurant.slug, branch.slug),
+        publishing: data.onlinePublishing,
         categories,
         items: data.items
           .filter((i) => !i.archivedAt && rank(i.categoryId) >= 0)
@@ -1860,6 +1863,16 @@ export class DemoAdapter implements ApiClient, DemoControls {
           throw new ApiError('VALIDATION', SETTINGS_MESSAGES.MONEY_INVALID);
         }
         Object.assign(data.branch, input);
+      }),
+    );
+  }
+
+  publishWebsite(): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'onlineApp.publish');
+        if (!canPublishWebsite(data.onlinePublishing)) throw new ApiError('CONFLICT', 'There is nothing new to publish.');
+        data.onlinePublishing = publishedWebsite(data.onlinePublishing, nowIso());
       }),
     );
   }

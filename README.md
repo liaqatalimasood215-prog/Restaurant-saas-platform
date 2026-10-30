@@ -16,6 +16,9 @@ Read before changing anything:
 **Phase 2 — Customer website: built, waiting for the owner's review (DEMO / PROTOTYPE).** The owner asked for the
 website first, then the Rider App; Riders page and refunds in Phase 1 wait. See [apps/customer/README.md](apps/customer/README.md).
 
+**Online App / Website rework (owner's brief, 2026-10-30):** step A (inspection) approved, step B (Overview, tabs, status
+header) built, DEMO only. Next steps C–H wait for the owner's approval.
+
 **Phase 1 — Restaurant OS UI prototype: mostly built (DEMO / PROTOTYPE).** Approved by the owner: Preview 1,
 the waiter → kitchen → cashier workflow (2026-10-28), POS / New Bill, Preview 4 (Orders, Online Orders),
 Tables management and the Staff design (2026-10-30).
@@ -66,7 +69,7 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | Settings: restaurant and branch, tax and service charge (with live example), rounding, delivery fee, minimum order, prep time, business day, receipt texts with preview, kitchen stations | DEMO / PROTOTYPE — Preview 5 step 2; Owner only; changes apply to new bills only (each order keeps its own bill settings) |
 | Today's Summary: sales, average bill, cash received, tips, open bills, refunds, tax + service; sales by order type, payments by method, top items, tips per waiter, discounts / voids / refunds / cancellations with who and why; earlier business days | DEMO / PROTOTYPE — Preview 5 step 3; Test A step 7 passes in the walkthrough |
 | Online App: online orders ON/OFF, delivery fee, minimum order, prep time, customer link and QR code, product Online ON/OFF | DEMO / PROTOTYPE — Preview 5 step 4; switches and link NOT CONNECTED to the website until Phase 4 |
-| Online App page: website preview + Open Full App | DEMO / PROTOTYPE — shows the real `apps/customer` with its own sample data |
+| Online App / Website page: tabs (Overview, Website, Mobile App, Android App, Settings), status header, Publish Website apart from Android, website and phone previews, View Website | DEMO / PROTOTYPE — publishing states are demo only, nothing goes online; previews show the real `apps/customer` with its own sample data; domain, PWA and Android tabs show plans and honest states only (PLACEHOLDER until later steps) |
 | Riders page: app preview + Open Full App | PLACEHOLDER — Rider App in Phase 3 |
 | Customer website: home, menu, search, product details, cart, checkout, tracking steps, account screens; two sample brands; phone, tablet, desktop | DEMO / PROTOTYPE — `walkthrough` in `apps/customer` (43 checks) passes on dev and on the production build; orders NOT CONNECTED to Restaurant OS until Phase 4; real sign-in, payment, photos and live tracking not built |
 | Dashboard, Customers, Finance & Reports (P7), Inventory & Suppliers, Payroll (P8), AI Manager (P10) | PLACEHOLDER — Coming Soon |
@@ -121,6 +124,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-30 | Preview 5 step 3 Today's Summary (Reports permission): one business day's sales, payments, tips per waiter, top items (by sales, because kg and pieces cannot be added up), and discounts, voids, refunds and cancellations with who and why. Shared `summarizeDay` | 84 tests (2 new: Test A step 7, open / discount / void / refund / cancel), typecheck, lint, build pass; all seven walkthroughs pass (Test A now steps 1–7; the POS walkthrough checks the "Staff meal" discount in the summary). One POS walkthrough run timed out while the dev server was recompiling and passed on the next runs |
 | 2026-10-30 | Preview 5 step 4 Online App page: orders ON/OFF, delivery fee, minimum order, prep time, customer link and QR code (free browser library `qrcode-generator`), product Online ON/OFF. DEMO customer orders now also refuse items that are not online and orders below the minimum | 85 tests (1 new), typecheck, lint, build pass; all eight walkthroughs pass (new `walkthrough:online-app`); QR picture decoded with jsQR once = same link; no real phone scan |
 | 2026-10-30 | Phase 2 customer website (owner: website first, then rider): `apps/customer` with home, menu, product details, cart, checkout, tracking, account screens, one app with two sample brands. Shared rules in `online-order.ts`. Online App page now previews the website | 88 tests (3 new), typecheck, lint, build pass; website walkthrough 43 checks passes on dev and on the production build; all eight Restaurant OS walkthroughs pass; not tested on a real phone; not pushed, not deployed |
+| 2026-10-30 | Online App / Website rework step B (owner's brief and reference picture): page split into five tabs, status header, three setup cards, website and phone previews, demo Publish Website (Owner only, new permission `onlineApp.publish`), publishing states in `packages/shared/src/online-app.ts`. Existing switches, fee form, link, QR and item list kept, moved into tabs. Demo data version 14 | 93 tests (5 new), typecheck, lint, build pass; `walkthrough:online-app` now checks the website inside the preview frames, on 4 sizes; all eight Restaurant OS walkthroughs and the customer walkthrough pass; not tested on a real phone; not pushed, not deployed |
 
 ## Commands
 

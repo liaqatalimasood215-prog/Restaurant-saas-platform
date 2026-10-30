@@ -49,6 +49,8 @@ export const PERMISSIONS = {
   'tables.manage': ['OWNER', 'MANAGER'],
   /** Menu items, sizes, add-ons, stations; Online App switches (Preview 5) */
   'menu.manage': ['OWNER', 'MANAGER'],
+  /** Publish the website and the Android app, domain and Google Play setup — the Owner only (owner, 2026-10-30) */
+  'onlineApp.publish': ['OWNER'],
   /** See the staff list (read-only for the Manager) */
   'staff.view': ['OWNER', 'MANAGER'],
   /** Add / edit staff, roles, invitations, PIN reset, Enable / Disable — the Owner only (owner, 2026-10-29) */

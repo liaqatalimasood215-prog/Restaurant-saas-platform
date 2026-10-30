@@ -1,4 +1,5 @@
 import {
+  NEW_ONLINE_PUBLISHING,
   NO_TAX,
   rupeesToPaisa,
   type Area,
@@ -14,6 +15,7 @@ import {
   type MenuCategory,
   type MenuItem,
   type ModifierGroup,
+  type OnlinePublishing,
   type Order,
   type Restaurant,
   type RiderCashSettlement,
@@ -25,7 +27,7 @@ import {
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 13;
+export const DEMO_DATA_VERSION = 14;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -39,6 +41,8 @@ export interface DemoData {
   version: number;
   restaurant: Restaurant;
   branch: Branch;
+  /** Online App / Website: demo states only, nothing is really published */
+  onlinePublishing: OnlinePublishing;
   staff: StaffUser[];
   stations: KitchenStation[];
   areas: Area[];
@@ -213,6 +217,7 @@ export function createSeed(): DemoData {
       defaultPrepMinutes: 30,
       managerCanSeeMoneyReports: false,
     },
+    onlinePublishing: { ...NEW_ONLINE_PUBLISHING },
     staff: [
       staff(1, 'Aziz Ahmed', 'OWNER'),
       staff(2, 'Sana Khan', 'MANAGER'),

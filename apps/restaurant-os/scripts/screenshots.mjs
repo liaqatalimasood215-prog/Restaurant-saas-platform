@@ -31,7 +31,7 @@ const SIZES = {
 const SHOTS = [
   { name: '01-desktop-owner-tables', size: 'desktop', role: 'OWNER', path: '/tables' },
   { name: '02-desktop-owner-online-app', size: 'desktop', role: 'OWNER', path: '/online-app' },
-  { name: '03-desktop-owner-online-app-open-full-app', size: 'desktop', role: 'OWNER', path: '/online-app', click: 'button:has-text("Open Full App")' },
+  { name: '03-desktop-owner-online-app-website-tab', size: 'desktop', role: 'OWNER', path: '/online-app', click: '[role="tab"]:has-text("Website")' },
   { name: '04-desktop-owner-riders', size: 'desktop', role: 'OWNER', path: '/riders' },
   { name: '05-desktop-owner-dashboard-coming-soon', size: 'desktop', role: 'OWNER', path: '/dashboard' },
   { name: '06-desktop-owner-profile-menu', size: 'desktop', role: 'OWNER', path: '/tables', click: 'button[aria-label="Profile menu"]' },

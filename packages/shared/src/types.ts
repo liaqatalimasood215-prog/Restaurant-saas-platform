@@ -7,6 +7,7 @@ import type { InviteKind, InviteStatus } from './staff';
 import type { Permission } from './permissions';
 import type { DaySummary } from './reports';
 import type { MenuUnit } from './units';
+import type { OnlinePublishing } from './online-app';
 
 /**
  * Data shapes shared by the API contract (MASTER_PROMPT.md §9). Phase 1 screens get these from the
@@ -400,6 +401,7 @@ export interface OnlineAppView {
   defaultPrepMinutes: number;
   /** "/restaurant-slug/branch-slug" on the Customer App */
   customerPath: string;
+  publishing: OnlinePublishing;
   categories: MenuCategory[];
   items: MenuItem[];
 }

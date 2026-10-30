@@ -369,6 +369,8 @@ export interface ApiClient {
   /** OFF: the server refuses every new customer order. */
   setOnlineOrdersEnabled(enabled: boolean): Promise<void>;
   saveOnlineSettings(input: { deliveryFee: number; minOrder: number; defaultPrepMinutes: number }): Promise<void>;
+  /** Owner only. The website alone; the Android app is a separate flow. Phase 1: a demo state, nothing goes online. */
+  publishWebsite(): Promise<void>;
 
   /** Today's Summary (permission "reports.money"); null = today's business day. */
   getDaySummary(businessDate: string | null): Promise<DaySummaryView>;

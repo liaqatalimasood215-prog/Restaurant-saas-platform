@@ -324,9 +324,15 @@ the daily order number) → **Picked up**.
 ### 5.5 Online App page — Pilot
 
 Product Online ON/OFF, Online orders ON/OFF, delivery fee, minimum order, default prep time,
-customer link, QR code, live preview of the Customer App and an **Open Full App** button. From
-Phase 5, changes show in the Customer App within 2 seconds, and the server enforces them. In
-Phase 1 the preview and the button are PLACEHOLDERS (the Customer App is built in Phase 2).
+customer link, QR code, preview of the Customer App and a **View Website** button. From
+Phase 5, changes show in the Customer App within 2 seconds, and the server enforces them.
+
+Owner's brief (2026-10-30): the page is titled **Online App / Website** and has the tabs Overview, Website,
+Mobile App (PWA), Android App (Play Store) and Settings, with a status header (Live, Draft, Changes Pending,
+Offline, Domain Setup Required, Subscription Suspended) and desktop and phone previews of the real Customer App.
+**Publish Website** and **Publish Online App** are separate flows; the website never needs Android. Menu, products
+and prices stay in the Menu page; this page only controls how they show online. Publishing, domain and Android are
+Owner only. Until separately approved, all of this is DEMO: nothing is deployed, built or sent to Google Play.
 
 ### 5.6 Riders page — Pilot
 
@@ -991,7 +997,7 @@ label demo or unfinished features.
 | Overkill | Microservices, Kubernetes, several databases | One modular backend is enough |
 | Overkill | Fancy chart dashboards and animations before the pilot | Simple numbers and tables first; analytics in P7 |
 | Overkill | Multi-country / multi-currency | Pakistan first |
-| Overkill | Custom domain per restaurant | When paying customers ask |
+| Later | Real custom domain per restaurant | DEMO screens from 2026-10-30 (owner's brief); the real connection stays P9, with approval |
 | Unrelated | Social feed, food blog, recipe videos, games | Not the core problem |
 | Unrelated | Full double-entry accounting | Simple expenses and payroll come in P8 |
 
@@ -1187,3 +1193,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-30 | §5.7 Today's Summary built in Preview 5 (permission "Reports"): sales of paid bills, by order type and payment method, cash received, tips per waiter (the order's waiter), refunds apart from payments, open bills, top items by sales, discounts / voids / refunds / cancellations with who and why; earlier business days selectable. Test A step 7 is automated. |
 | 2026-10-30 | §5.5 Online App page built in Preview 5: orders ON/OFF, delivery fee, minimum order, prep time, link, QR code, product Online ON/OFF; link and QR NOT CONNECTED and preview PLACEHOLDER until Phase 2. |
 | 2026-10-30 | §7.2 Customer website built as a DEMO (Phase 2, owner: website before the Riders page, refunds and Rider App): two sample brands from one app, menu, product details, cart, checkout, tracking, account screens. Not connected to Restaurant OS until Phase 4. §5.5 Online App page shows the website preview and Open Full App. Branding and customer account screens moved forward as DEMO (§7.6). |
+| 2026-10-30 | §5.5 Online App / Website rework (owner's brief): five tabs, status header, previews, two separate publishing flows; custom domain and Android moved forward as DEMO screens only; §14 custom domain row changed from Overkill to Later. Real work stays P9 and P11 (§7.6). |
