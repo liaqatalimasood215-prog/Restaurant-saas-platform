@@ -37,6 +37,7 @@ export function MenuScreen() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(ALL);
   const [stock, setStock] = useState<StockFilter>('ALL');
+  const [size, setSize] = useState(ALL);
   const [editing, setEditing] = useState<MenuItem | 'new' | null>(null);
   const [removing, setRemoving] = useState<MenuItem | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,12 +77,24 @@ export function MenuScreen() {
   const categoryOf = (id: string) => data.categories.find((c) => c.category.id === id)?.category;
   const stationName = (id: string) => data.stations.find((s) => s.id === id)?.name ?? '';
   const q = query.trim().toLowerCase();
-  const visible = data.items.filter(
+  // A category removed in another tab falls back to the whole menu.
+  const selected = categoryOf(category) ?? null;
+  const inCategory = selected ? data.items.filter((i) => i.categoryId === selected.id) : data.items;
+  const sizes = [...new Set(inCategory.flatMap((i) => i.variants.map((v) => v.name)))];
+  const visible = inCategory.filter(
     (i) =>
-      (category === ALL || i.categoryId === category) &&
+      (size === ALL || !sizes.includes(size) || i.variants.some((v) => v.name === size)) &&
       (stock === 'ALL' || (stock === 'AVAILABLE' && i.isAvailable) || (stock === 'OUT' && !i.isAvailable) || (stock === 'NOT_ONLINE' && !i.isOnline)) &&
       (!q || i.name.toLowerCase().includes(q) || i.description.toLowerCase().includes(q)),
   );
+  // Tapping a card shows everything in it, whatever was searched before.
+  const chooseCategory = (id: string) => {
+    setCategory(id);
+    setQuery('');
+    setStock('ALL');
+    setSize(ALL);
+  };
+  const itemCount = (n: number) => (n === 1 ? t('menuSetup.oneItem') : t('menuSetup.manyItems', { n }));
   // Items in category order, then their own order.
   const categoryRank = (id: string) => data.categories.findIndex((c) => c.category.id === id);
   visible.sort((a, b) => categoryRank(a.categoryId) - categoryRank(b.categoryId) || a.sort - b.sort);
@@ -99,6 +112,29 @@ export function MenuScreen() {
     </button>
   );
   const select = 'min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700';
+  const categoryCard = (id: string, name: string, count: number, hidden = false) => (
+    <button
+      key={id}
+      type="button"
+      aria-pressed={(selected?.id ?? ALL) === id}
+      onClick={() => chooseCategory(id)}
+      data-menu-category={name}
+      className={cn(
+        'flex min-h-20 w-40 shrink-0 items-center gap-2 rounded-2xl border-2 bg-white p-2.5 text-left shadow-sm transition-colors sm:w-auto',
+        (selected?.id ?? ALL) === id ? 'border-brand bg-brand-soft' : 'border-transparent hover:border-slate-300',
+        hidden && 'opacity-70',
+      )}
+    >
+      <ProductArt name={name} categoryName={name} className="size-12 shrink-0 rounded-full" emojiClassName="text-2xl" />
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-2 font-extrabold leading-tight text-slate-900">{name}</span>
+        <span className="block truncate text-xs font-semibold text-slate-500">
+          {itemCount(count)}
+          {hidden && ` · ${t('menuSetup.hidden')}`}
+        </span>
+      </span>
+    </button>
+  );
 
   return (
     <>
@@ -112,27 +148,41 @@ export function MenuScreen() {
       {tab === 'categories' && <CategoriesPanel setup={data} canManage={canManage} />}
       {tab === 'addons' && <AddonGroupsPanel setup={data} canManage={canManage} />}
       {tab === 'items' && (
+        <>
+        <div role="group" aria-label={t('menuSetup.categoryCards')} className="mb-4 flex gap-3 overflow-x-auto p-0.5 pb-1.5 sm:grid sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] sm:overflow-visible">
+          {categoryCard(ALL, t('menuSetup.allMenu'), data.items.length)}
+          {data.categories.map(({ category: c }) => categoryCard(c.id, c.name, data.items.filter((i) => i.categoryId === c.id).length, !c.isActive))}
+        </div>
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-3">
+            <div className="mr-2 flex min-w-40 items-center gap-3">
+              <ProductArt name={selected?.name ?? t('menuSetup.allMenu')} categoryName={selected?.name ?? ''} className="size-11 shrink-0 rounded-full" emojiClassName="text-2xl" />
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-extrabold text-slate-900" data-menu-heading>{selected?.name ?? t('menuSetup.allMenu')}</h2>
+                <p className="text-xs font-semibold text-slate-500">{itemCount(inCategory.length)}</p>
+              </div>
+            </div>
             <label className="relative min-w-56 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-slate-400" aria-hidden />
               <input
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('menuSetup.search')}
-                aria-label={t('menuSetup.search')}
+                placeholder={selected ? t('menuSetup.searchIn', { name: selected.name }) : t('menuSetup.search')}
+                aria-label={selected ? t('menuSetup.searchIn', { name: selected.name }) : t('menuSetup.search')}
                 className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm"
               />
             </label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label={t('menuSetup.item.category')} className={select}>
-              <option value={ALL}>{t('menuSetup.allCategories')}</option>
-              {data.categories.map(({ category: c }) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            {sizes.length > 0 && (
+              <select value={sizes.includes(size) ? size : ALL} onChange={(e) => setSize(e.target.value)} aria-label={t('menuSetup.sizeFilter')} className={select}>
+                <option value={ALL}>{t('menuSetup.allSizes')}</option>
+                {sizes.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            )}
             <select value={stock} onChange={(e) => setStock(e.target.value as StockFilter)} aria-label={t('menuSetup.stockFilter')} className={select}>
               {(['ALL', 'AVAILABLE', 'OUT', 'NOT_ONLINE'] as const).map((s) => (
                 <option key={s} value={s}>
@@ -140,7 +190,7 @@ export function MenuScreen() {
                 </option>
               ))}
             </select>
-            <span className="ml-auto text-sm font-semibold text-slate-500">{t('menuSetup.count', { n: visible.length, of: data.items.length })}</span>
+            <span className="ml-auto text-sm font-semibold text-slate-500" data-menu-count>{t('menuSetup.count', { n: visible.length, of: inCategory.length })}</span>
           </div>
           {visible.length === 0 ? (
             <div className="p-4">
@@ -151,9 +201,9 @@ export function MenuScreen() {
               {visible.map((item) => {
                 const cat = categoryOf(item.categoryId);
                 return (
-                  <li key={item.id} className={cn('flex flex-wrap items-center gap-3 px-3 py-2.5', !cat?.isActive && 'bg-slate-50/70')} data-menu-item={item.name}>
+                  <li key={item.id} className={cn('flex flex-wrap items-center gap-3 px-3 py-2.5 lg:grid lg:grid-cols-[3.5rem_minmax(0,1fr)_minmax(0,1.15fr)_10.5rem_5.75rem]', !cat?.isActive && 'bg-slate-50/70')} data-menu-item={item.name}>
                     <ProductArt name={item.name} categoryName={cat?.name ?? ''} className="size-14 shrink-0 rounded-xl" emojiClassName="text-3xl" />
-                    <div className="min-w-48 flex-1">
+                    <div className="min-w-48 flex-1 lg:min-w-0">
                       <p className="font-bold text-slate-900">
                         {canManage ? (
                           <button type="button" onClick={() => setEditing(item)} className="text-left hover:text-brand hover:underline">
@@ -164,13 +214,13 @@ export function MenuScreen() {
                         )}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {cat?.name}
-                        {cat && !cat.isActive && ` (${t('menuSetup.hidden')})`} · {stationName(item.stationId)}
+                        {!selected && `${cat?.name ?? ''}${cat && !cat.isActive ? ` (${t('menuSetup.hidden')})` : ''} · `}
+                        {stationName(item.stationId)}
                         {item.unit !== 'piece' && ` · ${t('menuSetup.perUnit', { unit: t(`menuSetup.units.${item.unit}`) })}`}
                       </p>
                       {item.description && <p className="truncate text-xs text-slate-500">{item.description}</p>}
                     </div>
-                    <div className="min-w-40 text-sm font-extrabold text-slate-900">
+                    <div className="min-w-40 text-sm font-extrabold text-slate-900 lg:min-w-0">
                       {priceText(item)}
                       {item.modifierGroupIds.length > 0 && (
                         <p className="text-xs font-semibold text-slate-500">
@@ -204,6 +254,7 @@ export function MenuScreen() {
             </ul>
           )}
         </Card>
+        </>
       )}
       <p className="mt-3 text-xs text-slate-500">{t('menuSetup.note')}</p>
 
@@ -211,7 +262,7 @@ export function MenuScreen() {
         <MenuItemDialog
           setup={data}
           item={editing === 'new' ? null : editing}
-          defaultCategoryId={category === ALL ? null : category}
+          defaultCategoryId={selected?.id ?? null}
           canStock={canStock}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {

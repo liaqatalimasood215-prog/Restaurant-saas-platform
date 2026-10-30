@@ -624,7 +624,13 @@ export const en = {
   menuSetup: {
     description: 'Categories, items, prices, sizes and add-ons. Changes reach POS, Waiter Orders and the kitchen at once; old bills never change.',
     search: 'Search items',
-    allCategories: 'All categories',
+    searchIn: 'Search in {name}',
+    categoryCards: 'Menu categories',
+    allMenu: 'All Menu',
+    oneItem: '1 item',
+    manyItems: '{n} items',
+    sizeFilter: 'Size',
+    allSizes: 'All sizes',
     stockFilter: 'Show',
     stock: {
       ALL: 'All items',
