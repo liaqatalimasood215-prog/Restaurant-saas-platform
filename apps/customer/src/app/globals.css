@@ -1,0 +1,43 @@
+@import 'tailwindcss';
+
+/*
+ * One website for all restaurants: the brand colour comes from the restaurant's data (--store-primary is set
+ * on the store's root element), so "brand" classes repaint per restaurant without copying the app.
+ */
+:root {
+  --store-primary: #e31e24;
+}
+
+@theme inline {
+  --color-brand: var(--store-primary);
+  --color-brand-dark: color-mix(in srgb, var(--store-primary) 80%, black);
+  --color-brand-soft: color-mix(in srgb, var(--store-primary) 9%, white);
+  --color-brand-line: color-mix(in srgb, var(--store-primary) 28%, white);
+  --color-page: #faf8f5;
+  --font-sans: var(--font-store), ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-page);
+  color: #1c1917;
+}
+
+/* Category sections stop below the sticky header and category bar. */
+.menu-section {
+  scroll-margin-top: 9rem;
+}
+
+dialog::backdrop {
+  background: rgb(28 25 23 / 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

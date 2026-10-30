@@ -1,13 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Copy, QrCode, Search, Truck, Wifi, WifiOff, UtensilsCrossed } from 'lucide-react';
+import { Copy, ExternalLink, QrCode, Search, Truck, Wifi, WifiOff, UtensilsCrossed } from 'lucide-react';
 import qrcode from 'qrcode-generator';
 import { MAX_PREP_MINUTES, checkOnlineSettings, paisaToInput, parseRupees, type OnlineAppView } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardBody } from '@/components/ui/card';
+import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/toast';
@@ -16,17 +16,16 @@ import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
-import { AppPreviewCard } from '../app-preview-screen';
 import { priceText } from '../menu/menu-parts';
 import { ProductArt } from '../pos/product-art';
 
-/** The Customer App's development address (PROJECT_RULES.md §3); the real domain comes with hosting. */
+/** The customer website's development address (PROJECT_RULES.md §3); the real domain comes with hosting. */
 const CUSTOMER_APP_ORIGIN = 'http://localhost:3001';
 
 /**
  * Online App page (Preview 5, MASTER_PROMPT.md §5.5): online orders ON/OFF, delivery fee, minimum order,
- * preparation time, the customer link and QR code, and which items are online. The Customer App preview and
- * Open Full App stay PLACEHOLDERS until Phase 2.
+ * preparation time, the customer link and QR code, and which items are online. The website preview shows the
+ * separate app in apps/customer, which keeps its own sample data until the backend joins them (Phase 4).
  */
 export function OnlineAppScreen() {
   const { allowed } = useSession();
@@ -84,7 +83,7 @@ export function OnlineAppScreen() {
           <ItemsCard view={view} canManage={canManage} busy={busy} onOnline={(id, on) => void run(() => getApi().setItemOnline(id, on))} />
         </div>
         <div className="space-y-4 self-start">
-          <AppPreviewCard app="customer" />
+          <WebsitePreviewCard path={view.customerPath} />
         </div>
       </div>
     </>
@@ -163,6 +162,29 @@ function TermsCard({ view, canManage }: { view: OnlineAppView; canManage: boolea
             </Button>
           </div>
         )}
+      </CardBody>
+    </Card>
+  );
+}
+
+/** The real website inside a phone shape, and a button that opens it in full (PROJECT_RULES.md §3). */
+function WebsitePreviewCard({ path }: { path: string }) {
+  const url = `${CUSTOMER_APP_ORIGIN}${path}`;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('onlineApp.previewTitle')}</CardTitle>
+        <Badge tone="amber">{t('onlineApp.linkStatus')}</Badge>
+      </CardHeader>
+      <CardBody className="flex flex-col items-center gap-3">
+        <div className="h-[504px] w-[273px] overflow-hidden rounded-[2rem] border-4 border-slate-800 bg-white">
+          <iframe src={url} title={t('onlineApp.previewFrame')} loading="lazy" className="h-[720px] w-[390px] origin-top-left scale-[0.7] border-0" />
+        </div>
+        <p className="text-xs text-slate-500">{t('onlineApp.previewHint')}</p>
+        <a href={url} target="_blank" rel="noopener" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-4 font-bold text-slate-800 hover:bg-slate-50">
+          <ExternalLink className="size-5" aria-hidden />
+          {t('onlineApp.openFullApp')}
+        </a>
       </CardBody>
     </Card>
   );

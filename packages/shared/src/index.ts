@@ -18,3 +18,4 @@ export * from './access';
 export * from './menu';
 export * from './settings';
 export * from './reports';
+export * from './online-order';

@@ -4,8 +4,14 @@
     {
       "name": "restaurant-os",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeArgs": ["--filter", "@restaurant-saas/restaurant-os", "dev"],
       "port": 3000
+    },
+    {
+      "name": "customer",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@restaurant-saas/customer", "dev"],
+      "port": 3001
     }
   ]
 }

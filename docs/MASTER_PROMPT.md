@@ -551,7 +551,7 @@ database — never a copied application per restaurant.
 
 | What | Phase |
 |---|---|
-| Restaurant name, logo, brand colours, website title, contact details, opening hours | P7 (branding), stored per restaurant in the one database |
+| Restaurant name, logo, brand colours, website title, contact details, opening hours | P7 (branding), stored per restaurant in the one database; name, colour and logo letters shown as DEMO on the customer website from P2 (owner, 2026-10-30) |
 | PWA name and icons per restaurant | P7, from the same Customer App deployment (`<domain>/<restaurant-slug>/<branch-slug>`) |
 | Custom domain per restaurant (e.g. `azizpizza.com` — an example, not a registered site) | P9, optional, mapped to the same deployment |
 | Menu and prices | Already per restaurant (Pilot) |
@@ -641,7 +641,7 @@ never deleted.
 | `held_bills` | type, discount (JSON), table_id, guests, customer copies, note, items (JSON drafts), held_by, held_at — POS bills on hold, not orders | Pilot |
 | `waiter_calls` | table_id (null = counter call), called_by, called_at — POS "Call Waiter"; the table's waiter is alerted for 15 minutes | Pilot |
 | `rider_cash_settlements` | rider_id, amount, order ids, settled_by | Pilot |
-| Shifts, printers, customer accounts and addresses | — | P7 |
+| Shifts, printers, customer accounts and addresses (account screens already DEMO in P2, owner 2026-10-30) | — | P7 |
 | Payroll: salary settings, attendance, advances, payroll runs | — | P8 |
 | Inventory and purchasing tables | `docs/AI_MANAGER_PLAN.md` §3 | P8 |
 | `platform_admins`, `subscription_plans`, `restaurant_subscriptions`, `platform_invoices`, `platform_payments` | — | P9 |
@@ -1186,3 +1186,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-30 | §7.1 Settings built in Preview 5 (Owner only): restaurant and branch, tax and service charge, rounding, delivery fee, minimum order, prep time, business day, receipt texts, kitchen stations. §8: every order keeps the bill settings it was made with (`orders.pricing`: tax settings, service charge, rounding, delivery fee) — a Settings change affects new bills only. |
 | 2026-10-30 | §5.7 Today's Summary built in Preview 5 (permission "Reports"): sales of paid bills, by order type and payment method, cash received, tips per waiter (the order's waiter), refunds apart from payments, open bills, top items by sales, discounts / voids / refunds / cancellations with who and why; earlier business days selectable. Test A step 7 is automated. |
 | 2026-10-30 | §5.5 Online App page built in Preview 5: orders ON/OFF, delivery fee, minimum order, prep time, link, QR code, product Online ON/OFF; link and QR NOT CONNECTED and preview PLACEHOLDER until Phase 2. |
+| 2026-10-30 | §7.2 Customer website built as a DEMO (Phase 2, owner: website before the Riders page, refunds and Rider App): two sample brands from one app, menu, product details, cart, checkout, tracking, account screens. Not connected to Restaurant OS until Phase 4. §5.5 Online App page shows the website preview and Open Full App. Branding and customer account screens moved forward as DEMO (§7.6). |

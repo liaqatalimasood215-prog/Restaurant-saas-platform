@@ -5,7 +5,7 @@
 > mein sab se pehle likhein: **"PROGRESS.md aur CLAUDE.md padho, phir wahin se jaari rakho."**
 > Naya project mat banana, code mat badalna jab tak kaam na diya jaye.
 
-**Last updated:** 2026-10-29 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
+**Last updated:** 2026-10-30 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
 everything in very easy Roman Urdu, code and documents in English)
 
 ---
@@ -18,7 +18,7 @@ everything in very easy Roman Urdu, code and documents in English)
    project. Do not create a new project."*
 3. Claude reads, in this order: `CLAUDE.md` (loads `PROJECT_RULES.md`) → this file → `README.md`
    (status table + progress log) → `docs/MASTER_PROMPT.md` only for the sections the task needs.
-4. Start the preview: `.claude/launch.json` already has the `restaurant-os` server (`pnpm dev`, port 3000).
+4. Start the preview: `.claude/launch.json` has `restaurant-os` (port 3000) and `customer` (port 3001). `pnpm dev` starts both.
 5. Before any new work run `pnpm install`, `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build` (see §8)
    to confirm the starting point is green.
 
@@ -62,7 +62,8 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | POS / New Bill (rebuilt many times at the owner's request) | **Approved** 2026-10-30 |
 | Tables management (Manage Areas, Add Table, Cleaning, Out of service — owner request 2026-10-29) | **Approved** 2026-10-30 (Cleaning stays manual — owner) |
 | Staff upgrade + redesign (Owner-only, activation links, PIN, Deactivate ends sessions, employee list, 3-step wizard, Role Permissions — owner requests 2026-10-29) | **Approved** 2026-10-30 (DEMO frontend); backend parts wait for Phase 4–6 |
-| Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Started** 2026-10-30 ("shuru karo"). Steps 1 **Menu**, 2 **Settings**, 3 **Today's Summary** and 4 **Online App: built**; next Riders, then refunds |
+| Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Started** 2026-10-30 ("shuru karo"). Steps 1 **Menu**, 2 **Settings**, 3 **Today's Summary** and 4 **Online App: built**; Riders and refunds **paused** (owner: website first) |
+| Phase 2 customer website (`apps/customer`) | **Built, waiting for the owner's review** 2026-10-30 (owner: "first making website … then rider") |
 
 ## 4. What is built (all DEMO / PROTOTYPE unless noted)
 
@@ -72,9 +73,9 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 ### 4.1 Foundation
 
 - Monorepo: pnpm 10.28 workspaces + Turborepo; Next.js 16 (App Router, Turbopack), React 19, Tailwind 4,
-  TypeScript 6, ESLint 9, lucide-react. Apps: `apps/restaurant-os`. Packages: `packages/shared`.
-  Not started: `apps/customer`, `apps/rider`, `apps/admin`, `backend/api` (only an unvalidated Prisma draft).
-- `packages/shared` (NOT CONNECTED — **57 unit tests pass**): 7 roles (OWNER, MANAGER, CASHIER, WAITER =
+  TypeScript 6, ESLint 9, lucide-react. Apps: `apps/restaurant-os`, `apps/customer`. Packages: `packages/shared`.
+  Not started: `apps/rider`, `apps/admin`, `backend/api` (only an unvalidated Prisma draft).
+- `packages/shared` (NOT CONNECTED — **88 unit tests pass**): 7 roles (OWNER, MANAGER, CASHIER, WAITER =
   Super Waiter, SERVICE_WAITER, KITCHEN, RIDER) and the permission matrix, sidebar sections, order
   engine (dine-in, delivery, takeaway), kitchen tickets (station split, auto-ready, undo within 2 min),
   pricing engine (paisa + basis points: discount, service charge, tax, delivery fee, rounding), payments,
@@ -103,8 +104,20 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 | Menu | Items tab (picture, category, station, unit, one price or sizes, add-ons, In stock and Online switches, search and filters, edit, delete = archive when ever ordered), Categories tab (add, rename, reorder, hide / show, delete when empty), Add-ons tab (groups with "choose min–max" and add-ons, free or priced). Changes reach POS, Waiter Orders and the kitchen at once; old bills keep their prices. Rules: `packages/shared/src/menu.ts`; screens: `apps/restaurant-os/src/screens/menu/` |
 | Settings | Owner only: restaurant and branch (name, phone, address), tax rate and switches (prices include tax, tax on service / delivery), dine-in service charge, round to rupee, live example bill, delivery fee, minimum order, usual prep time, business day start, receipt top / bottom text with preview, kitchen stations (add, edit warn / late minutes and "ready at once", reorder, remove only when unused). **Every order keeps the bill settings it was made with** (`order.pricing`): a Settings change affects new bills only. Rules: `packages/shared/src/settings.ts` |
 | Today's Summary | One business day (pick earlier days): sales of paid bills (big number), average bill, cash received (and cash still with riders), tips, open bills and amount due, refunds, tax + service; sales by order type, payments by method, top items by sales, tips per waiter, discounts / voids / refunds / cancellations with who and why. Permission "Reports" (Owner; Manager when Role Permissions allow). Calculation: `packages/shared/src/reports.ts` (Test A step 7 unit test) |
-| Online App | Online orders ON/OFF, delivery fee, minimum order, usual prep time (same values as Settings), customer link and QR code (NOT CONNECTED until Phase 2 + hosting; dev link `http://localhost:3001/aziz-pizza/main`), product Online ON/OFF with search. The DEMO customer buttons on Online Orders obey the switches and the minimum order. Customer App preview and Open Full App stay PLACEHOLDER. Free QR library `qrcode-generator` (drawn in the browser) |
+| Online App | Online orders ON/OFF, delivery fee, minimum order, usual prep time (same values as Settings), customer link and QR code (NOT CONNECTED: works on this computer only until hosting; dev link `http://localhost:3001/aziz-pizza/main`), product Online ON/OFF with search. The DEMO customer buttons on Online Orders obey the switches and the minimum order. Website preview in a phone shape and Open Full App show the real `apps/customer`, which keeps its own sample data until Phase 4. Free QR library `qrcode-generator` (drawn in the browser) |
 | Placeholders | Riders (Preview 5); Dashboard, Customers, Finance & Reports, Inventory, Payroll, AI Manager (Coming Soon) |
+
+### 4.3 Customer website (`apps/customer`, Phase 2, DEMO / PROTOTYPE)
+
+One Next.js app on port 3001 serves every restaurant at `/<restaurant>/<branch>`; name, colour, logo letters and
+menu are data (`StoreBrand`, `--store-primary`). Sample brands: `aziz-pizza/main` (red) and `demo-karahi/main`
+(teal). Screens: start page, home + menu (Delivery / Pickup, search, category chips, sold out, hidden items never
+shown, side cart on desktop, cart bar on phones), product details (size, add-ons, note, quantity), cart (edit,
+minimum order), checkout (details, address, cash only), tracking (private link, steps, DEMO buttons standing in for
+the restaurant, order again), account (DEMO sign-in, details, addresses, orders on this device; signing out forgets
+the details). Same pattern as Restaurant OS: `getApi()`, DemoAdapter in `src/lib/api/demo` (localStorage
+`lala-store-demo-v1`), text in `src/i18n/en.ts`, rules in `packages/shared/src/online-order.ts`. Run and publish
+notes: `apps/customer/README.md`. **Not connected to Restaurant OS** (separate sample data) until Phase 4.
 
 DEMO accounts (restaurant "Aziz Pizza — DEMO"): Aziz Ahmed 101 OWNER · Sana Khan 102 MANAGER · Bilal
 Hussain 103 CASHIER · Imran Ali 104 Super WAITER · Usman Tariq 105 SERVICE_WAITER (T1–T8) · Kashif Raza
@@ -162,8 +175,12 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 
 ## 7. Test status (last run, all green)
 
-- `pnpm test` — 85 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-29, Staff
-  upgrade).
+- `pnpm test` — 88 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-30, customer
+  website; the build covers both apps).
+- `pnpm --filter @restaurant-saas/customer walkthrough` — 43 checks on phone, tablet and desktop sizes, on the dev
+  server and on the production build (`CUSTOMER_URL=http://localhost:3011`): delivery and pickup orders, minimum
+  order, sold out, hidden item, double tap makes one order, tracking steps, reject, not taking orders, account,
+  second brand, wrong link, no sideways scroll. Screenshots in `screenshots/customer`.
 - Automated walkthroughs (Edge through `playwright-core`, while `pnpm dev` runs), all pass:
   - `pnpm --filter @restaurant-saas/restaurant-os walkthrough` — waiter → kitchen → cashier workflow, Test A
     steps 1–7 (step 7 = Today's Summary: Rs. 5,900 cash, Rs. 6,000 received, Rs. 100 tip to the waiter), permission checks.
@@ -187,7 +204,7 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
   - `... walkthrough:settings` — tax 60 % refused, 16 % + 5 % saved (example Rs. 1,210), the running T1 bill
     keeps its old settings (Rs. 250) while a new T2 bill uses the new ones (Rs. 151), branch / receipt / business
     day, kitchen stations (times checked, in-use station locked), Manager "No access".
-  - `... walkthrough:online-app` — link copied, orders OFF refuses a DEMO customer order, product OFF refuses it, bad fee and minimum order refused, fee reaches new orders and Settings, PLACEHOLDER preview, Manager may change, Cashier "No access". The QR picture was decoded once with a separate tool (jsQR) and gave the same link; a real phone scan is not tested.
+  - `... walkthrough:online-app` — link copied, orders OFF refuses a DEMO customer order, product OFF refuses it, bad fee and minimum order refused, fee reaches new orders and Settings, website preview link, Manager may change, Cashier "No access". The QR picture was decoded once with a separate tool (jsQR) and gave the same link; a real phone scan is not tested.
 - Screenshots go to `screenshots/` (git-ignored). `... screenshots` retakes the standard set.
 - **Not verified:** the actual spoken voice (only the text handed to the speech engine is tested); real
   phones/tablets (sync is DEMO); PWA install on a phone (needs HTTPS hosting = owner approval); no test of
@@ -199,8 +216,8 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 
 ```bash
 pnpm install
-pnpm dev                                   # Restaurant OS on http://localhost:3000
-pnpm test                                  # shared rules (57 unit tests)
+pnpm dev                                   # Restaurant OS on http://localhost:3000, website on :3001
+pnpm test                                  # shared rules (88 unit tests)
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -208,6 +225,7 @@ pnpm --filter @restaurant-saas/restaurant-os walkthrough          # needs pnpm d
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:online
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:pos
 pnpm --filter @restaurant-saas/restaurant-os screenshots
+pnpm --filter @restaurant-saas/customer walkthrough               # customer website
 ```
 
 Working notes that saved time: use the Edit tool for multi-line code changes (long shell here-docs with
@@ -216,6 +234,17 @@ walkthrough scripts clear localStorage themselves; the POS bill panel remounts w
 changes (state that must survive, such as `payNow`, lives in the draft, `screens/pos/draft.ts`).
 
 ## 9. Pending tasks and next steps (in this order)
+
+**Now (owner, 2026-10-30): website first, then rider.** The customer website is built; next:
+
+- A. Owner reviews the website and approves it or asks for changes (Phase 2 gate).
+- B. Rider App (Phase 3) after his "shuru karo". First ask: the owner said "rider sign up", but the decision log says
+  riders are created by the owner with no public signup. Recommended: keep owner-created riders, or let a rider
+  apply and the owner approve. Also decide rider Online / Offline (§10).
+- C. The paused Phase 1 items below (Riders page, refunds, Phase 1 gate) when he says so.
+- The website brief he pasted was cut off at the top: items 1–8 may hold more wishes; ask him to resend if they matter.
+
+Older list, kept for the paused items:
 
 1. Done 2026-10-30: the owner approved POS, Preview 4, Tables management and the Staff design. **Preview 5
    waits for the owner's "shuru karo"** (plan shown to him on 2026-10-30).

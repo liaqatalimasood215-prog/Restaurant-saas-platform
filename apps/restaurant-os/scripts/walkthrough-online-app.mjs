@@ -1,6 +1,6 @@
 // Online App walkthrough (Preview 5): online orders ON/OFF is obeyed, product Online ON/OFF, delivery fee /
-// minimum order / preparation time, customer link and QR code, PLACEHOLDER preview, who may change it.
-// Customer orders are the labelled DEMO buttons on Online Orders until the Customer App exists (Phase 2).
+// minimum order / preparation time, customer link and QR code, website preview, who may change it.
+// Customer orders here are the labelled DEMO buttons on Online Orders until the backend joins the website (Phase 4).
 // Usage: start the app (pnpm dev), then: pnpm --filter @restaurant-saas/restaurant-os walkthrough:online-app
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -109,12 +109,11 @@ assert.equal(await settings.getByLabel('Usual preparation time').inputValue(), '
 await settings.close();
 ok('bad fee refused; minimum Rs. 5,000 refuses the order; fee Rs. 200: Rs. 1,875 of food + Rs. 200 = Rs. 2,075 on a new order; Settings shows the same values');
 
-console.log('5. Customer App preview is a PLACEHOLDER');
+console.log('5. Website preview and Open Full App');
 await owner.bringToFront();
-await owner.getByRole('button', { name: /Open Full App/ }).click();
-await see(owner, 'Customer App — not built yet');
-await owner.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
-ok('Open Full App says the Customer App is not built yet');
+assert.equal(await owner.getByRole('link', { name: 'Open Full App' }).getAttribute('href'), LINK);
+assert.equal(await owner.getByTitle('Customer website preview').getAttribute('src'), LINK);
+ok('Preview and Open Full App point to the website');
 
 console.log('6. Who may use the page');
 const manager = await openAs(USER.manager, '/online-app', DESKTOP);
@@ -130,4 +129,4 @@ await see(phone, 'Taking online orders');
 await shot(phone, '02-phone-owner-online-app');
 
 await browser.close();
-console.log('Online App walkthrough passed: orders ON/OFF, product ON/OFF, fee / minimum / prep time, link and QR, PLACEHOLDER preview, permissions.');
+console.log('Online App walkthrough passed: orders ON/OFF, product ON/OFF, fee / minimum / prep time, link and QR, website preview, permissions.');

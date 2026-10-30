@@ -16,7 +16,7 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - `docs/AI_MANAGER_PLAN.md` — only for AI Manager work (Phase 10).
 - `README.md` — status of every feature and the progress log. Update it after every step.
 
-## Current stage (2026-10-29)
+## Current stage (2026-10-30)
 
 - Phase 0 approved by the owner on 2026-10-27.
 - **Phase 1 — Restaurant OS UI prototype** in progress on branch `phase-1/restaurant-os-ui`
@@ -24,17 +24,20 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - **Built (DEMO / PROTOTYPE):** layout and sidebar, DEMO login, Tables, Waiter Orders (Super + Service
   Waiter), Kitchen / KDS, Staff, Online Orders, Orders, installable PWA, notifications (message, beep,
   vibration), the full **POS / New Bill** (see below) and **Tables management** (Manage Areas, Add Table,
-  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 85 unit tests
+  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 88 unit tests
   and the eight walkthroughs (`walkthrough`, `walkthrough:online`, `walkthrough:pos`, `walkthrough:tables`,
   `walkthrough:staff`, `walkthrough:menu`, `walkthrough:settings`, `walkthrough:online-app`) pass.
 - **Approved by the owner:** documents, Phase 1 plan, Preview 1, the waiter → kitchen → cashier workflow,
   and on 2026-10-30 the final POS, Preview 4 (Online Orders, Orders), Tables management and the Staff design.
 - **Preview 5 started** 2026-10-30. Steps 1 **Menu**, 2 **Settings**, 3 **Today's Summary** and 4 **Online App** built (`walkthrough:menu`,
-  `walkthrough:settings`, `walkthrough:online-app`; Test A step 7 in `walkthrough`); next Riders, then refunds. Every order keeps its own bill
+  `walkthrough:settings`, `walkthrough:online-app`; Test A step 7 in `walkthrough`); Riders and refunds are paused. Every order keeps its own bill
   settings (`order.pricing`): Settings changes affect new bills only.
-- **Next (only after approval and "shuru karo"):** Preview 5 — Menu, Online App, Riders, Today's Summary,
-  Settings; then refunds. Details and open questions: `PROGRESS.md` §9–§10.
-- Customer App (Phase 2) and Rider App (Phase 3) stay PLACEHOLDERS inside Restaurant OS.
+- **Phase 2 customer website built, waiting for the owner's review** (owner, 2026-10-30: "first website, then rider"):
+  `apps/customer`, port 3001, DEMO, not connected to Restaurant OS until Phase 4; `pnpm --filter @restaurant-saas/customer
+  walkthrough`. Run and publish notes: `apps/customer/README.md`.
+- **Next (only after approval and "shuru karo"):** Rider App (Phase 3). The Riders page and refunds in Phase 1 are paused.
+  Details and open questions: `PROGRESS.md` §9–§10.
+- The Online App page previews the real customer website; the Rider App (Phase 3) stays a PLACEHOLDER inside Restaurant OS.
 - Never start a phase until the owner says "shuru karo" or approves it. Never push, deploy or
   connect a paid service without the owner's approval.
 

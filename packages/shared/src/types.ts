@@ -340,6 +340,58 @@ export interface SettingsView {
   stations: { station: KitchenStation; itemCount: number; openTickets: number; chefCount: number }[];
 }
 
+/** A restaurant's look on its own website (white-label; logo upload comes with file storage in Phase 7). */
+export interface StoreBrand {
+  /** Short text in the logo circle until a real logo, e.g. "AP" */
+  logoText: string;
+  /** Main colour (hex); white text must stay readable on it */
+  primaryColor: string;
+  tagline: string;
+  /** Food pictures of the welcome area until real photos */
+  heroEmoji: string[];
+}
+
+/** What the public website of one branch shows. Only items that are online; no staff or money data. */
+export interface PublicStore {
+  restaurant: { id: Uuid; name: string; slug: string };
+  branch: { id: Uuid; name: string; slug: string; phone: string; address: string; openingHours: string };
+  brand: StoreBrand;
+  /** Open now (hours); closed or online orders OFF = "Not taking orders right now" */
+  isOpen: boolean;
+  onlineOrdersEnabled: boolean;
+  deliveryFee: Paisa;
+  minOrder: Paisa;
+  defaultPrepMinutes: number;
+  pricing: OrderPricing;
+  categories: MenuCategory[];
+  items: MenuItem[];
+  addonGroups: ModifierGroup[];
+}
+
+/** The private tracking page of one online order (reached only through its long random token). */
+export interface TrackedOrder {
+  token: string;
+  restaurantSlug: string;
+  branchSlug: string;
+  restaurantName: string;
+  restaurantPhone: string;
+  kind: 'DELIVERY' | 'TAKEAWAY';
+  status: OrderStatus;
+  dailyNumber: number;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  note: string;
+  /** Copies made at order time */
+  items: { name: string; variantName: string | null; modifiers: string[]; quantity: number; unit: MenuUnit; lineTotal: Paisa; note: string }[];
+  /** What was ordered, for "Order again" */
+  lines: DraftItemInput[];
+  totals: BillTotals;
+  prepMinutes: number;
+  /** Each step reached, with its time */
+  history: { status: OrderStatus; at: IsoDateTime }[];
+}
+
 /** Online App page: the switches and the items with their online state. */
 export interface OnlineAppView {
   onlineOrdersEnabled: boolean;

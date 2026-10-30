@@ -41,7 +41,7 @@ function renderSection(section: OsSection, options: SectionOptions) {
   if (section.key === 'online-orders') return <OnlineOrdersScreen />;
   if (section.key === 'orders') return <OrdersScreen key={options.query ?? ''} query={options.query} />;
   if (section.key === 'online-app') return <OnlineAppScreen />;
-  if (section.key === 'riders') return <AppPreviewScreen section={section} app="rider" />;
+  if (section.key === 'riders') return <AppPreviewScreen section={section} />;
   if (section.group === 'COMING_SOON') return <ComingSoonScreen section={section} />;
   return <UpcomingScreen section={section} preview={PREVIEW_FOR_SECTION[section.key] ?? 1} />;
 }
