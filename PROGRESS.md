@@ -19,6 +19,7 @@ everything in very easy Roman Urdu, code and documents in English)
 3. Claude reads, in this order: `CLAUDE.md` (loads `PROJECT_RULES.md`) → this file → `README.md`
    (status table + progress log) → `docs/MASTER_PROMPT.md` only for the sections the task needs.
 4. Start the preview: `.claude/launch.json` has `restaurant-os` (port 3000) and `customer` (port 3001). `pnpm dev` starts both.
+   If another chat already runs them, use `restaurant-os-running` and `customer-running`: they attach to the running servers (Next.js allows one dev server per app folder).
 5. Before any new work run `pnpm install`, `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build` (see §8)
    to confirm the starting point is green.
 
