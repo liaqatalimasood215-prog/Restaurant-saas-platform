@@ -1,116 +1,82 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Copy, Globe, QrCode, Search, UtensilsCrossed } from 'lucide-react';
-import qrcode from 'qrcode-generator';
+import { useState } from 'react';
+import { Clock, Globe, Home, Palette, Phone, QrCode, Search, Share2, Truck, UtensilsCrossed, type LucideIcon } from 'lucide-react';
 import type { OnlineAppView } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/states';
 import { Switch } from '@/components/ui/switch';
-import { useToast } from '@/components/ui/toast';
 import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { priceText } from '../menu/menu-parts';
 import { ProductArt } from '../pos/product-art';
-import { Heading, customerUrl, type OnlineTabProps } from './online-parts';
+import type { OnlineTab } from './online-app-screen';
+import { Heading, type OnlineTabProps } from './online-parts';
+import { DomainSection } from './website-domain';
+import { PhonePreview } from './website-previews';
+import { QrSection } from './website-qr';
+import { BrandingSection, ContactSection, DeliverySection, HomepageSection, HoursSection, MenuDisplaySection, SeoSection } from './website-settings';
 
-export function WebsiteTab({ view, canManage, busy, run }: OnlineTabProps) {
+export type WebsiteSection = 'branding' | 'homepage' | 'menu' | 'delivery' | 'hours' | 'contact' | 'domain' | 'seo' | 'qr';
+
+const SECTIONS: { key: WebsiteSection; icon: LucideIcon }[] = [
+  { key: 'branding', icon: Palette },
+  { key: 'homepage', icon: Home },
+  { key: 'menu', icon: UtensilsCrossed },
+  { key: 'delivery', icon: Truck },
+  { key: 'hours', icon: Clock },
+  { key: 'contact', icon: Phone },
+  { key: 'domain', icon: Globe },
+  { key: 'seo', icon: Share2 },
+  { key: 'qr', icon: QrCode },
+];
+
+/**
+ * Website settings, one part at a time, with the real website beside them. Products, prices and categories stay in the
+ * Menu page; this tab only says how they show online. Everything is DEMO: nothing is deployed and no domain is touched.
+ */
+export function WebsiteTab({ section, onSection, onOpenTab, ...props }: OnlineTabProps & { section: WebsiteSection; onSection: (section: WebsiteSection) => void; onOpenTab: (tab: OnlineTab) => void }) {
+  const { view, canManage, busy, run } = props;
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    <div className="grid items-start gap-4 min-[1200px]:grid-cols-[minmax(0,1fr)_20rem]">
       <div className="min-w-0 space-y-4">
-        <LinkCard path={view.customerPath} />
-        <DomainCard />
+        <div role="group" aria-label={t('onlineApp.site.sections')} className="flex flex-wrap gap-2">
+          {SECTIONS.map(({ key, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={section === key}
+              data-website-section={key}
+              onClick={() => onSection(key)}
+              className={cn('flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm font-bold transition-colors', section === key ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white text-slate-600 hover:text-slate-900')}
+            >
+              <Icon className="size-4" aria-hidden />
+              {t(`onlineApp.site.names.${key}`)}
+            </button>
+          ))}
+        </div>
+        {/* A new key after a save starts the form from the saved values. */}
+        {section === 'branding' && <BrandingSection key={JSON.stringify(view.website.brand)} {...props} />}
+        {section === 'homepage' && <HomepageSection key={JSON.stringify(view.website.homepage)} {...props} />}
+        {section === 'menu' && (
+          <>
+            <MenuDisplaySection key={JSON.stringify(view.website.menu)} {...props} />
+            <ItemsCard view={view} canManage={canManage} busy={busy} onOnline={(id, on) => void run(() => getApi().setItemOnline(id, on))} />
+          </>
+        )}
+        {section === 'delivery' && <DeliverySection {...props} onOpenSettings={() => onOpenTab('settings')} />}
+        {section === 'hours' && <HoursSection key={JSON.stringify(view.website.hours)} {...props} />}
+        {section === 'contact' && <ContactSection key={JSON.stringify(view.website.contact)} {...props} />}
+        {section === 'domain' && <DomainSection {...props} />}
+        {section === 'seo' && <SeoSection key={JSON.stringify(view.website.seo)} {...props} />}
+        {section === 'qr' && <QrSection view={view} />}
       </div>
-      <div className="min-w-0">
-        <ItemsCard view={view} canManage={canManage} busy={busy} onOnline={(id, on) => void run(() => getApi().setItemOnline(id, on))} />
+      <div className="hidden self-start min-[1200px]:block">
+        <PhonePreview path={view.customerPath} />
       </div>
     </div>
-  );
-}
-
-/** The restaurant owns its domain; connecting one is a later step and needs the owner's approval. */
-function DomainCard() {
-  return (
-    <Card>
-      <CardBody className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Heading icon={Globe} title={t('onlineApp.domainTab.title')} />
-          <Badge tone="amber">{t('onlineApp.planned')}</Badge>
-        </div>
-        <p className="text-sm text-slate-700">{t('onlineApp.domainTab.ownership')}</p>
-        <p className="text-sm text-slate-600">{t('onlineApp.domainTab.subdomain', { example: 'restaurantname.lalaorders.com' })}</p>
-      </CardBody>
-    </Card>
-  );
-}
-
-function LinkCard({ path }: { path: string }) {
-  const toast = useToast();
-  const url = customerUrl(path);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.show({ tone: 'success', title: t('onlineApp.copied') });
-    } catch {
-      toast.show({ tone: 'error', title: t('onlineApp.copyFailed') });
-    }
-  };
-  return (
-    <Card>
-      <CardBody className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Heading icon={QrCode} title={t('onlineApp.linkTitle')} />
-          <Badge tone="amber">{t('onlineApp.linkStatus')}</Badge>
-        </div>
-        <div className="flex flex-wrap items-start gap-4">
-          <QrImage text={url} label={t('onlineApp.qrLabel', { url })} />
-          <div className="min-w-56 flex-1 space-y-2">
-            <label className="block">
-              <span className="mb-1 block font-bold text-slate-900">{t('onlineApp.linkLabel')}</span>
-              <input readOnly value={url} onFocus={(e) => e.target.select()} aria-label={t('onlineApp.linkLabel')} className="min-h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm" />
-            </label>
-            <Button variant="secondary" onClick={() => void copy()}>
-              <Copy className="size-4" aria-hidden />
-              {t('onlineApp.copy')}
-            </Button>
-            <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{t('onlineApp.linkHint')}</p>
-          </div>
-        </div>
-      </CardBody>
-    </Card>
-  );
-}
-
-/** A QR code drawn in the browser (free library, no outside service). */
-function QrImage({ text, label }: { text: string; label: string }) {
-  const { size, path } = useMemo(() => {
-    const qr = qrcode(0, 'M');
-    qr.addData(text);
-    qr.make();
-    const count = qr.getModuleCount();
-    let d = '';
-    for (let row = 0; row < count; row++) {
-      for (let col = 0; col < count; col++) {
-        if (qr.isDark(row, col)) d += `M${col} ${row}h1v1h-1z`;
-      }
-    }
-    return { size: count, path: d };
-  }, [text]);
-  const quiet = 4;
-  return (
-    <svg
-      role="img"
-      aria-label={label}
-      data-qr={text}
-      viewBox={`${-quiet} ${-quiet} ${size + quiet * 2} ${size + quiet * 2}`}
-      shapeRendering="crispEdges"
-      className="size-40 shrink-0 rounded-xl border border-slate-200 bg-white"
-    >
-      <path d={path} fill="#000" />
-    </svg>
   );
 }
 

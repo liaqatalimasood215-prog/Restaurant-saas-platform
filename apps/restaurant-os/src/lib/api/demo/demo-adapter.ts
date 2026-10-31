@@ -13,6 +13,15 @@ import {
   canPublishWebsite,
   checkOnlineSettings,
   publishedWebsite,
+  checkWebsiteConfig,
+  normalizeDomain,
+  withWebsiteChanges,
+  MAX_DEALS,
+  MAX_POPULAR_ITEMS,
+  MAX_SEO_DESCRIPTION,
+  MAX_SEO_TITLE,
+  type WebsiteConfig,
+  type WebsiteProblem,
   customerAppPath,
   formatPaisa,
   summarizeDay,
@@ -173,6 +182,23 @@ const PIN_MESSAGES: Record<PinProblem, string> = {
 };
 
 const PHONE_MESSAGE = 'Enter a mobile number, for example 0300-1234567 or 03001234567.';
+
+const WEBSITE_MESSAGES: Record<WebsiteProblem, string> = {
+  LOGO_REQUIRED: 'Enter the logo letters.',
+  TEXT_TOO_LONG: 'A text is too long: logo letters up to 4, short name up to 12, tagline and big line up to 60, description up to 300.',
+  COLOR_INVALID: 'Choose both colours.',
+  PRIMARY_TOO_LIGHT: 'The main colour is too light: white text on it could not be read.',
+  ACCENT_TOO_DARK: 'The second colour is too dark: dark text on it could not be read.',
+  TOO_MANY_POPULAR: `Choose at most ${MAX_POPULAR_ITEMS} popular dishes.`,
+  TOO_MANY_DEALS: `Keep at most ${MAX_DEALS} deals.`,
+  DEAL_TAG_REQUIRED: 'Give each deal a short label, up to 24 letters.',
+  MODES_REQUIRED: 'Keep at least one way to order. To stop all orders, switch online orders OFF.',
+  HOURS_INVALID: 'Check the opening hours: opening and closing time must differ.',
+  WHATSAPP_INVALID: 'Enter the WhatsApp number as a mobile number, for example 0300-1234567.',
+  EMAIL_INVALID: 'Check the email address.',
+  LINK_INVALID: 'Social links must start with https://',
+  SEO_TOO_LONG: `Search title up to ${MAX_SEO_TITLE} letters, description up to ${MAX_SEO_DESCRIPTION}.`,
+};
 
 const SETTINGS_MESSAGES = {
   NAME_REQUIRED: 'Enter the restaurant and branch names.',
@@ -1837,6 +1863,9 @@ export class DemoAdapter implements ApiClient, DemoControls {
         defaultPrepMinutes: branch.defaultPrepMinutes,
         customerPath: customerAppPath(restaurant.slug, branch.slug),
         publishing: data.onlinePublishing,
+        website: data.onlineWebsite,
+        branchPhone: branch.phone,
+        branchAddress: branch.address,
         samplePreviews: [{ name: 'LALA Restaurant', path: customerAppPath('lala-restaurant', 'main') }],
         categories,
         items: data.items
@@ -1888,8 +1917,62 @@ export class DemoAdapter implements ApiClient, DemoControls {
         categories,
         items,
         addonGroups: data.modifierGroups.filter((g) => items.some((i) => i.modifierGroupIds.includes(g.id))),
+        website: data.onlineWebsite,
       };
     });
+  }
+
+  saveWebsiteConfig(config: WebsiteConfig): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'onlineApp.publish');
+        const problem = checkWebsiteConfig(config);
+        if (problem) throw new ApiError('VALIDATION', WEBSITE_MESSAGES[problem]);
+        data.onlineWebsite = structuredClone(config);
+        data.onlinePublishing = withWebsiteChanges(data.onlinePublishing);
+      }),
+    );
+  }
+
+  setOrderModes(modes: WebsiteConfig['modes']): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        const problem = checkWebsiteConfig({ ...data.onlineWebsite, modes });
+        if (problem) throw new ApiError('VALIDATION', WEBSITE_MESSAGES[problem]);
+        data.onlineWebsite.modes = { ...modes };
+      }),
+    );
+  }
+
+  connectDomain(domain: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'onlineApp.publish');
+        const clean = normalizeDomain(domain);
+        if (!clean) throw new ApiError('VALIDATION', 'Enter a domain such as yourrestaurant.com.');
+        data.onlinePublishing = { ...data.onlinePublishing, customDomain: clean, domainState: 'DNS_PENDING' };
+      }),
+    );
+  }
+
+  markDomainConnected(): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'onlineApp.publish');
+        if (!data.onlinePublishing.customDomain) throw new ApiError('CONFLICT', 'Connect a domain first.');
+        data.onlinePublishing = { ...data.onlinePublishing, domainState: 'CONNECTED' };
+      }),
+    );
+  }
+
+  removeDomain(): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'onlineApp.publish');
+        data.onlinePublishing = { ...data.onlinePublishing, customDomain: null, domainState: 'NONE' };
+      }),
+    );
   }
 
   publishWebsite(): Promise<void> {
@@ -2467,6 +2550,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
       this.store.update((data) => {
         // The server refuses checkout while online orders are OFF (MASTER_PROMPT.md §5.5).
         if (!data.branch.onlineOrdersEnabled) throw new ApiError('CONFLICT', 'Not taking online orders right now.');
+        const { delivery, pickup } = data.onlineWebsite.modes;
+        if (type === 'DELIVERY' ? !delivery : !pickup) throw new ApiError('CONFLICT', type === 'DELIVERY' ? 'Delivery is switched off for online orders.' : 'Pickup is switched off for online orders.');
         const count = data.orders.filter((o) => o.channel === 'CUSTOMER_APP').length;
         const customer = DEMO_CUSTOMERS[count % DEMO_CUSTOMERS.length] ?? DEMO_CUSTOMERS[0]!;
         const order = this.newCounterOrder(

@@ -12,6 +12,7 @@ import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { OnlineTab } from './online-app-screen';
+import type { WebsiteSection } from './website-tab';
 import { AndroidSteps, CheckList, CheckRow, Heading, PublishWebsiteButton, PwaChecks, customerUrl, linkButtonClass, type OnlineTabProps } from './online-parts';
 import { LivePreview, PhonePreview, type PreviewDevice } from './website-previews';
 
@@ -26,7 +27,7 @@ const STATUS_LOOK: Record<OnlineStatus, { dot: string; box: string }> = {
   SUBSCRIPTION_SUSPENDED: { dot: 'bg-red-500', box: 'border-red-200 bg-red-50/60' },
 };
 
-export function OverviewTab({ onOpenTab, ...props }: OnlineTabProps & { onOpenTab: (tab: OnlineTab) => void }) {
+export function OverviewTab({ onOpenTab, ...props }: OnlineTabProps & { onOpenTab: (tab: OnlineTab, part?: WebsiteSection) => void }) {
   const { view, canPublish, busy, run } = props;
   const [device, setDevice] = useState<PreviewDevice>(() => (window.matchMedia('(max-width: 639px)').matches ? 'mobile' : 'desktop'));
   const previewRef = useRef<HTMLDivElement>(null);
@@ -38,6 +39,7 @@ export function OverviewTab({ onOpenTab, ...props }: OnlineTabProps & { onOpenTa
   const publish = () => void run(() => getApi().publishWebsite(), t('onlineApp.publishDone'));
   const publishButton = (className?: string) => <PublishWebsiteButton view={view} canPublish={canPublish} busy={busy} onPublish={publish} className={className} />;
   const live = view.publishing.websiteState === 'LIVE' || view.publishing.websiteState === 'CHANGES_PENDING';
+  const domainConnected = view.publishing.domainState === 'CONNECTED';
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:[grid-template-areas:'top_top'_'live_phone'] min-[1400px]:[grid-template-areas:'top_phone'_'live_phone']">
@@ -52,13 +54,13 @@ export function OverviewTab({ onOpenTab, ...props }: OnlineTabProps & { onOpenTa
               </p>
             </div>
             <CheckList>
-              <CheckRow done={false} label={t('onlineApp.websiteCard.domainConnected')} note={t('onlineApp.planned')} />
-              <CheckRow done={false} label={t('onlineApp.websiteCard.https')} note={t('onlineApp.planned')} />
+              <CheckRow done={domainConnected} label={t('onlineApp.websiteCard.domainConnected')} note={domainConnected ? t('onlineApp.demo') : view.publishing.domainState === 'DNS_PENDING' ? t('onlineApp.domainPending') : t('onlineApp.planned')} />
+              <CheckRow done={domainConnected} label={t('onlineApp.websiteCard.https')} note={domainConnected ? t('onlineApp.demo') : t('onlineApp.planned')} />
               <CheckRow done={live} label={t('onlineApp.websiteCard.published')} note={live ? t('onlineApp.demo') : t('onlineApp.notYet')} />
             </CheckList>
             <div className="mt-auto space-y-2">
-              <Button variant="secondary" className="w-full" onClick={() => onOpenTab('website')}>
-                {t('onlineApp.connectDomain')}
+              <Button variant="secondary" className="w-full" onClick={() => onOpenTab('website', 'domain')}>
+                {view.publishing.domainState === 'NONE' ? t('onlineApp.connectDomain') : t('onlineApp.editDomain')}
               </Button>
               <Button variant="outline" className="w-full" onClick={() => showPreview('desktop')}>
                 <Eye className="size-4" aria-hidden />

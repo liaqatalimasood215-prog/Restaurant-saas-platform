@@ -1,8 +1,8 @@
 // DEMO
-import { WEBSITE_PREVIEW_DATA, WEBSITE_PREVIEW_READY, amountToMinimum, calculateBill, isWebsitePreviewData, nextTrackingStep, normalizePhone, unitPriceFor, type DraftItemInput, type WebsitePreviewData } from '@restaurant-saas/shared';
+import { WEBSITE_PREVIEW_DATA, WEBSITE_PREVIEW_READY, amountToMinimum, calculateBill, formatOpeningHours, isWebsitePreviewData, nextTrackingStep, normalizePhone, unitPriceFor, type DraftItemInput, type WebsitePreviewData } from '@restaurant-saas/shared';
 import { rs } from '../../format';
 import { checkOrderDetails, stepsKind } from '../../order-rules';
-import { ApiError, type CustomerOrder, type CustomerProfile, type CustomerStore, type DemoControls, type PlaceOrderInput, type StoreApi } from '../client';
+import { ApiError, ORDER_MODES, type CustomerOrder, type CustomerProfile, type CustomerStore, type DemoControls, type PlaceOrderInput, type StoreApi } from '../client';
 import { DEMO_CLOSED_AT_START, DEMO_RIDER, DEMO_STORES } from './seed';
 
 /**
@@ -120,19 +120,21 @@ export class DemoAdapter implements StoreApi, DemoControls {
     const key = `${restaurantSlug}/${branchSlug}`;
     const switches = this.read().switches[key] ?? startSwitches(key);
     const preview = this.preview?.restaurant.slug === restaurantSlug && this.preview.branch.slug === branchSlug ? this.preview : null;
+    const website = preview?.website;
     // Item OFF = hidden: the website never receives it, also not through a deal or a suggestion.
-    const items = (preview?.items ?? seed.items).filter((i) => i.isOnline && !i.archivedAt);
-    // Deals and "popular" name dishes of the sample menu: they follow the dish with the same name in the Restaurant OS menu.
+    const items = (preview?.items ?? seed.items).filter((i) => i.isOnline && !i.archivedAt && (website?.menu.showSoldOut !== false || i.isAvailable));
+    // Best sellers and suggestions name dishes of the sample menu: they follow the dish with the same name in the Restaurant OS menu.
     const onMenu = (seedItemId: string): string | null => {
       const name = seed.items.find((i) => i.id === seedItemId)?.name;
       return items.find((i) => i.id === seedItemId || i.name === name)?.id ?? null;
     };
     const onMenuList = (ids: string[]) => ids.flatMap((id) => onMenu(id) ?? []);
+    const offered = (itemId: string) => items.some((i) => i.id === itemId);
     return {
       ...seed,
       ...(preview && {
         restaurant: { ...seed.restaurant, name: preview.restaurant.name },
-        branch: { ...seed.branch, name: preview.branch.name, phone: preview.branch.phone, address: preview.branch.address },
+        branch: { ...seed.branch, name: preview.branch.name, phone: preview.branch.phone, address: preview.branch.address, openingHours: website ? formatOpeningHours(website.hours) : seed.branch.openingHours },
         deliveryFee: preview.deliveryFee,
         minOrder: preview.minOrder,
         defaultPrepMinutes: preview.defaultPrepMinutes,
@@ -140,15 +142,29 @@ export class DemoAdapter implements StoreApi, DemoControls {
         categories: preview.categories,
         addonGroups: preview.addonGroups,
       }),
+      ...(website && {
+        brand: { ...seed.brand, ...website.brand, wordmark: website.brand.wordmark.trim() || null, headline: website.brand.headline.trim() || null },
+      }),
       fromRestaurantOs: Boolean(preview),
+      modes: website ? ORDER_MODES.filter((m) => (m === 'DELIVERY' ? website.modes.delivery : m === 'TAKEAWAY' ? website.modes.pickup : website.modes.dineIn)) : [...ORDER_MODES],
+      display: {
+        showCategories: website?.homepage.showCategories ?? true,
+        showDeals: website?.homepage.showDeals ?? true,
+        showPopular: website?.homepage.showPopular ?? true,
+        showDescriptions: website?.menu.showDescriptions ?? true,
+      },
+      about: website?.brand.description.trim() ?? '',
+      links: website?.contact ?? { whatsapp: '', email: '', facebook: '', instagram: '' },
       isOpen: switches.open,
       onlineOrdersEnabled: switches.online && (preview?.onlineOrdersEnabled ?? true),
       items,
-      deals: seed.deals.flatMap((d) => {
-        const itemId = onMenu(d.itemId);
-        return itemId ? [{ ...d, itemId }] : [];
-      }),
-      popularItemIds: onMenuList(seed.popularItemIds),
+      deals: website
+        ? website.homepage.deals.filter((d) => offered(d.itemId)).map((d, i) => ({ id: `deal-${i}`, tag: d.tag.trim(), itemId: d.itemId, emoji: [] }))
+        : seed.deals.flatMap((d) => {
+            const itemId = onMenu(d.itemId);
+            return itemId ? [{ ...d, itemId }] : [];
+          }),
+      popularItemIds: website ? website.homepage.popularItemIds.filter(offered) : onMenuList(seed.popularItemIds),
       bestsellerItemIds: onMenuList(seed.bestsellerItemIds),
       suggestedItemIds: onMenuList(seed.suggestedItemIds),
       branches: DEMO_STORES.filter((s) => s.restaurant.slug === restaurantSlug).map((s) => {
@@ -177,6 +193,7 @@ export class DemoAdapter implements StoreApi, DemoControls {
     if (repeated) return { token: repeated };
     const store = this.publicStore(input.restaurantSlug, input.branchSlug);
     if (!store.onlineOrdersEnabled || !store.isOpen) throw new ApiError('CONFLICT', 'Not taking orders right now.');
+    if (!store.modes.includes(input.mode)) throw new ApiError('CONFLICT', 'This way of ordering is switched off right now.');
     if (input.lines.length === 0) throw new ApiError('VALIDATION', 'Your cart is empty.');
     const problem = checkOrderDetails(input);
     if (problem) throw new ApiError('VALIDATION', 'Please check your details.');

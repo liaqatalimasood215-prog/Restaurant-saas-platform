@@ -15,7 +15,7 @@ import { OverviewTab } from './overview-tab';
 import { PwaTab } from './pwa-tab';
 import { SettingsTab } from './settings-tab';
 import { useWebsiteBridge } from './website-bridge';
-import { WebsiteTab } from './website-tab';
+import { WebsiteTab, type WebsiteSection } from './website-tab';
 
 export type OnlineTab = 'overview' | 'website' | 'pwa' | 'android' | 'settings';
 
@@ -38,6 +38,7 @@ export function OnlineAppScreen() {
   useWebsiteBridge();
   const toast = useToast();
   const [tab, setTab] = useState<OnlineTab>('overview');
+  const [section, setSection] = useState<WebsiteSection>('branding');
   const [busy, setBusy] = useState(false);
   const canManage = allowed('menu.manage');
   const canPublish = allowed('onlineApp.publish');
@@ -58,6 +59,10 @@ export function OnlineAppScreen() {
     }
   };
   const shared = { view, canManage, canPublish, busy, run };
+  const openTab = (next: OnlineTab, part?: WebsiteSection) => {
+    setTab(next);
+    if (part) setSection(part);
+  };
 
   return (
     <>
@@ -81,8 +86,8 @@ export function OnlineAppScreen() {
           </button>
         ))}
       </div>
-      {tab === 'overview' && <OverviewTab {...shared} onOpenTab={setTab} />}
-      {tab === 'website' && <WebsiteTab {...shared} />}
+      {tab === 'overview' && <OverviewTab {...shared} onOpenTab={openTab} />}
+      {tab === 'website' && <WebsiteTab {...shared} section={section} onSection={setSection} onOpenTab={openTab} />}
       {tab === 'pwa' && <PwaTab view={view} />}
       {tab === 'android' && <AndroidTab view={view} />}
       {tab === 'settings' && <SettingsTab {...shared} />}

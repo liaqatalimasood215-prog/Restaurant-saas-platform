@@ -17,8 +17,8 @@ Read before changing anything:
 (DEMO / PROTOTYPE).** The owner asked for the website first, then the Rider App; Riders page and refunds in
 Phase 1 wait. See [apps/customer/README.md](apps/customer/README.md).
 
-**Online App / Website rework (owner's brief, 2026-10-30):** steps A–B approved, step C (previews show the Restaurant OS menu)
-built, DEMO only. Next steps D–H wait for the owner's approval.
+**Online App / Website rework (owner's brief, 2026-10-30):** steps A–C approved, step D (Website tab) built, DEMO only.
+Next steps E–H wait for the owner's approval.
 
 **Phase 1 — Restaurant OS UI prototype: mostly built (DEMO / PROTOTYPE).** Approved by the owner: Preview 1,
 the waiter → kitchen → cashier workflow (2026-10-28), POS / New Bill, Preview 4 (Orders, Online Orders),
@@ -131,6 +131,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-31 | Customer App redesign (owner's six-screen picture, frontend only in `apps/customer`): Login, Home, Menu, Product, one-page Cart with Delivery / Pickup / Dine-in and payment choices, Tracking with rider card and map area, Orders with Reorder, bottom bar; new sample restaurant LALA with two branches and required crust; skeletons, empty and error states, branch selector, closed banner, install offer, offline message, "Rs 1,300", 44 px tap targets. `packages/shared`, Restaurant OS and backend untouched | Customer lint, type-check and build pass; website walkthrough 169 checks on dev and on the production build (includes 44 px and accessible-name audits on 8 screens); `walkthrough:online-app` passes; 93 shared tests pass; install offer tested with a simulated browser event, not on a real phone; not pushed, not deployed |
 | 2026-10-31 | Customer App, owner's feedback: phone preview in Online App no longer cuts off the bottom bar; first visit opens on Login once with Skip, Login redrawn like the picture and also in the header; while a rider has the order the customer calls the rider; bell, filter and sort, compact cart lines and other details closer to the picture | Customer lint, type-check and build pass; website walkthrough 182 checks on dev and on the production build; `walkthrough:online-app` passes and now checks that the whole bottom bar fits the phone shape; 93 shared tests pass; not tested on a real phone; not pushed, not deployed |
 | 2026-10-31 | Owner approves the Customer App. Online App step C: previews and View Website show the Restaurant OS menu, prices and switches (DEMO browser link, `website-bridge.ts` and the website's DemoAdapter); LALA sample can be chosen in the previews; a direct link keeps its sample data; orders still do not reach Restaurant OS | 94 shared tests (1 new), typecheck, lint and build of both apps pass; `walkthrough:online-app` covers orders OFF, dish OFF, a new dish, the fee on the bill, the direct link and LALA; all eight Restaurant OS walkthroughs and the customer walkthrough pass; not tested on a real phone; not pushed, not deployed |
+| 2026-10-31 | Online App step D: Website tab with Branding, Homepage, Menu display, Delivery & Pickup, Opening hours, Contact, Custom domain, SEO & Sharing, QR code (preview, download), beside the real website in a phone shape. Rules in `packages/shared/src/online-app.ts`; a saved look change waits for Publish Website; demo data version 15. No real domain, DNS, upload or hosting | 98 shared tests (4 new), typecheck, lint and build of both apps; `walkthrough:online-app` covers every part, refused values, Publish, the Manager and all nine parts at four screen sizes; all eight Restaurant OS walkthroughs and the customer walkthrough; not tested on a real phone; not pushed, not deployed |
 
 ## Commands
 

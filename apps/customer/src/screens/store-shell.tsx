@@ -51,7 +51,8 @@ export function StoreShell({ restaurant, branch, children }: { restaurant: strin
   const value = {
     store,
     base,
-    cart,
+    // A way of ordering the restaurant switched off falls back to one it offers.
+    cart: { ...cart, mode: store.modes.includes(cart.mode) ? cart.mode : (store.modes[0] ?? cart.mode) },
     cartCount,
     canOrder: store.isOpen && store.onlineOrdersEnabled,
     favourites,

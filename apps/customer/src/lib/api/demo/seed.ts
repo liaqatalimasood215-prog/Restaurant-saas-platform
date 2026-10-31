@@ -7,7 +7,7 @@ import type { CustomerBrand, CustomerStore, SampleRider, StoreDeal } from '../cl
  * each with its own brand and menu. Sample data only — never a real customer, price or address.
  * Phase 4 replaces this with the same menu that Restaurant OS manages.
  */
-type Seed = Omit<CustomerStore, 'onlineOrdersEnabled' | 'isOpen' | 'branches' | 'fromRestaurantOs'>;
+type Seed = Omit<CustomerStore, 'onlineOrdersEnabled' | 'isOpen' | 'branches' | 'fromRestaurantOs' | 'modes' | 'display' | 'about' | 'links'>;
 
 let nextId = 1;
 const id = () => `10000000-0000-4000-8000-${String(nextId++).padStart(12, '0')}`;

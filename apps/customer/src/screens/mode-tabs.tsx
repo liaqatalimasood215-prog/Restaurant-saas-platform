@@ -10,10 +10,10 @@ const ICONS: Record<OrderMode, LucideIcon> = { DELIVERY: Bike, TAKEAWAY: Shoppin
 
 /** Delivery, Pickup or Dine-in; the choice is kept with the cart. */
 export function ModeTabs({ onPick }: { onPick?: (mode: OrderMode) => void }) {
-  const { cart } = useStore();
+  const { store, cart } = useStore();
   return (
-    <div role="group" aria-label={t('mode.how')} className="grid grid-cols-3 gap-2" data-mode-tabs>
-      {ORDER_MODES.map((mode) => {
+    <div role="group" aria-label={t('mode.how')} className={cn('grid gap-2', store.modes.length === 3 ? 'grid-cols-3' : store.modes.length === 2 ? 'grid-cols-2' : 'grid-cols-1')} data-mode-tabs>
+      {ORDER_MODES.filter((mode) => store.modes.includes(mode)).map((mode) => {
         const Icon = ICONS[mode];
         const on = cart.mode === mode;
         return (

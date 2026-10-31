@@ -74,7 +74,7 @@ export function ProductCard({ item, addStyle = 'brand' }: { item: MenuItem; addS
             </Link>
           )}
         </h3>
-        <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">{item.description}</p>
+        {store.display.showDescriptions && <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">{item.description}</p>}
         <div className="mt-auto flex min-h-11 items-center justify-between gap-2 pt-2">
           <span className="text-base font-extrabold tabular-nums">
             {soldOut ? (

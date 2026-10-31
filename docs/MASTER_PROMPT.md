@@ -334,6 +334,12 @@ Offline, Domain Setup Required, Subscription Suspended) and desktop and phone pr
 and prices stay in the Menu page; this page only controls how they show online. Publishing, domain and Android are
 Owner only. Until separately approved, all of this is DEMO: nothing is deployed, built or sent to Google Play.
 
+The Website tab (DEMO since 2026-10-31) holds Branding (letters, short name, two colours that must stay readable, tagline, big line,
+description; logo, icon and banner upload Planned), Homepage (sections, up to 3 deals and 4 popular dishes, chosen from the Menu),
+Menu display, Delivery & Pickup (switches at once; fee, minimum and time in one place), Opening hours (shown only until the backend),
+Contact (WhatsApp, email, social links; phone and address stay in Settings), Custom domain (DEMO steps, the restaurant owns the domain),
+SEO & Sharing (saved; used after the website is online) and QR code (preview, download). The previews follow every saved change.
+
 ### 5.6 Riders page — Pilot
 
 The Owner or Manager adds a rider (name, phone, password), sets Active/Disabled, sees each rider's
@@ -1203,3 +1209,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-30 | §7.2 Customer website built as a DEMO (Phase 2, owner: website before the Riders page, refunds and Rider App): two sample brands from one app, menu, product details, cart, checkout, tracking, account screens. Not connected to Restaurant OS until Phase 4. §5.5 Online App page shows the website preview and Open Full App. Branding and customer account screens moved forward as DEMO (§7.6). |
 | 2026-10-30 | §5.5 Online App / Website rework (owner's brief): five tabs, status header, previews, two separate publishing flows; custom domain and Android moved forward as DEMO screens only; §14 custom domain row changed from Overkill to Later. Real work stays P9 and P11 (§7.6). |
 | 2026-10-31 | §7.2 Customer App redesigned from the owner's six-screen picture as DEMO screens; OTP, Google, online payments, map and rider contact are NOT CONNECTED screens only; open decision #19 (Dine-in from the customer's phone). |
+| 2026-10-31 | §5.5 Website tab built as DEMO (Online App step D); the previews follow its settings. |

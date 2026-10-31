@@ -7,7 +7,7 @@ import type { InviteKind, InviteStatus } from './staff';
 import type { Permission } from './permissions';
 import type { DaySummary } from './reports';
 import type { MenuUnit } from './units';
-import type { OnlinePublishing } from './online-app';
+import type { OnlinePublishing, WebsiteConfig } from './online-app';
 
 /**
  * Data shapes shared by the API contract (MASTER_PROMPT.md §9). Phase 1 screens get these from the
@@ -402,6 +402,10 @@ export interface OnlineAppView {
   /** "/restaurant-slug/branch-slug" on the Customer App */
   customerPath: string;
   publishing: OnlinePublishing;
+  website: WebsiteConfig;
+  /** Same values as Settings; shown on the Website tab, changed in one place */
+  branchPhone: string;
+  branchAddress: string;
   /** Sample restaurants the website previews can also show; they keep their own menus */
   samplePreviews: { name: string; path: string }[];
   categories: MenuCategory[];

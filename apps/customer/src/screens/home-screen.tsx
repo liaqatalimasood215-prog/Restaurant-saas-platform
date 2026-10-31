@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Check, ChevronDown, Clock, MapPin, Plus, Search, SlidersHorizontal, Store } from 'lucide-react';
 import type { MenuItem } from '@restaurant-saas/shared';
 import { StoreSkeleton } from '@/components/skeletons';
-import { Button, ProductArt, Sheet, fieldClass } from '@/components/ui';
+import { Button, ProductArt, Sheet, artEmoji, fieldClass } from '@/components/ui';
 import { t } from '@/i18n';
 import { getApi, type CustomerProfile } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -77,10 +77,10 @@ function HomeContent() {
         </button>
       </form>
 
-      <CategoryRow />
-      <DealSlider />
+      {store.display.showCategories && <CategoryRow />}
+      {store.display.showDeals && <DealSlider />}
 
-      {popular.length > 0 && (
+      {store.display.showPopular && popular.length > 0 && (
         <section aria-labelledby="popular-now">
           <div className="mb-2 flex items-center justify-between gap-3">
             <h2 id="popular-now" className="text-xl font-extrabold tracking-tight">
@@ -270,7 +270,7 @@ function DealSlider() {
             <span className="mt-1 max-w-[65%] text-sm text-white">{item.description}</span>
             <span className="relative mt-auto pt-3 text-3xl font-black tabular-nums text-accent">{priceText(item)}</span>
             <span aria-hidden className="absolute -right-1 bottom-2 flex flex-col items-end text-6xl drop-shadow-lg">
-              <span>{deal.emoji[0]}</span>
+              <span>{deal.emoji[0] ?? artEmoji(item.name)}</span>
               <span className="-mt-1 mr-8 text-4xl">{deal.emoji.slice(1).join('')}</span>
             </span>
           </Link>

@@ -83,6 +83,7 @@ ok('Publish Website: DEMO live, Android stays Not configured; Publish Online App
 
 console.log('1c. Website tab: QR code and link');
 await openTab(owner, 'Website');
+await owner.locator('[data-website-section="qr"]').click();
 assert.equal(await owner.getByLabel('Customer App link').inputValue(), LINK);
 assert.equal(await owner.locator('svg[data-qr]').getAttribute('data-qr'), LINK);
 await owner.locator('svg[data-qr]').screenshot({ path: path.join(OUT_DIR, 'qr-code.png') });
@@ -114,6 +115,7 @@ ok('OFF: the customer order is refused; ON: the order arrives (Rs. 975 + Rs. 150
 console.log('3. Product Online ON/OFF');
 await owner.bringToFront();
 await openTab(owner, 'Website');
+await owner.locator('[data-website-section="menu"]').click();
 await see(owner, '11 of 11 items are shown online');
 await owner.getByRole('switch', { name: 'Online: Cold Drink' }).click();
 await see(owner, '10 of 11 items are shown online');
@@ -238,10 +240,179 @@ assert.equal(await owner.locator('[data-preview-device]').getAttribute('data-pre
 await websiteShown(owner, 'Customer website preview');
 ok('Desktop and phone previews really show the website (its menu is inside the frame); Preview buttons change the size');
 
+console.log('5b. Website tab: every setting reaches the website preview');
+const section = (name) => owner.locator(`[data-website-section="${name}"]`).click();
+const saveSection = () => owner.locator('[data-website-save]').click();
+const savedMessage = () => see(owner, 'Saved. The preview shows it');
+await openTab(owner, 'Website');
+await section('branding');
+await inPhone('Zinger Burger').waitFor();
+await shot(owner, '07-desktop-owner-website-branding');
+await owner.getByLabel('Main colour', { exact: true }).fill('#ffee00');
+await saveSection();
+await see(owner, 'The main colour is too light');
+await owner.getByLabel('Main colour', { exact: true }).fill('#0f766e');
+await owner.getByLabel('Second colour', { exact: true }).fill('#222222');
+await saveSection();
+await see(owner, 'The second colour is too dark');
+await owner.getByLabel('Second colour', { exact: true }).fill('#fbbf24');
+await owner.getByLabel('Short name (optional)').fill('AZIZ');
+await owner.getByLabel('About the restaurant (optional)').fill('Family pizza since the demo began.');
+assert.equal(await owner.locator('[data-picture-slots] li').count(), 3);
+await saveSection();
+await savedMessage();
+await phoneFrame.locator('header').getByText('AZIZ').waitFor();
+await phoneFrame.locator('[data-footer]').getByText('Family pizza since the demo began.').waitFor({ state: 'attached' });
+const brandColour = () => phoneFrame.locator('div[style*="--store-primary"]').first().getAttribute('style');
+assert.ok((await brandColour()).includes('#0f766e'));
+ok('Branding: unreadable colours refused; new colour, short name and description reach the preview; pictures stay Planned');
+
+await section('homepage');
+await owner.getByRole('switch', { name: 'Show deals' }).click();
+await saveSection();
+await phoneFrame.locator('[data-deal]').first().waitFor({ state: 'detached' });
+await section('homepage');
+await owner.getByRole('switch', { name: 'Show deals' }).click();
+await owner.getByRole('button', { name: 'Add deal' }).click();
+await owner.getByLabel('Deal 3: dish').selectOption({ label: 'Alfredo Pasta' });
+await saveSection();
+await see(owner, 'Give each deal a short label');
+await owner.getByLabel('Deal 3: label').fill('New today');
+assert.equal(await owner.getByRole('button', { name: 'Add deal' }).count(), 0, 'at most three deals');
+await owner.locator('[data-popular-pick="Classic Pizza"]').click();
+await owner.locator('[data-popular-pick="Beef Burger"]').click();
+await saveSection();
+await savedMessage();
+await phoneFrame.locator('[data-deal="Alfredo Pasta"]').waitFor({ state: 'attached' });
+await phoneFrame.locator('[data-popular] [data-menu-item="Beef Burger"]').waitFor({ state: 'attached' });
+assert.equal(await phoneFrame.locator('[data-popular] [data-menu-item="Classic Pizza"]').count(), 0);
+assert.equal(await owner.locator('[data-popular-pick="Alfredo Pasta"]').isDisabled(), true, 'at most four popular dishes');
+ok('Homepage: deals off and on, a new deal at its Menu price, Popular Now chosen from the Menu (at most 3 and 4)');
+
+await section('menu');
+await owner.getByRole('switch', { name: 'Show dish descriptions' }).click();
+await saveSection();
+await savedMessage();
+await phoneFrame.locator('[data-menu-item="Zinger Burger"]').first().getByText('Crispy chicken').waitFor({ state: 'detached' });
+await section('menu');
+await owner.getByRole('switch', { name: 'Show dish descriptions' }).click();
+await saveSection();
+await phoneFrame.locator('[data-menu-item="Zinger Burger"]').first().getByText('Crispy chicken').waitFor({ state: 'attached' });
+ok('Menu display: descriptions hide and return; the dishes themselves stay on the Menu page');
+
+await section('delivery');
+const howSheet = async (count) => {
+  await phoneFrame.locator('[data-ordering-bar]').dispatchEvent('click'); // the frame is scaled and may sit under the page header
+  await phoneFrame.locator('[data-mode-tabs]').waitFor();
+  assert.equal(await phoneFrame.locator('[data-mode]').count(), count);
+  await phoneFrame.getByRole('button', { name: 'Done' }).dispatchEvent('click');
+  await phoneFrame.locator('[data-mode-tabs]').waitFor({ state: 'detached' });
+};
+await owner.getByRole('switch', { name: 'Dine-in' }).click();
+await owner.waitForTimeout(800);
+await howSheet(2);
+await owner.getByRole('switch', { name: 'Pickup' }).click();
+await owner.waitForTimeout(800);
+await owner.getByRole('switch', { name: 'Delivery' }).click();
+await see(owner, 'Keep at least one way to order');
+await howSheet(1);
+const ordersTab = await openAs(USER.owner, '/online-orders', DESKTOP);
+await ordersTab.getByRole('button', { name: /customer pickup order/i }).first().click();
+await see(ordersTab, 'Pickup is switched off for online orders.');
+await ordersTab.close();
+await owner.bringToFront();
+await owner.getByRole('switch', { name: 'Pickup' }).click();
+await owner.waitForTimeout(800);
+await owner.getByRole('switch', { name: 'Dine-in' }).click();
+await owner.waitForTimeout(800);
+await howSheet(3);
+ok('Delivery & Pickup: switches work at once, the last one cannot be switched off, a DEMO pickup order is refused while Pickup is OFF');
+
+await section('hours');
+await owner.getByRole('switch', { name: 'Open on Sunday' }).click();
+await owner.getByLabel('Saturday closes at').fill('23:30');
+assert.equal(await owner.locator('[data-hours-text]').innerText(), 'Mon–Fri, 12:00 pm – 2:00 am · Sat, 12:00 pm – 11:30 pm · Sun closed');
+await saveSection();
+await savedMessage();
+await phoneFrame.locator('[data-footer]').getByText('Sun closed').waitFor({ state: 'attached' });
+ok('Opening hours: grouped as short text, and shown on the website');
+
+await section('contact');
+assert.ok((await owner.locator('[data-branch-contact]').innerText()).includes('0300-0000000'), 'phone comes from Settings');
+await owner.getByLabel('Email').fill('no-at');
+await saveSection();
+await see(owner, 'Check the email address');
+await owner.getByLabel('Email').fill('info@example.com');
+await owner.getByLabel('Facebook link').fill('javascript:alert(1)');
+await saveSection();
+await see(owner, 'Social links must start with https://');
+await owner.getByLabel('Facebook link').fill('https://facebook.com/azizpizza');
+await owner.getByLabel('WhatsApp number').fill('03001234567');
+await saveSection();
+await savedMessage();
+const footerLink = (name) => phoneFrame.locator('[data-footer-links]').getByRole('link', { name });
+assert.equal(await footerLink('WhatsApp').getAttribute('href'), 'https://wa.me/923001234567');
+assert.equal(await footerLink('Facebook').getAttribute('href'), 'https://facebook.com/azizpizza');
+ok('Contact: phone and address stay in Settings; bad email and unsafe link refused; links reach the website');
+
+await section('seo');
+await owner.getByLabel('Title on Google').fill('Aziz Pizza Lahore');
+assert.ok((await owner.locator('[data-seo-preview]').innerText()).includes('Aziz Pizza Lahore'));
+await saveSection();
+await savedMessage();
+await see(owner, 'NOT CONNECTED');
+ok('SEO & Sharing: saved with a preview, and marked NOT CONNECTED');
+
+await section('domain');
+await owner.getByLabel('Your domain').fill('not a domain');
+await owner.getByRole('button', { name: 'Connect Domain' }).click();
+await see(owner, 'Enter a domain such as yourrestaurant.com');
+await owner.getByLabel('Your domain').fill('https://www.AzizPizza.example/');
+await owner.getByRole('button', { name: 'Connect Domain' }).click();
+await owner.locator('[data-domain-state="DNS_PENDING"]').waitFor();
+await see(owner, 'www.azizpizza.example');
+assert.ok((await owner.locator('[data-dns-table]').innerText()).includes('CNAME'));
+await see(owner, 'Example only');
+await shot(owner, '08-desktop-owner-website-domain');
+await owner.getByRole('button', { name: 'DEMO: mark as connected' }).click();
+await owner.locator('[data-domain-state="CONNECTED"]').waitFor();
+await see(owner, 'no real domain was touched');
+await openTab(owner, 'Overview');
+assert.equal(await owner.locator('[data-domain]').innerText(), 'www.azizpizza.example');
+assert.equal(await owner.locator('[data-customer-url]').innerText(), LINK, 'the link stays on this computer until hosting');
+ok('Custom domain: refused or cleaned up, DNS instructions marked as an example, DEMO connected, link and QR unchanged');
+
+await see(owner, 'Changes are waiting');
+await owner.getByRole('button', { name: 'Publish Website' }).first().click();
+await see(owner, 'Online ordering is live (DEMO)');
+assert.equal(await owner.getByRole('button', { name: 'Publish Website' }).count(), 0);
+ok('A saved change waits for Publish Website on a published website; Publish brings it back to live (DEMO)');
+
+await openTab(owner, 'Website');
+await section('domain');
+await owner.getByRole('button', { name: 'Remove domain' }).click();
+await owner.locator('[data-domain-state="NONE"]').waitFor();
+await section('qr');
+await owner.getByRole('button', { name: 'Preview QR' }).click();
+await owner.locator('[data-qr-preview] svg[data-qr]').waitFor();
+await owner.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).first().click();
+const [qrFile] = await Promise.all([owner.waitForEvent('download'), owner.getByRole('button', { name: 'Download QR' }).click()]);
+assert.equal(qrFile.suggestedFilename(), 'customer-qr-aziz-pizza-main.png');
+await qrFile.saveAs(path.join(OUT_DIR, qrFile.suggestedFilename()));
+await openTab(owner, 'Overview');
+ok('Domain removed; QR code previews and downloads as a picture');
+
 console.log('6. Who may use the page');
 const manager = await openAs(USER.manager, '/online-app', DESKTOP);
 assert.equal(await manager.getByRole('switch', { name: 'Online orders' }).isDisabled(), false);
 await see(manager, 'Only the Owner can publish.');
+await openTab(manager, 'Website');
+await see(manager, 'Only the Owner can change this.');
+assert.equal(await manager.getByLabel('Tagline').isDisabled(), true);
+await manager.locator('[data-website-section="domain"]').click();
+assert.equal(await manager.getByLabel('Your domain').isDisabled(), true);
+await manager.locator('[data-website-section="delivery"]').click();
+assert.equal(await manager.getByRole('switch', { name: 'Pickup' }).isDisabled(), false);
 await manager.close();
 const cashier = await openAs(USER.cashier, '/online-app', DESKTOP);
 await see(cashier, 'No access');
@@ -259,6 +430,12 @@ for (const [label, viewport] of Object.entries({ phone: PHONE, tablet: { width: 
   await page.getByTitle('Customer website preview').scrollIntoViewIfNeeded();
   await page.waitForTimeout(1_000);
   await shot(page, `02-${label}-owner-online-app-preview`);
+  await openTab(page, 'Website');
+  for (const name of ['branding', 'homepage', 'menu', 'delivery', 'hours', 'contact', 'domain', 'seo', 'qr']) {
+    await page.locator(`[data-website-section="${name}"]`).click();
+    await noSideScroll(page, `${label} ${name}`);
+    if (name === 'hours') await shot(page, `09-${label}-owner-website-hours`);
+  }
   await page.close();
 }
 ok('No sideways page scroll on phone, tablet, laptop and desktop');

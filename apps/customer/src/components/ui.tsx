@@ -132,9 +132,13 @@ const ART: { match: RegExp; emoji: string; tone: string }[] = [
   { match: /drink|juice|tea/i, emoji: '🥤', tone: 'from-sky-100 to-cyan-50' },
 ];
 
+const artFor = (name: string) => ART.find((a) => a.match.test(name)) ?? { emoji: '🍽️', tone: 'from-stone-100 to-stone-50' };
+
+export const artEmoji = (name: string) => artFor(name).emoji;
+
 /** The picture of a product: a food illustration until real photos (photo upload is Phase 7). */
 export function ProductArt({ name, className, emojiClassName = 'text-5xl' }: { name: string; className?: string; emojiClassName?: string }) {
-  const art = ART.find((a) => a.match.test(name)) ?? { emoji: '🍽️', tone: 'from-stone-100 to-stone-50' };
+  const art = artFor(name);
   return (
     <span aria-hidden className={cn('grid place-items-center bg-gradient-to-br', art.tone, className)}>
       <span className={emojiClassName}>{art.emoji}</span>

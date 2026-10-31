@@ -12,6 +12,7 @@ import type {
   FloorPlan,
   DaySummaryView,
   OnlineAppView,
+  WebsiteConfig,
   WebsitePreviewData,
   KitchenStation,
   KitchenTicketView,
@@ -372,8 +373,16 @@ export interface ApiClient {
   saveOnlineSettings(input: { deliveryFee: number; minOrder: number; defaultPrepMinutes: number }): Promise<void>;
   /** Owner only. The website alone; the Android app is a separate flow. Phase 1: a demo state, nothing goes online. */
   publishWebsite(): Promise<void>;
-  /** What the website previews show: this restaurant's online menu, prices and switches. */
+  /** What the website previews show: this restaurant's online menu, prices, switches and website settings. */
   getWebsitePreview(): Promise<WebsitePreviewData>;
+  /** Owner only. Look and texts of the website; a published website then waits for Publish Website. */
+  saveWebsiteConfig(config: WebsiteConfig): Promise<void>;
+  /** Delivery, Pickup, Dine-in ON/OFF: same people and same effect as online orders ON/OFF, at once. */
+  setOrderModes(modes: WebsiteConfig['modes']): Promise<void>;
+  /** Owner only. Demo steps: nothing touches a real domain or its DNS. */
+  connectDomain(domain: string): Promise<void>;
+  markDomainConnected(): Promise<void>;
+  removeDomain(): Promise<void>;
 
   /** Today's Summary (permission "reports.money"); null = today's business day. */
   getDaySummary(businessDate: string | null): Promise<DaySummaryView>;

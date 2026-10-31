@@ -24,12 +24,13 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - **Built (DEMO / PROTOTYPE):** layout and sidebar, DEMO login, Tables, Waiter Orders (Super + Service
   Waiter), Kitchen / KDS, Staff, Online Orders, Orders, installable PWA, notifications (message, beep,
   vibration), the full **POS / New Bill** (see below) and **Tables management** (Manage Areas, Add Table,
-  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 94 unit tests
+  Cleaning, Out of service) and the **Staff upgrade** (Owner-only, activation links, PIN — DEMO). 98 unit tests
   and the eight walkthroughs (`walkthrough`, `walkthrough:online`, `walkthrough:pos`, `walkthrough:tables`,
   `walkthrough:staff`, `walkthrough:menu`, `walkthrough:settings`, `walkthrough:online-app`) pass.
 - **Online App / Website rework** (owner's brief 2026-10-30, steps A–H): A and B approved (five tabs, status header, previews, demo Publish
   Website; `screens/online-app/`, `packages/shared/src/online-app.ts`), C built (previews and View Website show the Restaurant OS menu through a
-  DEMO browser link, `website-bridge.ts`; a direct link keeps sample data; orders do not reach Restaurant OS). Frontend and demo
+  DEMO browser link, `website-bridge.ts`; a direct link keeps sample data; orders do not reach Restaurant OS) approved, D built (Website tab:
+  branding, homepage, menu display, delivery and pickup, hours, contact, domain, SEO, QR; the previews follow it). Frontend and demo
   data only. No real backend, custom domain, image upload, Google Play or publishing without the owner's separate
   approval. Website and Android are two separate publishing flows. Details: `PROGRESS.md` §9.
 - **Approved by the owner:** documents, Phase 1 plan, Preview 1, the waiter → kitchen → cashier workflow,

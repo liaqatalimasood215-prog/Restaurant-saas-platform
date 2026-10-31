@@ -1,6 +1,7 @@
 import {
   NEW_ONLINE_PUBLISHING,
   NO_TAX,
+  WEEK_DAYS,
   rupeesToPaisa,
   type Area,
   type Branch,
@@ -20,6 +21,7 @@ import {
   type Restaurant,
   type RiderCashSettlement,
   type StaffUser,
+  type WebsiteConfig,
   type WaiterCall,
 } from '@restaurant-saas/shared';
 
@@ -27,7 +29,7 @@ import {
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 14;
+export const DEMO_DATA_VERSION = 15;
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -43,6 +45,7 @@ export interface DemoData {
   branch: Branch;
   /** Online App / Website: demo states only, nothing is really published */
   onlinePublishing: OnlinePublishing;
+  onlineWebsite: WebsiteConfig;
   staff: StaffUser[];
   stations: KitchenStation[];
   areas: Area[];
@@ -218,6 +221,25 @@ export function createSeed(): DemoData {
       managerCanSeeMoneyReports: false,
     },
     onlinePublishing: { ...NEW_ONLINE_PUBLISHING },
+    onlineWebsite: {
+      brand: { logoText: 'AP', wordmark: '', primaryColor: '#e31e24', accentColor: '#fbbf24', tagline: 'Hot pizza, crispy burgers, delivered to your door.', description: '', headline: '' },
+      homepage: {
+        showCategories: true,
+        showDeals: true,
+        showPopular: true,
+        // Classic Pizza, Zinger Burger, Chicken Tikka, Loaded Fries
+        popularItemIds: [demoId(701), demoId(703), demoId(711), demoId(705)],
+        deals: [
+          { itemId: demoId(710), tag: "Today's pick" },
+          { itemId: demoId(703), tag: 'Customer favourite' },
+        ],
+      },
+      menu: { showDescriptions: true, showSoldOut: true },
+      modes: { delivery: true, pickup: true, dineIn: true },
+      hours: Object.fromEntries(WEEK_DAYS.map((day) => [day, { closed: false, open: '12:00', close: '02:00' }])) as WebsiteConfig['hours'],
+      contact: { whatsapp: '', email: '', facebook: '', instagram: '' },
+      seo: { title: 'Aziz Pizza — Order online', description: 'Hot pizza, crispy burgers, delivered to your door. Order online for delivery or pickup.' },
+    },
     staff: [
       staff(1, 'Aziz Ahmed', 'OWNER'),
       staff(2, 'Sana Khan', 'MANAGER'),

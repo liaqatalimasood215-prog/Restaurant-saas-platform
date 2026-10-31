@@ -204,11 +204,14 @@ export function ClosedBanner() {
 export function SiteFooter({ phoneToo }: { phoneToo: boolean }) {
   const { store } = useStore();
   const row = 'flex items-start gap-2 text-sm text-stone-600';
+  const { whatsapp, email, facebook, instagram } = store.links;
+  const social = 'inline-flex min-h-11 items-center rounded-xl px-2 text-sm font-bold text-brand hover:underline';
   return (
-    <footer className={cn('border-t border-stone-200 bg-stone-50 pb-20 lg:pb-0', !phoneToo && 'hidden lg:block')}>
+    <footer className={cn('border-t border-stone-200 bg-stone-50 pb-20 lg:pb-0', !phoneToo && 'hidden lg:block')} data-footer>
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-8 sm:grid-cols-[1fr_auto]">
         <div className="space-y-2">
           <p className="font-extrabold">{store.restaurant.name}</p>
+          {store.about && <p className="max-w-xl text-sm text-stone-600">{store.about}</p>}
           <p className={row}>
             <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden />
             {store.branch.address}
@@ -221,6 +224,30 @@ export function SiteFooter({ phoneToo }: { phoneToo: boolean }) {
             <Phone className="size-4 shrink-0" aria-hidden />
             {store.branch.phone}
           </a>
+          {(whatsapp || email || facebook || instagram) && (
+            <div className="-ml-2 flex flex-wrap" data-footer-links>
+              {whatsapp && (
+                <a href={`https://wa.me/92${whatsapp.replace(/\D/g, '').replace(/^0/, '')}`} target="_blank" rel="noreferrer" className={social}>
+                  {t('store.whatsapp')}
+                </a>
+              )}
+              {email && (
+                <a href={`mailto:${email}`} className={social}>
+                  {t('store.email')}
+                </a>
+              )}
+              {facebook && (
+                <a href={facebook} target="_blank" rel="noreferrer" className={social}>
+                  {t('store.facebook')}
+                </a>
+              )}
+              {instagram && (
+                <a href={instagram} target="_blank" rel="noreferrer" className={social}>
+                  {t('store.instagram')}
+                </a>
+              )}
+            </div>
+          )}
         </div>
         <p className="self-end text-xs text-stone-500">{t('app.poweredBy')}</p>
       </div>

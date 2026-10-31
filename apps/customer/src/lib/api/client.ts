@@ -62,8 +62,13 @@ export interface CustomerStore extends PublicStore {
   bestsellerItemIds: string[];
   /** "Complete your meal" in the cart */
   suggestedItemIds: string[];
-  /** DEMO: this page shows the menu, prices and switches sent by Restaurant OS, not the website's own sample data */
+  /** DEMO: this page shows the menu, prices and settings sent by Restaurant OS, not the website's own sample data */
   fromRestaurantOs: boolean;
+  /** The ways to order this restaurant offers; at least one */
+  modes: OrderMode[];
+  display: { showCategories: boolean; showDeals: boolean; showPopular: boolean; showDescriptions: boolean };
+  about: string;
+  links: { whatsapp: string; email: string; facebook: string; instagram: string };
 }
 
 /** DEMO: there is no rider system yet; the card shows made-up details. */

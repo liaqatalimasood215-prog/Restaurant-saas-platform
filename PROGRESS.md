@@ -64,7 +64,7 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | Staff upgrade + redesign (Owner-only, activation links, PIN, Deactivate ends sessions, employee list, 3-step wizard, Role Permissions — owner requests 2026-10-29) | **Approved** 2026-10-30 (DEMO frontend); backend parts wait for Phase 4–6 |
 | Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Started** 2026-10-30 ("shuru karo"). Steps 1 **Menu**, 2 **Settings**, 3 **Today's Summary** and 4 **Online App: built**; Riders and refunds **paused** (owner: website first) |
 | Phase 2 customer website (`apps/customer`) | **Approved** 2026-10-31 ("Approve, Phase C karo"): redesigned from the owner's six-screen picture, DEMO |
-| Online App / Website rework (owner's brief, steps A–H) | Steps A and B **approved**; step C **built 2026-10-31, waiting for the owner's review**; steps D–H not started |
+| Online App / Website rework (owner's brief, steps A–H) | Steps A, B and C **approved**; step D **built 2026-10-31, waiting for the owner's review**; steps E–H not started |
 
 ## 4. What is built (all DEMO / PROTOTYPE unless noted)
 
@@ -76,7 +76,7 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 - Monorepo: pnpm 10.28 workspaces + Turborepo; Next.js 16 (App Router, Turbopack), React 19, Tailwind 4,
   TypeScript 6, ESLint 9, lucide-react. Apps: `apps/restaurant-os`, `apps/customer`. Packages: `packages/shared`.
   Not started: `apps/rider`, `apps/admin`, `backend/api` (only an unvalidated Prisma draft).
-- `packages/shared` (NOT CONNECTED — **94 unit tests pass**): 7 roles (OWNER, MANAGER, CASHIER, WAITER =
+- `packages/shared` (NOT CONNECTED — **98 unit tests pass**): 7 roles (OWNER, MANAGER, CASHIER, WAITER =
   Super Waiter, SERVICE_WAITER, KITCHEN, RIDER) and the permission matrix, sidebar sections, order
   engine (dine-in, delivery, takeaway), kitchen tickets (station split, auto-ready, undo within 2 min),
   pricing engine (paisa + basis points: discount, service charge, tax, delivery fee, rounding), payments,
@@ -84,7 +84,7 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 - Data layer: `ApiClient` interface (`src/lib/api/client.ts`) + `DemoAdapter` (`src/lib/api/demo/*`).
   Screens use `getApi()`; an ESLint rule blocks importing the demo folder anywhere else. Demo data in
   localStorage + BroadcastChannel (the message carries the data); the login session is per tab in
-  sessionStorage. **Demo data version is 14** (changing it resets everyone's demo data once).
+  sessionStorage. **Demo data version is 15** (changing it resets everyone's demo data once).
 - All UI text lives in `apps/restaurant-os/src/i18n/en.ts` (Urdu UI is Phase 7).
 - Installable PWA (manifest, icons, no-cache service worker, Install App in the profile menu); no offline
   data. One small "Demo mode" indicator in the header explains that sync works only between tabs of one
@@ -105,7 +105,7 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 | Menu | Items tab with **category cards on top** (All Menu, Pizza, Burgers … with item counts; tap one and only its products show, owner's reference picture 2026-10-31, in the app's light colours; search stays inside the category; size filter where items have sizes). Each item: picture, station, unit, one price or sizes, add-ons, In stock and Online switches, edit, delete = archive when ever ordered. Then Categories tab (add, rename, reorder, hide / show, delete when empty), Add-ons tab (groups with "choose min–max" and add-ons, free or priced). Changes reach POS, Waiter Orders and the kitchen at once; old bills keep their prices. Rules: `packages/shared/src/menu.ts`; screens: `apps/restaurant-os/src/screens/menu/` |
 | Settings | Owner only: restaurant and branch (name, phone, address), tax rate and switches (prices include tax, tax on service / delivery), dine-in service charge, round to rupee, live example bill, delivery fee, minimum order, usual prep time, business day start, receipt top / bottom text with preview, kitchen stations (add, edit warn / late minutes and "ready at once", reorder, remove only when unused). **Every order keeps the bill settings it was made with** (`order.pricing`): a Settings change affects new bills only. Rules: `packages/shared/src/settings.ts` |
 | Today's Summary | One business day (pick earlier days): sales of paid bills (big number), average bill, cash received (and cash still with riders), tips, open bills and amount due, refunds, tax + service; sales by order type, payments by method, top items by sales, tips per waiter, discounts / voids / refunds / cancellations with who and why. Permission "Reports" (Owner; Manager when Role Permissions allow). Calculation: `packages/shared/src/reports.ts` (Test A step 7 unit test) |
-| Online App / Website | Rework step B, owner's reference picture in the app's own colours. Tabs: **Overview** (status header with link, copy, View Website, Publish Website and the orders ON/OFF switch; cards Website, Installable App, Android App; Website Preview Desktop / Mobile and phone preview, both the real `apps/customer` in a frame), **Website** (customer link and QR code, custom domain = Planned, product Online ON/OFF with search), **Mobile App (PWA)** (honest list: offline = Planned, install = needs hosting), **Android App** (5 steps, screens only), **Settings** (delivery fee, minimum order, prep time, same values as Settings). Publish Website is a demo state, Owner only (`onlineApp.publish`), and never touches Android. The DEMO customer buttons on Online Orders obey the switches and the minimum order. Link NOT CONNECTED: works on this computer only until hosting. Rules: `packages/shared/src/online-app.ts`; screens: `apps/restaurant-os/src/screens/online-app/` |
+| Online App / Website | Rework steps B–D, owner's reference picture in the app's own colours. The **Website** tab now has nine parts beside a phone preview: Branding, Homepage, Menu display (with product Online ON/OFF), Delivery & Pickup, Opening hours, Contact, Custom domain (DEMO steps), SEO & Sharing, QR code (preview, download). Saved settings reach the previews at once; on a published website they wait for Publish Website. Owner only, except the Delivery / Pickup / Dine-in switches. Tabs as first built: **Overview** (status header with link, copy, View Website, Publish Website and the orders ON/OFF switch; cards Website, Installable App, Android App; Website Preview Desktop / Mobile and phone preview, both the real `apps/customer` in a frame), **Website** (customer link and QR code, custom domain = Planned, product Online ON/OFF with search), **Mobile App (PWA)** (honest list: offline = Planned, install = needs hosting), **Android App** (5 steps, screens only), **Settings** (delivery fee, minimum order, prep time, same values as Settings). Publish Website is a demo state, Owner only (`onlineApp.publish`), and never touches Android. The DEMO customer buttons on Online Orders obey the switches and the minimum order. Link NOT CONNECTED: works on this computer only until hosting. Rules: `packages/shared/src/online-app.ts`; screens: `apps/restaurant-os/src/screens/online-app/` |
 | Placeholders | Riders (Preview 5); Dashboard, Customers, Finance & Reports, Inventory, Payroll, AI Manager (Coming Soon) |
 
 ### 4.3 Customer website (`apps/customer`, Phase 2, DEMO / PROTOTYPE)
@@ -182,9 +182,9 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 
 ## 7. Test status (last run, all green)
 
-- `pnpm test` — 94 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-31, Online App
-  rework step C; the build covers both apps). All eight Restaurant OS walkthroughs and the customer walkthrough ran
-  after step C and pass. A full-page screenshot leaves the website frames empty although they show on screen: use viewport screenshots.
+- `pnpm test` — 98 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-31, Online App
+  rework step D; the build covers both apps). All eight Restaurant OS walkthroughs and the customer walkthrough ran
+  after step D and pass. A full-page screenshot leaves the website frames empty although they show on screen: use viewport screenshots.
 - Customer App redesign (2026-10-31): `pnpm --filter @restaurant-saas/customer lint`, `typecheck` and `build` pass.
 - `pnpm --filter @restaurant-saas/customer walkthrough` — 182 checks on phone, tablet and desktop sizes, on the dev
   server and on the production build (after `build`: preview `customer-production` in `.claude/launch.json`, port 3012,
@@ -229,7 +229,7 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 ```bash
 pnpm install
 pnpm dev                                   # Restaurant OS on http://localhost:3000, website on :3001
-pnpm test                                  # shared rules (94 unit tests)
+pnpm test                                  # shared rules (98 unit tests)
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -257,9 +257,10 @@ approval: no real backend, custom domain, image upload, Google Play or publishin
 
 - A inspection, B Overview, tabs, status header: approved.
 - C previews and View Website show the Restaurant OS menu, prices and switches (DEMO browser link); LALA sample in the previews;
-  built 2026-10-31, the owner reviews it next. Not done by design: a direct website link keeps sample data; orders stay on the website.
-- D Website tab: branding, homepage, menu display,
-  delivery and pickup switches, opening hours, contact, SEO, domain screens, Download QR. E PWA screens. F Android screens
+  approved. Not done by design: a direct website link keeps sample data; orders stay on the website.
+- D Website tab (`website-tab.tsx`, `website-settings.tsx`, `website-domain.tsx`, `website-qr.tsx`): built 2026-10-31, the owner reviews it
+  next. Not done by design: real domain or DNS, picture upload, SEO on the real pages, hours closing the website by themselves.
+- E PWA screens. F Android screens
   (mock states, no real tooling). G tenant by domain with mock data; the "One website, every restaurant" start page becomes a
   developer page only. H full check, screenshots, documents.
 - Each next step waits for the owner's approval. Riders page, refunds and Rider App stay paused.
