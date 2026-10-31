@@ -402,6 +402,8 @@ export interface OnlineAppView {
   /** "/restaurant-slug/branch-slug" on the Customer App */
   customerPath: string;
   publishing: OnlinePublishing;
+  /** Sample restaurants the website previews can also show; they keep their own menus */
+  samplePreviews: { name: string; path: string }[];
   categories: MenuCategory[];
   items: MenuItem[];
 }

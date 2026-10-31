@@ -17,6 +17,7 @@ export const en = {
     label: 'DEMO',
     title: 'Sample website',
     body: 'This is a sample: the restaurant and orders are not real, nothing is sent to a kitchen and no money moves. Orders are kept only in this browser. Connecting it to Restaurant OS comes with the backend (Phase 4).',
+    fromOs: 'This page shows the menu, prices and switches from Restaurant OS on this computer. Orders placed here still do not reach Restaurant OS.',
     onlineOrders: 'Taking online orders',
     openNow: 'Restaurant open',
     reset: 'Clear sample orders',

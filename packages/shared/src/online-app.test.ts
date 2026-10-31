@@ -1,6 +1,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NEW_ONLINE_PUBLISHING, canGrant, canPublishWebsite, onlineStatus, publishedWebsite, recommendedPermissions, type OnlinePublishing } from './index';
+import { NEW_ONLINE_PUBLISHING, NO_TAX, canGrant, canPublishWebsite, isWebsitePreviewData, onlineStatus, publishedWebsite, recommendedPermissions, type OnlinePublishing } from './index';
+
+test('the website accepts only well-formed preview data from Restaurant OS', () => {
+  const good = {
+    restaurant: { name: 'A', slug: 'a' },
+    branch: { name: 'Main', slug: 'main', phone: '', address: '' },
+    onlineOrdersEnabled: true,
+    deliveryFee: 15_000,
+    minOrder: 50_000,
+    defaultPrepMinutes: 30,
+    pricing: { tax: NO_TAX, serviceChargeBps: 0, roundToRupee: true, deliveryFee: 15_000 },
+    categories: [],
+    items: [{ id: 'x', name: 'Zinger', basePrice: 45_000, variants: [] }],
+    addonGroups: [],
+  };
+  assert.equal(isWebsitePreviewData(good), true);
+  assert.equal(isWebsitePreviewData(null), false);
+  assert.equal(isWebsitePreviewData('menu'), false);
+  assert.equal(isWebsitePreviewData({ ...good, restaurant: undefined }), false);
+  assert.equal(isWebsitePreviewData({ ...good, deliveryFee: -1 }), false);
+  assert.equal(isWebsitePreviewData({ ...good, items: [{ id: 'x', name: 'Zinger', basePrice: 1.5, variants: [] }] }), false);
+});
 
 const AT = '2026-10-30T10:00:00.000Z';
 

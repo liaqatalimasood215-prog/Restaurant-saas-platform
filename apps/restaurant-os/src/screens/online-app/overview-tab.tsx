@@ -30,6 +30,7 @@ export function OverviewTab({ onOpenTab, ...props }: OnlineTabProps & { onOpenTa
   const { view, canPublish, busy, run } = props;
   const [device, setDevice] = useState<PreviewDevice>(() => (window.matchMedia('(max-width: 639px)').matches ? 'mobile' : 'desktop'));
   const previewRef = useRef<HTMLDivElement>(null);
+  const [previewPath, setPreviewPath] = useState(view.customerPath);
   const showPreview = (next: PreviewDevice) => {
     setDevice(next);
     previewRef.current?.scrollIntoView({ block: 'start' });
@@ -84,10 +85,10 @@ export function OverviewTab({ onOpenTab, ...props }: OnlineTabProps & { onOpenTa
         </div>
       </div>
       <div ref={previewRef} className="min-w-0 scroll-mt-20 lg:[grid-area:live]">
-        <LivePreview path={view.customerPath} device={device} onDevice={setDevice} />
+        <LivePreview view={view} path={previewPath} onPath={setPreviewPath} device={device} onDevice={setDevice} />
       </div>
       <div className="hidden self-start lg:block lg:[grid-area:phone]">
-        <PhonePreview path={view.customerPath} />
+        <PhonePreview path={previewPath} />
       </div>
     </div>
   );
@@ -128,7 +129,8 @@ function StatusHeader({ view, canManage, canPublish, busy, run, publishButton }:
               <Copy className="size-4" aria-hidden />
             </button>
           </div>
-          <a href={url} target="_blank" rel="noopener" className={linkButtonClass}>
+          {/* rel="opener": the website tab asks this page for its menu (website-bridge.ts). */}
+          <a href={url} target="_blank" rel="opener" className={linkButtonClass}>
             <ExternalLink className="size-4" aria-hidden />
             {t('onlineApp.viewWebsite')}
           </a>

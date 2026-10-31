@@ -5,6 +5,7 @@
  * These are states only: nothing here deploys a website, builds an app or talks to Google Play.
  * Roman Urdu: Website aur Android app alag alag publish hote hain; website ko Android ki zaroorat nahi.
  */
+import type { MenuCategory, MenuItem, ModifierGroup, OrderPricing, Paisa } from './types';
 
 export type WebsitePublishState = 'DRAFT' | 'PUBLISHING' | 'LIVE' | 'CHANGES_PENDING' | 'FAILED' | 'DOMAIN_REQUIRED';
 
@@ -48,6 +49,47 @@ export const NEW_ONLINE_PUBLISHING: OnlinePublishing = {
   androidState: 'NOT_CONFIGURED',
   subscription: 'ACTIVE',
 };
+
+/**
+ * DEMO link between Restaurant OS and the website's preview, until the backend joins them (Phase 4): the website says it
+ * is ready, and Restaurant OS answers with its menu, prices and switches. Never staff, customers or orders.
+ */
+export const WEBSITE_PREVIEW_READY = 'lala-website-preview-ready';
+export const WEBSITE_PREVIEW_DATA = 'lala-website-preview-data';
+
+export interface WebsitePreviewData {
+  restaurant: { name: string; slug: string };
+  branch: { name: string; slug: string; phone: string; address: string };
+  onlineOrdersEnabled: boolean;
+  deliveryFee: Paisa;
+  minOrder: Paisa;
+  defaultPrepMinutes: number;
+  pricing: OrderPricing;
+  categories: MenuCategory[];
+  items: MenuItem[];
+  addonGroups: ModifierGroup[];
+}
+
+/** A message from another window is not trusted: the website checks its shape before showing it. */
+export function isWebsitePreviewData(value: unknown): value is WebsitePreviewData {
+  if (typeof value !== 'object' || value === null) return false;
+  const d = value as Partial<WebsitePreviewData>;
+  const money = (n: unknown) => Number.isSafeInteger(n) && (n as number) >= 0;
+  return (
+    typeof d.restaurant?.slug === 'string' &&
+    typeof d.restaurant.name === 'string' &&
+    typeof d.branch?.slug === 'string' &&
+    typeof d.onlineOrdersEnabled === 'boolean' &&
+    money(d.deliveryFee) &&
+    money(d.minOrder) &&
+    typeof d.pricing === 'object' &&
+    d.pricing !== null &&
+    Array.isArray(d.categories) &&
+    Array.isArray(d.items) &&
+    Array.isArray(d.addonGroups) &&
+    d.items.every((i) => typeof i?.id === 'string' && typeof i.name === 'string' && money(i.basePrice) && Array.isArray(i.variants))
+  );
+}
 
 /** What the status header shows: the website's state, unless something bigger stops customers from ordering. */
 export type OnlineStatus = WebsitePublishState | 'OFFLINE' | 'SUBSCRIPTION_SUSPENDED';

@@ -14,6 +14,7 @@ import { AndroidTab } from './android-tab';
 import { OverviewTab } from './overview-tab';
 import { PwaTab } from './pwa-tab';
 import { SettingsTab } from './settings-tab';
+import { useWebsiteBridge } from './website-bridge';
 import { WebsiteTab } from './website-tab';
 
 export type OnlineTab = 'overview' | 'website' | 'pwa' | 'android' | 'settings';
@@ -34,6 +35,7 @@ const TABS: { key: OnlineTab; icon: LucideIcon }[] = [
 export function OnlineAppScreen() {
   const { allowed } = useSession();
   const online = useApiQuery(() => getApi().getOnlineApp(), []);
+  useWebsiteBridge();
   const toast = useToast();
   const [tab, setTab] = useState<OnlineTab>('overview');
   const [busy, setBusy] = useState(false);

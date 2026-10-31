@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Monitor, Smartphone } from 'lucide-react';
+import { ExternalLink, Monitor, Smartphone } from 'lucide-react';
+import type { OnlineAppView } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
+import { useSession } from '@/lib/session';
 import { customerUrl } from './online-parts';
 
 export type PreviewDevice = 'desktop' | 'mobile';
@@ -16,10 +18,11 @@ const SIZE: Record<PreviewDevice, { width: number; height: number }> = {
 };
 
 /**
- * Both previews show the real customer website in a frame, never a copy of its homepage, so a change to the website
- * appears here by itself. It keeps its own sample data until the backend joins the two (Phase 4).
+ * Both previews show the real customer website in a frame, never a copy of its homepage. For this restaurant it shows
+ * the Restaurant OS menu, prices and switches (website-bridge.ts); a sample restaurant keeps its own menu.
  */
-export function LivePreview({ path, device, onDevice }: { path: string; device: PreviewDevice; onDevice: (device: PreviewDevice) => void }) {
+export function LivePreview({ view, path, onPath, device, onDevice }: { view: OnlineAppView; path: string; onPath: (path: string) => void; device: PreviewDevice; onDevice: (device: PreviewDevice) => void }) {
+  const { data: session } = useSession();
   const boxRef = useRef<HTMLDivElement>(null);
   const [boxWidth, setBoxWidth] = useState(0);
   useEffect(() => {
@@ -47,8 +50,19 @@ export function LivePreview({ path, device, onDevice }: { path: string; device: 
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
           <CardTitle>{t('onlineApp.previewTitle')}</CardTitle>
-          <Badge tone="amber">{t('onlineApp.linkStatus')}</Badge>
+          <Badge tone="amber">{t('onlineApp.demo')}</Badge>
         </div>
+        <label className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-600">
+          <span className="sr-only">{t('onlineApp.previewRestaurant')}</span>
+          <select value={path} onChange={(e) => onPath(e.target.value)} aria-label={t('onlineApp.previewRestaurant')} className="min-h-11 min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700">
+            <option value={view.customerPath}>{t('onlineApp.previewYours', { name: session?.restaurant.name ?? '' })}</option>
+            {view.samplePreviews.map((sample) => (
+              <option key={sample.path} value={sample.path}>
+                {t('onlineApp.previewSample', { name: sample.name })}
+              </option>
+            ))}
+          </select>
+        </label>
         <div role="group" aria-label={t('onlineApp.previewDevice')} className="flex gap-1">
           {choice('desktop', Monitor, t('onlineApp.desktop'))}
           {choice('mobile', Smartphone, t('onlineApp.mobile'))}
@@ -62,7 +76,15 @@ export function LivePreview({ path, device, onDevice }: { path: string; device: 
             </div>
           )}
         </div>
-        <p className="text-xs text-slate-500">{t('onlineApp.previewHint')}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="min-w-56 flex-1 text-xs text-slate-500" data-preview-hint>
+            {path === view.customerPath ? t('onlineApp.previewHint') : t('onlineApp.previewHintSample')}
+          </p>
+          <a href={customerUrl(path)} target="_blank" rel="opener" data-preview-open className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-bold text-brand hover:bg-brand-soft">
+            <ExternalLink className="size-4" aria-hidden />
+            {t('onlineApp.previewOpen')}
+          </a>
+        </div>
       </CardBody>
     </Card>
   );

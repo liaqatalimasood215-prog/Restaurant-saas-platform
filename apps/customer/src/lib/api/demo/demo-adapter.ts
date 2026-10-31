@@ -1,5 +1,5 @@
 // DEMO
-import { amountToMinimum, calculateBill, nextTrackingStep, normalizePhone, unitPriceFor, type DraftItemInput } from '@restaurant-saas/shared';
+import { WEBSITE_PREVIEW_DATA, WEBSITE_PREVIEW_READY, amountToMinimum, calculateBill, isWebsitePreviewData, nextTrackingStep, normalizePhone, unitPriceFor, type DraftItemInput, type WebsitePreviewData } from '@restaurant-saas/shared';
 import { rs } from '../../format';
 import { checkOrderDetails, stepsKind } from '../../order-rules';
 import { ApiError, type CustomerOrder, type CustomerProfile, type CustomerStore, type DemoControls, type PlaceOrderInput, type StoreApi } from '../client';
@@ -11,6 +11,14 @@ import { DEMO_CLOSED_AT_START, DEMO_RIDER, DEMO_STORES } from './seed';
  * but it is NOT a security boundary, and it is not joined to Restaurant OS until the backend exists (Phase 4).
  */
 const KEY = 'lala-store-demo-v2';
+
+/**
+ * DEMO link: inside a Restaurant OS preview frame, or a tab opened from it, the page asks Restaurant OS for its menu,
+ * prices and switches. Only this address is believed and the shape is checked. A direct visit keeps the sample data.
+ */
+const RESTAURANT_OS_ORIGIN = 'http://localhost:3000';
+const PREVIEW_KEY = 'lala-store-preview';
+const PREVIEW_WAIT_MS = 800;
 
 interface DemoState {
   /** "restaurant/branch" → switches */
@@ -32,8 +40,42 @@ export class DemoAdapter implements StoreApi, DemoControls {
   private loaded = false;
   private listening = false;
   private readonly listeners = new Set<() => void>();
+  private preview: WebsitePreviewData | null = null;
+  private previewAsked = false;
+  private previewArrival: Promise<void> = Promise.resolve();
+
+  /** Asks Restaurant OS once; the first answer is waited for briefly, so the sample menu does not flash first. */
+  private askRestaurantOs(): void {
+    if (this.previewAsked) return;
+    this.previewAsked = true;
+    const host = window.parent !== window ? window.parent : (window.opener as Window | null);
+    if (!host) return;
+    try {
+      const kept: unknown = JSON.parse(window.sessionStorage.getItem(PREVIEW_KEY) ?? 'null');
+      if (isWebsitePreviewData(kept)) this.preview = kept;
+    } catch {
+      // Storage blocked or broken: wait for Restaurant OS.
+    }
+    this.previewArrival = new Promise<void>((resolve) => {
+      if (this.preview) resolve();
+      setTimeout(resolve, PREVIEW_WAIT_MS);
+      window.addEventListener('message', (event) => {
+        if (event.origin !== RESTAURANT_OS_ORIGIN || event.data?.type !== WEBSITE_PREVIEW_DATA || !isWebsitePreviewData(event.data.data)) return;
+        this.preview = event.data.data;
+        try {
+          window.sessionStorage.setItem(PREVIEW_KEY, JSON.stringify(this.preview));
+        } catch {
+          // Storage blocked: it still works until a reload.
+        }
+        resolve();
+        this.emit();
+      });
+    });
+    host.postMessage({ type: WEBSITE_PREVIEW_READY }, RESTAURANT_OS_ORIGIN);
+  }
 
   private read(): DemoState {
+    this.askRestaurantOs();
     if (!this.loaded) {
       this.loaded = true;
       try {
@@ -77,18 +119,38 @@ export class DemoAdapter implements StoreApi, DemoControls {
     const seed = this.seed(restaurantSlug, branchSlug);
     const key = `${restaurantSlug}/${branchSlug}`;
     const switches = this.read().switches[key] ?? startSwitches(key);
+    const preview = this.preview?.restaurant.slug === restaurantSlug && this.preview.branch.slug === branchSlug ? this.preview : null;
     // Item OFF = hidden: the website never receives it, also not through a deal or a suggestion.
-    const items = seed.items.filter((i) => i.isOnline && !i.archivedAt);
-    const onMenu = (itemId: string) => items.some((i) => i.id === itemId);
+    const items = (preview?.items ?? seed.items).filter((i) => i.isOnline && !i.archivedAt);
+    // Deals and "popular" name dishes of the sample menu: they follow the dish with the same name in the Restaurant OS menu.
+    const onMenu = (seedItemId: string): string | null => {
+      const name = seed.items.find((i) => i.id === seedItemId)?.name;
+      return items.find((i) => i.id === seedItemId || i.name === name)?.id ?? null;
+    };
+    const onMenuList = (ids: string[]) => ids.flatMap((id) => onMenu(id) ?? []);
     return {
       ...seed,
+      ...(preview && {
+        restaurant: { ...seed.restaurant, name: preview.restaurant.name },
+        branch: { ...seed.branch, name: preview.branch.name, phone: preview.branch.phone, address: preview.branch.address },
+        deliveryFee: preview.deliveryFee,
+        minOrder: preview.minOrder,
+        defaultPrepMinutes: preview.defaultPrepMinutes,
+        pricing: preview.pricing,
+        categories: preview.categories,
+        addonGroups: preview.addonGroups,
+      }),
+      fromRestaurantOs: Boolean(preview),
       isOpen: switches.open,
-      onlineOrdersEnabled: switches.online,
+      onlineOrdersEnabled: switches.online && (preview?.onlineOrdersEnabled ?? true),
       items,
-      deals: seed.deals.filter((d) => onMenu(d.itemId)),
-      popularItemIds: seed.popularItemIds.filter(onMenu),
-      bestsellerItemIds: seed.bestsellerItemIds.filter(onMenu),
-      suggestedItemIds: seed.suggestedItemIds.filter(onMenu),
+      deals: seed.deals.flatMap((d) => {
+        const itemId = onMenu(d.itemId);
+        return itemId ? [{ ...d, itemId }] : [];
+      }),
+      popularItemIds: onMenuList(seed.popularItemIds),
+      bestsellerItemIds: onMenuList(seed.bestsellerItemIds),
+      suggestedItemIds: onMenuList(seed.suggestedItemIds),
       branches: DEMO_STORES.filter((s) => s.restaurant.slug === restaurantSlug).map((s) => {
         const branchKey = `${restaurantSlug}/${s.branch.slug}`;
         return { name: s.branch.name, slug: s.branch.slug, address: s.branch.address, isOpen: (this.read().switches[branchKey] ?? startSwitches(branchKey)).open };
@@ -103,7 +165,8 @@ export class DemoAdapter implements StoreApi, DemoControls {
   }
 
   async getStore(restaurantSlug: string, branchSlug: string): Promise<CustomerStore> {
-    await wait();
+    this.read();
+    await Promise.all([wait(), this.previewArrival]);
     return clone(this.publicStore(restaurantSlug, branchSlug));
   }
 

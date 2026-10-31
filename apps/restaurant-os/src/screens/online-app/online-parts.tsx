@@ -6,7 +6,7 @@ import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
 
 /** The customer website's development address (PROJECT_RULES.md §3); the real domain comes with hosting. */
-const CUSTOMER_APP_ORIGIN = 'http://localhost:3001';
+export const CUSTOMER_APP_ORIGIN = 'http://localhost:3001';
 
 export const customerUrl = (path: string) => `${CUSTOMER_APP_ORIGIN}${path}`;
 

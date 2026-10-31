@@ -19,7 +19,8 @@ import { StoreContext } from './store-context';
 export function StoreShell({ restaurant, branch, children }: { restaurant: string; branch: string; children: ReactNode }) {
   const query = useApiQuery(() => getApi().getStore(restaurant, branch), [restaurant, branch]);
   const base = `/${restaurant}/${branch}`;
-  const cart = useCart(`${restaurant}/${branch}`);
+  // The Restaurant OS menu has other dishes than the sample menu, so a preview keeps its own cart.
+  const cart = useCart(query.data?.fromRestaurantOs ? `${restaurant}/${branch}/preview` : `${restaurant}/${branch}`);
   const favourites = useFavourites(restaurant);
   const router = useRouter();
   const pathname = usePathname();

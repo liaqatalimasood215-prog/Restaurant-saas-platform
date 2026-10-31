@@ -171,6 +171,11 @@ function DemoPanel({ onClose }: { onClose: () => void }) {
   return (
     <Sheet title={t('demo.title')} onClose={onClose} footer={<Button variant="secondary" className="w-full" onClick={onClose}>{t('demo.close')}</Button>}>
       <p className="mb-3 text-sm text-stone-600">{t('demo.body')}</p>
+      {store.fromRestaurantOs && (
+        <p className="mb-3 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900" data-from-restaurant-os>
+          {t('demo.fromOs')}
+        </p>
+      )}
       <div className="space-y-2">
         {toggle(t('demo.onlineOrders'), store.onlineOrdersEnabled, (on) => demo.setOnlineOrders(...slugs, on))}
         {toggle(t('demo.openNow'), store.isOpen, (on) => demo.setOpen(...slugs, on))}

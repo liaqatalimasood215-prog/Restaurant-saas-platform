@@ -43,6 +43,7 @@ import {
   type InviteKind,
   type PinProblem,
   type OnlineAppView,
+  type WebsitePreviewData,
   type DaySummaryView,
   type OrderPricing,
   type SettingsView,
@@ -1836,6 +1837,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         defaultPrepMinutes: branch.defaultPrepMinutes,
         customerPath: customerAppPath(restaurant.slug, branch.slug),
         publishing: data.onlinePublishing,
+        samplePreviews: [{ name: 'LALA Restaurant', path: customerAppPath('lala-restaurant', 'main') }],
         categories,
         items: data.items
           .filter((i) => !i.archivedAt && rank(i.categoryId) >= 0)
@@ -1865,6 +1867,29 @@ export class DemoAdapter implements ApiClient, DemoControls {
         Object.assign(data.branch, input);
       }),
     );
+  }
+
+  getWebsitePreview(): Promise<WebsitePreviewData> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'onlineApp.view');
+      const { branch, restaurant } = data;
+      const categories = data.categories.filter((c) => c.isActive).sort((a, b) => a.sort - b.sort);
+      // Only what customers may see: item OFF or a hidden category never leaves Restaurant OS.
+      const items = data.items.filter((i) => !i.archivedAt && i.isOnline && categories.some((c) => c.id === i.categoryId));
+      return {
+        restaurant: { name: restaurant.name, slug: restaurant.slug },
+        branch: { name: branch.name, slug: branch.slug, phone: branch.phone, address: branch.address },
+        onlineOrdersEnabled: branch.onlineOrdersEnabled,
+        deliveryFee: branch.deliveryFee,
+        minOrder: branch.minOrder,
+        defaultPrepMinutes: branch.defaultPrepMinutes,
+        pricing: pricingOf(branch),
+        categories,
+        items,
+        addonGroups: data.modifierGroups.filter((g) => items.some((i) => i.modifierGroupIds.includes(g.id))),
+      };
+    });
   }
 
   publishWebsite(): Promise<void> {
