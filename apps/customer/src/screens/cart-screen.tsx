@@ -12,6 +12,7 @@ import { cartTotals, describeCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { rs } from '@/lib/format';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
+import { newId } from '@/lib/new-id';
 import { checkOrderDetails, type OrderField } from '@/lib/order-rules';
 import { useOnline } from '@/lib/pwa';
 import { CartLineRow, TotalsList } from './cart-view';
@@ -47,7 +48,7 @@ export function CartScreen() {
   const [placed, setPlaced] = useState(false);
   const [clearing, setClearing] = useState(false);
   // One key per checkout: a double tap or a retry never creates a second order.
-  const [key] = useState(() => crypto.randomUUID());
+  const [key] = useState(() => newId());
 
   // Remembered details, until the person types something else.
   const saved = profile.data;

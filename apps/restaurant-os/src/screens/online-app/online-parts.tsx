@@ -10,6 +10,11 @@ export const CUSTOMER_APP_ORIGIN = 'http://localhost:3001';
 
 export const customerUrl = (path: string) => `${CUSTOMER_APP_ORIGIN}${path}`;
 
+const LAN_ADDRESS = process.env.NEXT_PUBLIC_LAN_ADDRESS;
+
+/** The link to share: on a phone `localhost` means the phone itself, so it uses this computer's Wi-Fi address (next.config.ts). */
+export const customerShareUrl = (path: string) => (LAN_ADDRESS ? `http://${LAN_ADDRESS}:3001${path}` : customerUrl(path));
+
 /** What every tab of the Online App page receives. */
 export interface OnlineTabProps {
   view: OnlineAppView;

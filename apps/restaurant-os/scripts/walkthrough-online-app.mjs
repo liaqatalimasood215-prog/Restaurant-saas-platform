@@ -57,14 +57,16 @@ await owner.getByRole('heading', { name: 'Online App / Website', level: 1 }).wai
 for (const name of ['Overview', 'Website', 'Mobile App (PWA)', 'Android App (Play Store)', 'Settings']) await owner.getByRole('tab', { name }).waitFor();
 await see(owner, 'Website is a draft');
 await see(owner, 'Taking online orders');
-assert.equal(await owner.locator('[data-customer-url]').innerText(), LINK);
+// The link to share uses this computer's Wi-Fi address when it has one, so it opens on a phone; View Website and the previews stay on localhost.
+const SHARE_LINK = await owner.locator('[data-customer-url]').innerText();
+assert.match(SHARE_LINK, /^http:\/\/(localhost|(10|172|192)\.[\d.]+):3001\/aziz-pizza\/main$/);
 await owner.getByRole('button', { name: 'Copy link' }).click();
 await see(owner, 'Link copied');
-assert.equal(await owner.evaluate(() => navigator.clipboard.readText()), LINK);
+assert.equal(await owner.evaluate(() => navigator.clipboard.readText()), SHARE_LINK);
 assert.equal(await owner.getByRole('link', { name: 'View Website' }).getAttribute('href'), LINK);
 await websiteShown(owner, 'Customer website preview');
 await shot(owner, '01-desktop-owner-online-app-overview');
-ok(`five tabs; draft status; link ${LINK} copied; View Website points to it`);
+ok(`five tabs; draft status; link ${SHARE_LINK} copied; View Website points to ${LINK}`);
 
 console.log('1b. Publish Website is separate from Android');
 await see(owner, 'Not configured');
@@ -84,8 +86,8 @@ ok('Publish Website: DEMO live, Android stays Not configured; Publish Online App
 console.log('1c. Website tab: QR code and link');
 await openTab(owner, 'Website');
 await owner.locator('[data-website-section="qr"]').click();
-assert.equal(await owner.getByLabel('Customer App link').inputValue(), LINK);
-assert.equal(await owner.locator('svg[data-qr]').getAttribute('data-qr'), LINK);
+assert.equal(await owner.getByLabel('Customer App link').inputValue(), SHARE_LINK);
+assert.equal(await owner.locator('svg[data-qr]').getAttribute('data-qr'), SHARE_LINK);
 await owner.locator('svg[data-qr]').screenshot({ path: path.join(OUT_DIR, 'qr-code.png') });
 await shot(owner, '04-desktop-owner-online-app-website-full');
 await openTab(owner, 'Mobile App (PWA)');
@@ -379,7 +381,7 @@ await owner.locator('[data-domain-state="CONNECTED"]').waitFor();
 await see(owner, 'no real domain was touched');
 await openTab(owner, 'Overview');
 assert.equal(await owner.locator('[data-domain]').innerText(), 'www.azizpizza.example');
-assert.equal(await owner.locator('[data-customer-url]').innerText(), LINK, 'the link stays on this computer until hosting');
+assert.equal(await owner.locator('[data-customer-url]').innerText(), SHARE_LINK, 'the link stays on this computer\'s Wi-Fi until hosting');
 ok('Custom domain: refused or cleaned up, DNS instructions marked as an example, DEMO connected, link and QR unchanged');
 
 await see(owner, 'Changes are waiting');

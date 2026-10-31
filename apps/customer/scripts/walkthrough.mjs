@@ -486,8 +486,11 @@ try {
   check('the install details are linked', (await page.locator('link[rel="manifest"]').getAttribute('href')) === '/lala-restaurant/main/manifest.webmanifest');
   const manifest = await (await page.request.get(`${LALA}/manifest.webmanifest`)).json();
   check('install details carry the restaurant', manifest.name.includes('LALA') && manifest.start_url === '/lala-restaurant/main');
-  await page.waitForFunction(() => navigator.serviceWorker.getRegistration().then((r) => Boolean(r)));
-  check('the service worker is registered', true);
+  // Browsers give a service worker only on localhost and HTTPS, not on a Wi-Fi address.
+  if (await page.evaluate(() => window.isSecureContext)) {
+    await page.waitForFunction(() => navigator.serviceWorker.getRegistration().then((r) => Boolean(r)));
+    check('the service worker is registered', true);
+  }
   const offerInstall = () =>
     page.evaluate(() => {
       const event = new Event('beforeinstallprompt', { cancelable: true });

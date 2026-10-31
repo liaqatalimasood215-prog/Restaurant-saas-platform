@@ -10,7 +10,7 @@ import { Card, CardBody } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { t } from '@/i18n';
-import { Heading, customerUrl } from './online-parts';
+import { Heading, customerShareUrl } from './online-parts';
 
 const QUIET_MODULES = 4;
 
@@ -45,7 +45,7 @@ function downloadPng(text: string, fileName: string): void {
 export function QrSection({ view }: { view: OnlineAppView }) {
   const toast = useToast();
   const [previewing, setPreviewing] = useState(false);
-  const url = customerUrl(view.customerPath);
+  const url = customerShareUrl(view.customerPath);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(url);

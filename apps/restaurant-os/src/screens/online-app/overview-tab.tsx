@@ -13,7 +13,7 @@ import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { OnlineTab } from './online-app-screen';
 import type { WebsiteSection } from './website-tab';
-import { AndroidSteps, CheckList, CheckRow, Heading, PublishWebsiteButton, PwaChecks, customerUrl, linkButtonClass, type OnlineTabProps } from './online-parts';
+import { AndroidSteps, CheckList, CheckRow, Heading, PublishWebsiteButton, PwaChecks, customerShareUrl, customerUrl, linkButtonClass, type OnlineTabProps } from './online-parts';
 import { LivePreview, PhonePreview, type PreviewDevice } from './website-previews';
 
 const STATUS_LOOK: Record<OnlineStatus, { dot: string; box: string }> = {
@@ -98,7 +98,7 @@ export function OverviewTab({ onOpenTab, ...props }: OnlineTabProps & { onOpenTa
 
 function StatusHeader({ view, canManage, canPublish, busy, run, publishButton }: OnlineTabProps & { publishButton: ReactNode }) {
   const toast = useToast();
-  const url = customerUrl(view.customerPath);
+  const url = customerShareUrl(view.customerPath);
   const status = onlineStatus(view.publishing, view.onlineOrdersEnabled);
   const copy = async () => {
     try {
@@ -132,7 +132,7 @@ function StatusHeader({ view, canManage, canPublish, busy, run, publishButton }:
             </button>
           </div>
           {/* rel="opener": the website tab asks this page for its menu (website-bridge.ts). */}
-          <a href={url} target="_blank" rel="opener" className={linkButtonClass}>
+          <a href={customerUrl(view.customerPath)} target="_blank" rel="opener" className={linkButtonClass}>
             <ExternalLink className="size-4" aria-hidden />
             {t('onlineApp.viewWebsite')}
           </a>

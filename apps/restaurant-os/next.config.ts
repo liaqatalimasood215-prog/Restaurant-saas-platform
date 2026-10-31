@@ -1,10 +1,25 @@
+import { networkInterfaces } from 'node:os';
 import type { NextConfig } from 'next';
+import { PHASE_DEVELOPMENT_SERVER } from 'next/constants';
 
-const nextConfig: NextConfig = {
-  reactStrictMode: true,
-  // The dev badge covers the phone bottom navigation; build errors still show as an overlay.
-  devIndicators: false,
-  transpilePackages: ['@restaurant-saas/shared'],
-};
+/** This computer's private network address, Wi-Fi first (virtual adapters skipped). */
+function lanAddress(): string | undefined {
+  const adapters = Object.entries(networkInterfaces())
+    .filter(([name]) => !/virtual|vmware|vethernet|wsl|bluetooth/i.test(name))
+    .sort(([a], [b]) => Number(/wi-?fi|wlan/i.test(b)) - Number(/wi-?fi|wlan/i.test(a)));
+  return adapters
+    .flatMap(([, addresses]) => addresses ?? [])
+    .find(({ family, address }) => family === 'IPv4' && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(address))?.address;
+}
 
-export default nextConfig;
+export default function config(phase: string): NextConfig {
+  const lan = phase === PHASE_DEVELOPMENT_SERVER ? lanAddress() : undefined;
+  return {
+    reactStrictMode: true,
+    // The dev badge covers the phone bottom navigation; build errors still show as an overlay.
+    devIndicators: false,
+    transpilePackages: ['@restaurant-saas/shared'],
+    // Development only: the customer link and QR code use it, so they open on a phone on the same Wi-Fi.
+    env: lan ? { NEXT_PUBLIC_LAN_ADDRESS: lan } : {},
+  };
+}

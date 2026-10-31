@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { calculateBill, unitPriceFor, type BillTotals, type DraftItemInput, type MenuItem, type PublicStore } from '@restaurant-saas/shared';
 import type { OrderMode } from './api/client';
 import { deviceStore } from './device-store';
+import { newId } from './new-id';
 
 /**
  * The cart lives on this device, one per restaurant branch. The totals here are for showing only:
@@ -38,7 +39,7 @@ export function useCart(key: string) {
             [...l.modifierIds].sort().join() === [...line.modifierIds].sort().join(),
         );
         if (same) return { ...s, lines: s.lines.map((l) => (l === same ? { ...l, quantity: Math.min(50, l.quantity + line.quantity) } : l)) };
-        return { ...s, lines: [...s.lines, { ...line, lineId: crypto.randomUUID() }] };
+        return { ...s, lines: [...s.lines, { ...line, lineId: newId() }] };
       }),
     replaceLine: (lineId: string, line: DraftItemInput) => update((s) => ({ ...s, lines: s.lines.map((l) => (l.lineId === lineId ? { ...line, lineId } : l)) })),
     setQuantity: (lineId: string, quantity: number) =>
