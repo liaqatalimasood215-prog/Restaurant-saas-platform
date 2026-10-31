@@ -37,6 +37,11 @@ body {
   display: none;
 }
 
+/* Shown inside the phone and desktop previews of Restaurant OS: a scrollbar there would narrow the page. */
+.in-frame {
+  scrollbar-width: none;
+}
+
 dialog::backdrop {
   background: rgb(28 25 23 / 0.55);
 }

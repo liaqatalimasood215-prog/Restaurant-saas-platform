@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Pencil, ShoppingBag, Trash2 } from 'lucide-react';
+import { ShoppingBag } from 'lucide-react';
 import { amountToMinimum, type BillTotals } from '@restaurant-saas/shared';
 import { EmptyState, ProductArt, Stepper, primaryLinkClass } from '@/components/ui';
 import { t } from '@/i18n';
@@ -34,31 +34,20 @@ export function TotalsList({ totals }: { totals: BillTotals }) {
   );
 }
 
-/** One dish in the cart: quantity, change and remove. */
+/** One dish in the cart: tap it to change its choices; quantity on the right; the last minus removes it. */
 export function CartLineRow({ view }: { view: Line }) {
   const { base, cart } = useStore();
-  const icon = 'grid size-11 place-items-center rounded-full text-stone-500 hover:bg-stone-100';
   return (
-    <li className="py-3" data-cart-line={view.item.name}>
-      <div className="flex gap-3">
-        <ProductArt name={view.item.name} className="size-14 shrink-0 rounded-2xl" emojiClassName="text-3xl" />
-        <div className="min-w-0 flex-1">
-          <p className="font-bold leading-tight">{view.item.name}</p>
-          {view.detail && <p className="text-xs text-stone-500">{view.detail}</p>}
-          <p className="mt-0.5 text-sm font-extrabold tabular-nums">{rs(view.lineTotal)}</p>
-        </div>
-      </div>
-      <div className="mt-1 flex items-center justify-between">
-        <Stepper value={view.line.quantity} min={1} name={view.item.name} onChange={(n) => cart.setQuantity(view.line.lineId, n)} />
-        <span className="flex">
-          <Link href={`${base}/item/${view.item.id}?line=${view.line.lineId}`} aria-label={t('cart.edit', { name: view.item.name })} className={icon}>
-            <Pencil className="size-4" aria-hidden />
-          </Link>
-          <button type="button" onClick={() => cart.setQuantity(view.line.lineId, 0)} aria-label={t('cart.remove', { name: view.item.name })} className={icon}>
-            <Trash2 className="size-4" aria-hidden />
-          </button>
+    <li className="flex items-center gap-2 py-3" data-cart-line={view.item.name}>
+      <Link href={`${base}/item/${view.item.id}?line=${view.line.lineId}`} aria-label={t('cart.edit', { name: view.item.name })} className="flex min-w-0 flex-1 items-center gap-3">
+        <ProductArt name={view.item.name} className="size-16 shrink-0 rounded-2xl" emojiClassName="text-4xl" />
+        <span className="min-w-0">
+          <span className="block font-bold leading-tight">{view.item.name}</span>
+          {view.detail && <span className="block text-xs text-stone-500">{view.detail}</span>}
+          <span className="mt-0.5 block text-sm font-extrabold tabular-nums">{rs(view.lineTotal)}</span>
         </span>
-      </div>
+      </Link>
+      <Stepper value={view.line.quantity} min={1} name={view.item.name} onChange={(n) => cart.setQuantity(view.line.lineId, n)} onRemove={{ label: t('cart.remove', { name: view.item.name }), run: () => cart.setQuantity(view.line.lineId, 0) }} />
     </li>
   );
 }

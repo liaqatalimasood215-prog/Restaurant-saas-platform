@@ -118,8 +118,9 @@ slider, Popular Now, branch selector, closed banner, install offer), Menu `/menu
 tab, sold out, hidden items never shown, side cart on desktop), Product `/item/<id>` (size, required crust, extras, note,
 quantity, price on the button; `?line=` edits a cart line), Cart `/cart` (Delivery / Pickup / Dine-in, details remembered,
 Complete your meal, payment choices, bill; `/checkout` redirects here), Tracking `/track/<token>` (private link, steps, DEMO
-buttons, rider card, map area, order again), Orders `/orders` (Reorder), Account `/account`, Login `/login`, bottom bar below
-1024 px. **NOT CONNECTED screens only:** OTP, Google, JazzCash / Easypaisa / Card, map, rider contact. Dine-in is DEMO only
+buttons, rider card with call and WhatsApp while a rider has the order, map area, order again), Orders `/orders` (Reorder),
+Account `/account`, Login `/login` (first visit on a device, once, with Skip; also in the header), bell, filter and sort, bottom
+bar below 1024 px. **NOT CONNECTED screens only:** OTP, Google, JazzCash / Easypaisa / Card, map, rider contact. Dine-in is DEMO only
 (borrows the pickup steps, `lib/order-rules.ts`). Same pattern as Restaurant OS: `getApi()`, DemoAdapter and all mock data in
 `src/lib/api/demo` (marked `// DEMO`, localStorage `lala-store-demo-v2`, cart `lala-store-cart-v2`), text in `src/i18n/en.ts`,
 rules and money only from `packages/shared` (not changed by the redesign). Run and publish notes: `apps/customer/README.md`.
@@ -185,7 +186,7 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
   rework step B; the build covers both apps). All eight Restaurant OS walkthroughs and the customer walkthrough ran
   after step B and pass. A full-page screenshot leaves the website frames empty although they show on screen: use viewport screenshots.
 - Customer App redesign (2026-10-31): `pnpm --filter @restaurant-saas/customer lint`, `typecheck` and `build` pass.
-- `pnpm --filter @restaurant-saas/customer walkthrough` — 169 checks on phone, tablet and desktop sizes, on the dev
+- `pnpm --filter @restaurant-saas/customer walkthrough` — 182 checks on phone, tablet and desktop sizes, on the dev
   server and on the production build (after `build`: preview `customer-production` in `.claude/launch.json`, port 3012,
   then `CUSTOMER_URL=http://localhost:3012`): the six screens, delivery / pickup / Dine-in orders, required crust, minimum
   order, sold out, hidden item, favourites, double tap makes one order, tracking, rider and map labels, Reorder, reject,
@@ -247,7 +248,10 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 ## 9. Pending tasks and next steps (in this order)
 
 **Now (owner, 2026-10-31): the owner reviews the redesigned Customer App** (§4.3) and approves it or asks for changes.
-Decided in the plan: Home opens first, login never forced; Dine-in DEMO only (open decision #19, MASTER_PROMPT.md §16);
+His first feedback is done (2026-10-31): whole bottom bar in the phone preview, first visit opens on Login once with Skip,
+the customer calls the rider while a rider has the order, details closer to the picture. Testing note: after
+`build`, stop and start `customer-production`, or it still serves the old build.
+Decided in the plan: login never forced; Dine-in DEMO only (open decision #19, MASTER_PROMPT.md §16);
 COD default, other payments take no money; LALA is sample data; food pictures stay emoji, no photos from the internet.
 
 **Then (owner, 2026-10-30): Online App / Website rework, steps A–H.** Frontend and demo data only. Without separate

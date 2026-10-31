@@ -31,6 +31,9 @@ export function StoreShell({ restaurant, branch, children }: { restaurant: strin
     pagesSeen.current += 1;
   }, [pathname]);
   useEffect(() => registerServiceWorker(), []);
+  useEffect(() => {
+    if (window.self !== window.top) document.documentElement.classList.add('in-frame');
+  }, []);
 
   if (query.loading && !query.data) return <StoreSkeleton />;
   if (!query.data) {

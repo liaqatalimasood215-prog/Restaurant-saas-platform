@@ -64,6 +64,8 @@ export function TrackScreen({ token, isNew }: { token: string; isNew: boolean })
   const accepted = at('ACCEPTED');
   const estimate = accepted && !finished && !rejected ? new Date(Date.parse(accepted) + order.prepMinutes * 60_000).toISOString() : null;
   const delivery = order.mode === 'DELIVERY';
+  // While a rider has the order, the customer calls the rider (owner, 2026-10-31); otherwise the restaurant.
+  const riderWorking = order.status === 'RIDER_ASSIGNED' || order.status === 'OUT_FOR_DELIVERY';
 
   const copy = async () => {
     try {
@@ -137,26 +139,27 @@ export function TrackScreen({ token, isNew }: { token: string; isNew: boolean })
             </ol>
           )}
 
-          {/* DEMO: stands in for Restaurant OS */}
-          {!rejected && !finished && (
-            <div className="mt-5 rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-3">
-              <p className="mb-2 text-xs font-semibold text-amber-800">{t('track.demoHint')}</p>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => getDemoControls().nextOrderStep(order.token)} disabled={!nextTrackingStep(order.kind, order.status)}>
-                  {t('track.demoNext')}
-                </Button>
-                {order.status === 'PLACED' && (
-                  <Button variant="ghost" onClick={() => getDemoControls().rejectOrder(order.token)}>
-                    {t('track.demoReject')}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
         </section>
 
-        {delivery && !rejected && <MapArea showRider={order.status === 'OUT_FOR_DELIVERY'} />}
-        {order.rider && !rejected && <RiderCard rider={order.rider} />}
+        {delivery && !rejected && <MapArea onTheWay={order.status === 'OUT_FOR_DELIVERY'} />}
+        {riderWorking && order.rider && <RiderCard rider={order.rider} />}
+
+        {/* DEMO: stands in for Restaurant OS */}
+        {!rejected && !finished && (
+          <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-3">
+            <p className="mb-2 text-xs font-semibold text-amber-800">{t('track.demoHint')}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => getDemoControls().nextOrderStep(order.token)} disabled={!nextTrackingStep(order.kind, order.status)}>
+                {t('track.demoNext')}
+              </Button>
+              {order.status === 'PLACED' && (
+                <Button variant="ghost" onClick={() => getDemoControls().rejectOrder(order.token)}>
+                  {t('track.demoReject')}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         <section className="rounded-3xl border border-stone-100 bg-white p-5 shadow-sm">
           <h2 className="mb-3 text-lg font-extrabold tracking-tight">{t('track.items')}</h2>
@@ -190,10 +193,12 @@ export function TrackScreen({ token, isNew }: { token: string; isNew: boolean })
         </section>
 
         <div className="flex flex-wrap gap-2">
-          <a href={`tel:${order.restaurantPhone}`} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-brand-soft px-4 text-sm font-bold text-brand hover:bg-brand-line">
-            <Phone className="size-4" aria-hidden />
-            {t('track.call')}
-          </a>
+          {!riderWorking && (
+            <a href={`tel:${order.restaurantPhone}`} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-brand-soft px-4 text-sm font-bold text-brand hover:bg-brand-line">
+              <Phone className="size-4" aria-hidden />
+              {t('track.call')}
+            </a>
+          )}
           <Button variant="secondary" onClick={() => void copy()}>
             <Copy className="size-4" aria-hidden />
             {copied ? t('track.copied') : t('track.copy')}
@@ -212,7 +217,7 @@ export function TrackScreen({ token, isNew }: { token: string; isNew: boolean })
 }
 
 /** A drawing that holds the place of a map: no GPS and no map service (P11, paid, needs approval). */
-function MapArea({ showRider }: { showRider: boolean }) {
+function MapArea({ onTheWay }: { onTheWay: boolean }) {
   return (
     <figure className="overflow-hidden rounded-3xl border border-stone-200 bg-stone-100" data-map>
       <figcaption className="flex flex-wrap items-center gap-2 bg-white px-3 py-2 text-xs font-semibold text-stone-700">
@@ -228,20 +233,31 @@ function MapArea({ showRider }: { showRider: boolean }) {
         <text x="70" y="126" textAnchor="middle" fontSize="16">🏠</text>
         <circle cx="300" cy="40" r="15" fill="#1c1917" />
         <text x="300" y="46" textAnchor="middle" fontSize="16">🍽️</text>
-        {showRider && (
-          <text x="190" y="92" textAnchor="middle" fontSize="26">
-            🛵
-          </text>
+        {onTheWay && (
+          <g>
+            <text x="190" y="92" textAnchor="middle" fontSize="26">
+              🛵
+            </text>
+            <rect x="205" y="74" width="122" height="26" rx="13" fill="#fff" stroke="#e7e5e4" />
+            <text x="266" y="91" textAnchor="middle" fontSize="12" fontWeight="700" fill="#1c1917">
+              {t('track.onTheWay')}
+            </text>
+          </g>
         )}
       </svg>
     </figure>
   );
 }
 
-/** Made-up rider details: the buttons do nothing until the Rider App exists (Phase 3) and the backend joins it. */
+/**
+ * The customer reaches the rider from here. The rider's details are made up until the Rider App exists (Phase 3) and the
+ * backend joins it, so the buttons explain themselves instead of dialling a number that belongs to nobody we know.
+ * Then they become a plain phone call and a free WhatsApp link: no paid service.
+ */
 function RiderCard({ rider }: { rider: SampleRider }) {
+  const { notify } = useStore();
   const initials = rider.name.split(' ').map((part) => part[0]).join('').slice(0, 2);
-  const contact = 'grid size-11 shrink-0 place-items-center rounded-full border border-stone-200 text-stone-400';
+  const explain = () => notify(t('track.riderDemo', { name: rider.name }));
   return (
     <section className="rounded-3xl border border-stone-100 bg-white p-4 shadow-sm" data-rider-card>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -256,10 +272,10 @@ function RiderCard({ rider }: { rider: SampleRider }) {
           <p className="truncate font-bold">{rider.name}</p>
           <p className="text-xs text-stone-500">{t('track.riderSample', { plate: rider.plate })}</p>
         </div>
-        <button type="button" disabled aria-label={t('track.riderWhatsapp')} className={contact}>
+        <button type="button" onClick={explain} aria-label={t('track.riderWhatsapp')} className="grid size-11 shrink-0 place-items-center rounded-full bg-green-600 text-white hover:bg-green-700">
           <MessageCircle className="size-5" aria-hidden />
         </button>
-        <button type="button" disabled aria-label={t('track.riderCall')} className={contact}>
+        <button type="button" onClick={explain} aria-label={t('track.riderCall')} className="grid size-11 shrink-0 place-items-center rounded-full border border-stone-300 bg-white text-stone-800 hover:bg-stone-50">
           <Phone className="size-5" aria-hidden />
         </button>
       </div>

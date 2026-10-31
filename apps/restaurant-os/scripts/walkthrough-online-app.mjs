@@ -160,6 +160,15 @@ assert.equal(await owner.getByTitle('Customer website on a phone').getAttribute(
 await frame.waitFor();
 await websiteShown(owner, 'Customer website preview');
 await websiteShown(owner, 'Customer website on a phone');
+const phoneFrame = owner.frameLocator('iframe[title="Customer website on a phone"]');
+await phoneFrame.getByText('Popular Now').waitFor();
+const fits = await owner.locator('[data-phone-screen]').evaluate((box) => {
+  const outer = box.getBoundingClientRect();
+  const inner = box.querySelector('iframe').getBoundingClientRect();
+  return inner.bottom <= outer.bottom && inner.right <= outer.right;
+});
+assert.ok(fits, "the website's bottom bar must fit inside the phone shape");
+assert.equal((await phoneFrame.locator('[data-bottom-nav] a').allInnerTexts()).join(), 'Home,Menu,Cart,Orders,Account');
 assert.equal(await owner.locator('[data-preview-device]').getAttribute('data-preview-device'), 'desktop');
 await owner.getByRole('button', { name: 'Preview Mobile View' }).click();
 assert.equal(await owner.locator('[data-preview-device]').getAttribute('data-preview-device'), 'mobile');

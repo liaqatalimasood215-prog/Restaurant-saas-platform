@@ -11,9 +11,14 @@ import { cn } from '@/lib/cn';
 import { rs } from '@/lib/format';
 import { useStore } from './store-context';
 
+/** What a dish costs at least: its smallest size, or its one price. */
+export function lowestPrice(item: MenuItem): number {
+  return item.variants.length > 0 ? Math.min(...item.variants.map((v) => v.price)) : item.basePrice;
+}
+
 /** The price line of a dish: lowest size, per kg, or one price. */
 export function priceText(item: MenuItem): string {
-  if (item.variants.length > 0) return t('menu.from', { price: rs(Math.min(...item.variants.map((v) => v.price))) });
+  if (item.variants.length > 0) return t('menu.from', { price: rs(lowestPrice(item)) });
   return item.unit === 'piece' ? rs(item.basePrice) : t('menu.perUnit', { price: rs(item.basePrice), unit: item.unit });
 }
 
@@ -41,7 +46,7 @@ export function FavouriteButton({ item, className }: { item: MenuItem; className
       className={cn('z-10 grid size-11 place-items-center', className)}
     >
       <span className="grid size-8 place-items-center rounded-full bg-white shadow">
-        <Heart className={cn('size-4', on ? 'fill-brand text-brand' : 'text-stone-500')} aria-hidden />
+        <Heart className={cn('size-4 text-brand', on && 'fill-brand')} aria-hidden />
       </span>
     </button>
   );
@@ -71,7 +76,18 @@ export function ProductCard({ item, addStyle = 'brand' }: { item: MenuItem; addS
         </h3>
         <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">{item.description}</p>
         <div className="mt-auto flex min-h-11 items-center justify-between gap-2 pt-2">
-          <span className="text-sm font-extrabold tabular-nums">{soldOut ? t('menu.soldOut') : priceText(item)}</span>
+          <span className="text-base font-extrabold tabular-nums">
+            {soldOut ? (
+              t('menu.soldOut')
+            ) : item.variants.length > 0 ? (
+              <>
+                <span className="text-xs font-semibold text-stone-500">{t('menu.fromWord')} </span>
+                {rs(lowestPrice(item))}
+              </>
+            ) : (
+              priceText(item)
+            )}
+          </span>
           {!soldOut && canOrder && (
             <button
               type="button"

@@ -526,11 +526,12 @@ Navigation (owner, 2026-10-27):
 - Later: accounts with phone OTP (paid SMS — needs approval), saved addresses, reorder (P7); online
   payment, loyalty and coupons (P11).
 - Owner's design (2026-10-31), built as DEMO screens from one codebase: Login (+92 phone, WhatsApp / SMS code, Google;
-  never forced), Home (address, time, search, categories, deals, popular), Menu (category tabs, grid, favourites), Product
+  shown once on the first visit with Skip, never forced), Home (address, time, search, categories, deals, popular), Menu (category tabs, grid, favourites), Product
   (size, required crust, extras), one-page Cart (Delivery / Pickup / Dine-in, Complete your meal, Cash / JazzCash / Easypaisa /
   Card, bill), Tracking (steps, rider card, map area), Orders with Reorder, bottom bar, branch selector. OTP, Google, online
   payments, map and rider contact are NOT CONNECTED screens only; the real ones stay in their phases and need approval. Deals
-  are ordinary menu items with their own price. Dine-in is open decision #19.
+  are ordinary menu items with their own price. Dine-in is open decision #19. While a rider has the order, tracking offers
+  a call and WhatsApp to the rider instead of the restaurant (a plain phone call and a free link, no paid service).
 
 ### 7.3 Rider App (PWA) — Pilot
 

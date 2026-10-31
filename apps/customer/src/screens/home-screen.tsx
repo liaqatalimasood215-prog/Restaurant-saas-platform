@@ -1,29 +1,41 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, ChevronDown, Clock, MapPin, Plus, Search, Store } from 'lucide-react';
+import { Check, ChevronDown, Clock, MapPin, Plus, Search, SlidersHorizontal, Store } from 'lucide-react';
 import type { MenuItem } from '@restaurant-saas/shared';
+import { StoreSkeleton } from '@/components/skeletons';
 import { Button, ProductArt, Sheet, fieldClass } from '@/components/ui';
 import { t } from '@/i18n';
 import { getApi, type CustomerProfile } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
+import { isFinished } from '@/lib/order-rules';
+import { useFirstVisit } from '@/lib/welcome';
 import { ModeTabs } from './mode-tabs';
 import { ProductCard, priceText } from './product-card';
 import { InstallBanner } from './pwa-banner';
 import { ClosedBanner } from './store-chrome';
 import { useStore } from './store-context';
 
-const FINISHED = ['DELIVERED', 'PICKED_UP', 'REJECTED', 'CANCELLED'];
+/** A new visitor starts on Login once, with Skip; after that the website opens here. */
+export function HomeScreen() {
+  const { store, base } = useStore();
+  const router = useRouter();
+  const firstVisit = useFirstVisit(store.restaurant.slug);
+  useEffect(() => {
+    if (firstVisit) router.replace(`${base}/login`);
+  }, [firstVisit, base, router]);
+  return firstVisit ? <StoreSkeleton /> : <HomeContent />;
+}
 
 /** Home: where it comes from, search, categories, deals and what is popular (owner's design, screen 2). */
-export function HomeScreen() {
+function HomeContent() {
   const { store, base, canOrder } = useStore();
   const router = useRouter();
   const orders = useApiQuery(() => getApi().listMyOrders(store.restaurant.slug, store.branch.slug), [store.restaurant.slug, store.branch.slug]);
-  const active = orders.data?.find((o) => !FINISHED.includes(o.status));
+  const active = orders.data?.find((o) => !isFinished(o.status));
   const [query, setQuery] = useState('');
   const popular = store.popularItemIds.map((id) => store.items.find((i) => i.id === id)).filter((i): i is MenuItem => Boolean(i));
 
@@ -55,8 +67,11 @@ export function HomeScreen() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('home.search')}
           aria-label={t('menu.search')}
-          className="min-h-12 w-full rounded-2xl border border-stone-200 bg-stone-50 pl-12 pr-4 text-base outline-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand-line"
+          className="min-h-12 w-full rounded-2xl border border-stone-200 bg-stone-50 pl-12 pr-14 text-base outline-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand-line"
         />
+        <Link href={`${base}/menu?filter=1`} aria-label={t('menu.filter')} data-home-filter className="absolute right-0.5 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-xl text-stone-600 hover:bg-stone-100">
+          <SlidersHorizontal className="size-5" aria-hidden />
+        </Link>
         <button type="submit" className="sr-only">
           {t('home.searchButton')}
         </button>
@@ -211,10 +226,10 @@ function CategoryRow() {
   const { store, base } = useStore();
   const categories = store.categories.filter((c) => store.items.some((i) => i.categoryId === c.id));
   return (
-    <nav aria-label={t('menu.categories')} className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 py-0.5 lg:mx-0 lg:flex-wrap lg:px-0.5" data-category-row>
-      {categories.map((c) => (
+    <nav aria-label={t('menu.categories')} className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 py-1 lg:mx-0 lg:flex-wrap lg:px-1" data-category-row>
+      {categories.map((c, i) => (
         <Link key={c.id} href={`${base}/menu?c=${c.id}`} data-category={c.name} className="flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5 text-center">
-          <ProductArt name={c.name} className="size-16 rounded-full ring-1 ring-stone-200" emojiClassName="text-3xl" />
+          <ProductArt name={c.name} className={cn('size-16 rounded-full', i === 0 ? 'ring-[3px] ring-accent' : 'ring-1 ring-stone-200')} emojiClassName="text-3xl" />
           <span className="line-clamp-2 text-xs font-bold leading-tight">{c.name}</span>
         </Link>
       ))}
@@ -253,10 +268,8 @@ function DealSlider() {
             <span className="rounded-lg bg-accent px-2 py-0.5 text-[0.6875rem] font-extrabold uppercase tracking-wide text-stone-900">{deal.tag}</span>
             <span className="mt-2 max-w-[70%] text-2xl font-black leading-tight tracking-tight">{item.name}</span>
             <span className="mt-1 max-w-[65%] text-sm text-white">{item.description}</span>
-            <span className="mt-auto pt-3">
-              <span className="inline-block rounded-xl bg-accent px-3 py-1 text-lg font-black tabular-nums text-stone-900">{priceText(item)}</span>
-            </span>
-            <span aria-hidden className="absolute -right-1 bottom-2 flex flex-col items-end text-5xl drop-shadow-lg">
+            <span className="relative mt-auto pt-3 text-3xl font-black tabular-nums text-accent">{priceText(item)}</span>
+            <span aria-hidden className="absolute -right-1 bottom-2 flex flex-col items-end text-6xl drop-shadow-lg">
               <span>{deal.emoji[0]}</span>
               <span className="-mt-1 mr-8 text-4xl">{deal.emoji.slice(1).join('')}</span>
             </span>

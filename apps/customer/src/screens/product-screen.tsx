@@ -118,9 +118,14 @@ function ProductForm({ item, line }: { item: MenuItem; line?: CartLine }) {
             {heading(t('item.size'), true)}
             <div className={cn('grid gap-2', item.variants.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
               {item.variants.map((v) => (
-                <button key={v.id} type="button" aria-pressed={variantId === v.id} className={chip(variantId === v.id)} onClick={() => (setVariantId(v.id), setError(null))}>
+                <button key={v.id} type="button" aria-pressed={variantId === v.id} className={cn('relative flex min-h-14 flex-col items-center justify-center rounded-2xl border-2 bg-white px-2 py-1 text-center text-sm font-bold text-stone-800 transition-colors', variantId === v.id ? 'border-stone-900' : 'border-stone-200 hover:border-stone-300')} onClick={() => (setVariantId(v.id), setError(null))}>
+                  {variantId === v.id && (
+                    <span className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-stone-900 text-white">
+                      <Check className="size-3" strokeWidth={4} aria-hidden />
+                    </span>
+                  )}
                   <span>{v.name}</span>
-                  <span className={cn('text-xs font-semibold tabular-nums', variantId === v.id ? 'text-white/80' : 'text-stone-500')}>{rs(v.price)}</span>
+                  <span className="text-xs font-semibold tabular-nums text-stone-500">{rs(v.price)}</span>
                 </button>
               ))}
             </div>

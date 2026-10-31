@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { Minus, Plus, TriangleAlert, X } from 'lucide-react';
+import { Minus, Plus, Trash2, TriangleAlert, X } from 'lucide-react';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
 
@@ -57,17 +57,25 @@ export function Sheet({ title, onClose, footer, children }: { title: string; onC
   );
 }
 
-export function Stepper({ value, min, onChange, name }: { value: number; min: number; onChange: (n: number) => void; name?: string }) {
+/** Quantity. With onRemove, the minus at the lowest quantity becomes a bin that takes the line away. */
+export function Stepper({ value, min, onChange, name, onRemove }: { value: number; min: number; onChange: (n: number) => void; name?: string; onRemove?: { label: string; run: () => void } }) {
   const button = 'grid size-11 place-items-center rounded-full border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 disabled:opacity-40';
+  const removing = onRemove && value <= min;
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <button type="button" className={button} disabled={value <= min} onClick={() => onChange(value - 1)} aria-label={name ? t('item.decreaseFor', { name }) : t('item.decrease')}>
-        <Minus className="size-4" aria-hidden />
-      </button>
+    <span className="inline-flex shrink-0 items-center gap-0.5">
+      {removing ? (
+        <button type="button" className={button} onClick={onRemove.run} aria-label={onRemove.label}>
+          <Trash2 className="size-4" aria-hidden />
+        </button>
+      ) : (
+        <button type="button" className={button} disabled={value <= min} onClick={() => onChange(value - 1)} aria-label={name ? t('item.decreaseFor', { name }) : t('item.decrease')}>
+          <Minus className="size-4" aria-hidden />
+        </button>
+      )}
       <span className="min-w-6 text-center font-extrabold tabular-nums" aria-live="polite">
         {value}
       </span>
-      <button type="button" className={button} disabled={value >= 50} onClick={() => onChange(value + 1)} aria-label={name ? t('item.increaseFor', { name }) : t('item.increase')}>
+      <button type="button" className={cn(button, 'text-brand')} disabled={value >= 50} onClick={() => onChange(value + 1)} aria-label={name ? t('item.increaseFor', { name }) : t('item.increase')}>
         <Plus className="size-4" aria-hidden />
       </button>
     </span>

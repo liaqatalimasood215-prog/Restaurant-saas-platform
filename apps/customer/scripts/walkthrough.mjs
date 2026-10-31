@@ -22,8 +22,14 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const phone = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true };
 
 /** A new customer: their own browser storage. */
-async function newCustomer(options = phone) {
+async function newCustomer(options = phone, { firstVisit = false } = {}) {
   const context = await browser.newContext(options);
+  // Everyone except the first-visit check has already seen Login once.
+  if (!firstVisit) {
+    await context.addInitScript(() => {
+      for (const slug of ['lala-restaurant', 'aziz-pizza', 'demo-karahi']) window.localStorage.setItem(`lala-store-welcomed:${slug}`, 'true');
+    });
+  }
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
   page.errors = [];
@@ -86,6 +92,25 @@ try {
     await page.context().close();
   }
 
+  console.log('First visit opens on Login, once, with Skip');
+  {
+    const first = await newCustomer(phone, { firstVisit: true });
+    await first.goto(LALA);
+    await first.waitForURL('**/login');
+    await first.getByRole('button', { name: /^Continue with WhatsApp/ }).waitFor();
+    check('a new visitor starts on Login', true);
+    await first.getByRole('link', { name: 'Skip' }).click();
+    await first.locator('[data-popular]').waitFor();
+    check('Skip goes to Home', first.url().endsWith('/lala-restaurant/main'));
+    await first.reload();
+    await first.locator('[data-popular]').waitFor();
+    check('the second time the website opens on Home', first.url().endsWith('/lala-restaurant/main'));
+    await first.goto(`${AZIZ}/menu`);
+    await dish(first, 'Classic Pizza').waitFor();
+    check('a direct link to a page is never sent to Login', first.url().endsWith('/menu'));
+    await first.context().close();
+  }
+
   console.log('Screen 2: Home');
   const page = await newCustomer();
   const raw = await (await page.request.get(LALA)).text();
@@ -104,6 +129,9 @@ try {
   check('price format is "Rs 1,300", no dot', !(await page.locator('main').innerText()).includes('Rs. '));
   check('bottom bar: Home, Menu, Cart, Orders, Account', (await page.locator('[data-bottom-nav] a').allInnerTexts()).join() === 'Home,Menu,Cart,Orders,Account');
   check('Home is the active tab', (await page.locator('[data-bottom-nav] a[aria-current="page"]').innerText()) === 'Home');
+  await page.locator('[data-header-login]').waitFor();
+  check('Login is in the header while nobody is logged in', (await page.locator('[data-header-login]').getAttribute('href')).endsWith('/login'));
+  check('the bell has no dot without a running order', (await page.locator('[data-bell="false"]').getAttribute('href')).endsWith('/orders'));
   check('no sideways scroll', (await sideScroll(page)) <= 0);
   await checkTargets(page, 'Home');
   await page.locator('[data-deal-dots] button').nth(1).click();
@@ -139,6 +167,28 @@ try {
   const soldOut = dish(page, 'BBQ Wings');
   await soldOut.waitFor();
   check('sold out: no link and no add button', (await soldOut.getByRole('link').count()) === 0 && (await soldOut.locator('[data-add]').count()) === 0 && (await soldOut.innerText()).includes('Sold out'));
+  await page.locator('[data-menu-filter]').click();
+  await page.getByRole('switch', { name: 'Hide sold out dishes' }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await soldOut.waitFor({ state: 'detached' });
+  check('the filter hides sold out dishes', (await page.locator('[data-menu-filter="true"]').count()) === 1);
+  await page.locator('[data-menu-filter]').click();
+  await page.getByRole('switch', { name: 'Hide sold out dishes' }).click();
+  await page.locator('[data-sort="HIGH"]').click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await tab(page, 'Pizza').click();
+  await dish(page, 'Fajita Pizza').waitFor();
+  check('sort by price: dearest first', (await page.locator('[data-menu-grid] [data-menu-item]').first().getAttribute('data-menu-item')) === 'Pepperoni Pizza');
+  await page.locator('[data-menu-filter]').click();
+  await page.locator('[data-sort="MENU"]').click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await page.goto(`${LALA}?x=1`);
+  await page.locator('[data-home-filter]').click();
+  await page.waitForURL('**/menu?filter=1');
+  await page.locator('[data-sort="MENU"]').waitFor();
+  check('the filter icon on Home opens the same filter', true);
+  await page.goto(`${LALA}/menu`);
+  await dish(page, 'Fajita Pizza').waitFor();
   await page.getByRole('button', { name: 'Open search' }).click();
   await page.getByRole('searchbox').fill('xyz');
   await empty(page).waitFor();
@@ -271,6 +321,7 @@ try {
   check('no made-up "minutes away"', !/min(utes)? away/i.test(pageText));
   check('the map says NOT CONNECTED', (await page.locator('[data-map]').innerText()).includes('NOT CONNECTED'));
   check('no rider before the rider step', (await page.locator('[data-rider-card]').count()) === 0);
+  check('before a rider, the customer can call the restaurant', await page.getByRole('link', { name: 'Call restaurant' }).isVisible());
   check('cash is what is left to pay', (await page.locator('[data-track-payment]').innerText()).includes('To pay in cash'));
   await checkTargets(page, 'Tracking');
   const doneSteps = () => page.locator('[data-step][data-done="true"]').count();
@@ -285,9 +336,14 @@ try {
       await shot(page, 'phone-track-rider');
       await shot(page, 'phone-track-rider-full', true);
       check('rider card shows from the rider step, marked NOT CONNECTED', (await page.locator('[data-rider-card]').innerText()).includes('NOT CONNECTED'));
-      check("the rider's buttons do nothing yet", await page.getByRole('button', { name: /Call the rider/ }).isDisabled());
+      check('with a rider on the way, the call goes to the rider, not the restaurant', (await page.getByRole('link', { name: 'Call restaurant' }).count()) === 0);
+      await page.getByRole('button', { name: 'Call the rider' }).click();
+      await page.locator('[data-toast]').waitFor();
+      check("the rider's call explains itself until riders are connected", (await page.locator('[data-toast]').innerText()).includes('Faisal Riaz') && (await page.getByRole('button', { name: /WhatsApp/ }).isVisible()));
+      check('the map shows the rider on the way', (await page.locator('[data-map]').innerText()).includes('Rider on the way'));
     }
   }
+  check('after delivery the call goes to the restaurant again', (await page.getByRole('link', { name: 'Call restaurant' }).isVisible()) && (await page.locator('[data-rider-card]').count()) === 0);
   check('the delivery reaches Delivered', (await page.locator('[data-track-status]').innerText()).toLowerCase().includes('delivered'));
   check('DEMO buttons leave when finished', (await page.getByRole('button', { name: /next step/i }).count()) === 0);
   check('Orders is the active tab', (await page.locator('[data-bottom-nav] a[aria-current="page"]').innerText()) === 'Orders');
@@ -583,7 +639,7 @@ try {
     await wide.waitForURL('**/menu');
     await dish(wide, 'Fajita Pizza').waitFor();
     if (name === 'desktop') {
-      check('desktop: top links instead of the bottom bar', (await wide.locator('[data-bottom-nav]').isVisible()) === false && (await wide.locator('header').getByRole('link', { name: 'Orders' }).isVisible()));
+      check('desktop: top links instead of the bottom bar', (await wide.locator('[data-bottom-nav]').isVisible()) === false && (await wide.locator('header').getByRole('link', { name: 'Orders', exact: true }).isVisible()));
       check('desktop: cart beside the menu', await wide.locator('aside[aria-label="Your Cart"] [data-cart-line="Fajita Pizza"]').isVisible());
     } else {
       check('tablet: the bottom bar stays', await wide.locator('[data-bottom-nav]').isVisible());

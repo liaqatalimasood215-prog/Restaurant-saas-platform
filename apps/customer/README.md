@@ -11,7 +11,7 @@ From the repository root:
 ```bash
 pnpm install
 pnpm dev                                             # website on http://localhost:3001 (Restaurant OS on :3000)
-pnpm --filter @restaurant-saas/customer walkthrough  # 169 checks in Microsoft Edge, while pnpm dev runs
+pnpm --filter @restaurant-saas/customer walkthrough  # 182 checks in Microsoft Edge, while pnpm dev runs
 ```
 
 Try <http://localhost:3001> for the sample restaurants: `lala-restaurant/main` (the owner's design; second branch
@@ -28,7 +28,7 @@ Try <http://localhost:3001> for the sample restaurants: `lala-restaurant/main` (
 | Payment: Cash | `/cart` | DEMO / PROTOTYPE |
 | Payment: JazzCash, Easypaisa, Card | `/cart` | NOT CONNECTED: no money moves |
 | Tracking: steps with times, DEMO buttons standing in for the restaurant | `/track/<token>` | DEMO / PROTOTYPE; never called "live" before Phase 5 |
-| Tracking: map area, rider card, rider's call and WhatsApp buttons | `/track/<token>` | NOT CONNECTED: a drawing and made-up details |
+| Tracking: map area, rider card, rider's call and WhatsApp buttons | `/track/<token>` | NOT CONNECTED: a drawing and made-up details; the buttons explain themselves until real rider numbers exist |
 | Orders, Reorder | `/orders` | DEMO / PROTOTYPE; orders on this device only |
 | Account: details, saved addresses | `/account` | DEMO / PROTOTYPE |
 | Login: +92 phone, WhatsApp / SMS code, Google | `/login` | NOT CONNECTED: no code is sent and nothing is checked |
@@ -41,7 +41,7 @@ Try <http://localhost:3001> for the sample restaurants: `lala-restaurant/main` (
 | Live tracking | NOT CONNECTED: Phase 5 (no GPS map in the first version) |
 | Product photos | Food pictures chosen by name until photo upload (Phase 7) |
 
-Ordering never needs an account. Browser storage here is for the demo only, never security.
+Ordering never needs an account: the first visit on a device opens on Login once, with Skip; direct links and previews never do. Browser storage here is for the demo only, never security.
 
 ## How it is built
 

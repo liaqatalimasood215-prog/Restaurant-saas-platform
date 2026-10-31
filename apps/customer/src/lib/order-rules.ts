@@ -1,5 +1,10 @@
-import { checkCheckout, type CheckoutField, type CheckoutProblem, type OnlineOrderKind } from '@restaurant-saas/shared';
+import { checkCheckout, type CheckoutField, type CheckoutProblem, type OnlineOrderKind, type OrderStatus } from '@restaurant-saas/shared';
 import type { OrderMode } from './api/client';
+
+/** The order has reached its end on the customer's path. */
+export function isFinished(status: OrderStatus): boolean {
+  return status === 'DELIVERED' || status === 'PICKED_UP' || status === 'REJECTED' || status === 'CANCELLED';
+}
 
 /**
  * DEMO: Dine-in is a website option only. It is not joined to the tables and waiters of Restaurant OS, so it borrows

@@ -75,7 +75,8 @@ export function PhonePreview({ path }: { path: string }) {
         <CardTitle>{t('onlineApp.previewPhone')}</CardTitle>
       </CardHeader>
       <CardBody className="flex justify-center">
-        <div className="relative h-[560px] w-[281px] overflow-hidden rounded-[2.25rem] border-[6px] border-slate-800 bg-white">
+        {/* Inside the frame: exactly 390 × 800 at 70 %, with white above and below, so the website's bottom bar is never cut off. */}
+        <div className="box-content h-[560px] w-[273px] overflow-hidden rounded-[2.25rem] border-[6px] border-slate-800 bg-white py-3" data-phone-screen>
           <iframe src={customerUrl(path)} title={t('onlineApp.previewPhoneFrame')} loading="lazy" className="h-[800px] w-[390px] origin-top-left scale-[0.7] border-0" />
         </div>
       </CardBody>

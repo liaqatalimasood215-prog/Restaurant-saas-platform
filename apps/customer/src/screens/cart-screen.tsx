@@ -218,11 +218,6 @@ export function CartScreen() {
 
           <MealRow />
 
-          <label className="block">
-            <span className="mb-1 block text-sm font-bold">{t('checkout.note')}</span>
-            <input value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} className={fieldClass} />
-          </label>
-
           <section aria-labelledby="cart-payment">
             <h2 id="cart-payment" className="mb-2 font-extrabold">
               {t('checkout.payment')}
@@ -247,6 +242,11 @@ export function CartScreen() {
               </p>
             )}
           </section>
+
+          <label className="block">
+            <span className="mb-1 block text-sm font-bold">{t('checkout.note')}</span>
+            <input value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} className={fieldClass} />
+          </label>
         </div>
 
         <aside className="space-y-3 lg:sticky lg:top-20 lg:rounded-3xl lg:border lg:border-stone-100 lg:bg-white lg:p-5 lg:shadow-sm" aria-label={t('checkout.bill')}>
@@ -307,7 +307,11 @@ function PlaceSummary({ address, editing, name, phone, onChange }: { address: st
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-extrabold">{label}</p>
-        {place && <p className="text-sm text-stone-600">{place}</p>}
+        {place && (
+          <p className="text-sm text-stone-600">
+            {place} · {t('store.prep', { n: store.defaultPrepMinutes })}
+          </p>
+        )}
         {!editing && (
           <p className="text-xs text-stone-500">
             {name.trim()} · {phone}

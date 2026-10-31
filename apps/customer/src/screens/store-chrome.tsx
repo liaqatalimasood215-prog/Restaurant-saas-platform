@@ -2,11 +2,13 @@
 
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ClipboardList, Clock, House, MapPin, Phone, ShoppingCart, TriangleAlert, UserRound, UtensilsCrossed, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Bell, ClipboardList, Clock, House, MapPin, Phone, ShoppingCart, TriangleAlert, UserRound, UtensilsCrossed, type LucideIcon } from 'lucide-react';
 import { Button, Sheet } from '@/components/ui';
 import { t } from '@/i18n';
-import { getDemoControls } from '@/lib/api';
+import { getApi, getDemoControls } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { useApiQuery } from '@/lib/hooks/use-api-query';
+import { isFinished } from '@/lib/order-rules';
 import { useStore } from './store-context';
 
 const NAV: { key: 'home' | 'menu' | 'cart' | 'orders' | 'account'; path: string; icon: LucideIcon; isOn: (page: string) => boolean }[] = [
@@ -42,7 +44,7 @@ export function BottomNav({ page }: { page: string }) {
             className={cn('flex min-h-14 flex-col items-center justify-center gap-0.5 text-[0.6875rem] font-bold', on ? 'text-brand' : 'text-stone-500')}
           >
             <span className="relative">
-              <Icon className="size-5" aria-hidden />
+              <Icon className={cn('size-5', on && 'fill-brand-line')} aria-hidden />
               {key === 'cart' && <CartBadge count={cartCount} className="-right-3 -top-2" />}
             </span>
             {t(`nav.${key}`)}
@@ -87,7 +89,8 @@ export function SiteHeader({ phoneToo, page }: { phoneToo: boolean; page: string
             </Link>
           ))}
         </nav>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          <HeaderActions />
           <DemoChip />
           <Link
             href={`${base}/cart`}
@@ -101,6 +104,27 @@ export function SiteHeader({ phoneToo, page }: { phoneToo: boolean; page: string
         </div>
       </div>
     </header>
+  );
+}
+
+/** Login while nobody is logged in, and the bell: it opens the orders and shows a dot while one is running. */
+function HeaderActions() {
+  const { store, base } = useStore();
+  const profile = useApiQuery(() => getApi().getProfile(store.restaurant.slug), [store.restaurant.slug]);
+  const orders = useApiQuery(() => getApi().listMyOrders(store.restaurant.slug, store.branch.slug), [store.restaurant.slug, store.branch.slug]);
+  const running = orders.data?.some((o) => !isFinished(o.status)) ?? false;
+  return (
+    <>
+      {profile.data && !profile.data.signedIn && (
+        <Link href={`${base}/login`} data-header-login className="flex min-h-11 items-center rounded-xl px-2 text-sm font-extrabold text-brand hover:bg-brand-soft">
+          {t('nav.login')}
+        </Link>
+      )}
+      <Link href={`${base}/orders`} aria-label={running ? t('nav.bellRunning') : t('nav.bell')} data-bell={running} className="relative grid size-11 place-items-center rounded-full text-stone-700 hover:bg-stone-100">
+        <Bell className="size-5" aria-hidden />
+        {running && <span className="absolute right-2.5 top-2.5 size-2.5 rounded-full border-2 border-white bg-brand" />}
+      </Link>
+    </>
   );
 }
 

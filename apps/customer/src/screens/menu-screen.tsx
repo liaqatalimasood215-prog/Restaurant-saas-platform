@@ -1,34 +1,42 @@
 'use client';
 
 import { useState } from 'react';
-import { Heart, Search, SearchX, UtensilsCrossed } from 'lucide-react';
-import { EmptyState } from '@/components/ui';
+import { Heart, Search, SearchX, SlidersHorizontal, UtensilsCrossed } from 'lucide-react';
+import { Button, EmptyState, Sheet } from '@/components/ui';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { CartView } from './cart-view';
-import { ProductCard } from './product-card';
+import { ProductCard, lowestPrice } from './product-card';
 import { ClosedBanner, PageHeader } from './store-chrome';
 import { useStore } from './store-context';
 
 const FAVOURITES = 'favourites';
+type Sort = 'MENU' | 'LOW' | 'HIGH';
+const SORTS: readonly Sort[] = ['MENU', 'LOW', 'HIGH'];
 
 /** Menu: category tabs and a grid of dishes (owner's design, screen 3). A search looks through the whole menu. */
-export function MenuScreen({ initialCategory, initialQuery }: { initialCategory?: string; initialQuery?: string }) {
+export function MenuScreen({ initialCategory, initialQuery, openFilter }: { initialCategory?: string; initialQuery?: string; openFilter?: boolean }) {
   const { store, base, canOrder, favourites } = useStore();
   const [selected, setSelected] = useState(initialCategory ?? '');
   const [query, setQuery] = useState(initialQuery ?? '');
   const [searchOpen, setSearchOpen] = useState(Boolean(initialQuery));
+  const [filterOpen, setFilterOpen] = useState(Boolean(openFilter));
+  const [sort, setSort] = useState<Sort>('MENU');
+  const [hideSoldOut, setHideSoldOut] = useState(false);
   const categories = store.categories.filter((c) => store.items.some((i) => i.categoryId === c.id));
   const favouriteItems = store.items.filter((i) => favourites.has(i.id));
   const showFavourites = favouriteItems.length > 0 || selected === FAVOURITES;
   const active = selected === FAVOURITES || categories.some((c) => c.id === selected) ? selected : (categories[0]?.id ?? '');
   const q = query.trim().toLowerCase();
   const searching = q.length > 0;
-  const shown = searching
+  const found = searching
     ? store.items.filter((i) => i.name.toLowerCase().includes(q) || i.description.toLowerCase().includes(q))
     : active === FAVOURITES
       ? favouriteItems
       : store.items.filter((i) => i.categoryId === active);
+  const shown = found.filter((i) => !hideSoldOut || i.isAvailable);
+  if (sort !== 'MENU') shown.sort((a, b) => (sort === 'LOW' ? lowestPrice(a) - lowestPrice(b) : lowestPrice(b) - lowestPrice(a)));
+  const filtered = sort !== 'MENU' || hideSoldOut;
   const heading = searching ? t('menu.results', { q: query.trim() }) : active === FAVOURITES ? t('menu.favourites') : (categories.find((c) => c.id === active)?.name ?? t('menu.title'));
 
   const tab = (id: string, label: string, icon?: boolean) => {
@@ -58,9 +66,15 @@ export function MenuScreen({ initialCategory, initialQuery }: { initialCategory?
         title={t('menu.title')}
         back={base}
         action={
-          <button type="button" onClick={() => setSearchOpen((v) => !v)} aria-label={t('menu.openSearch')} aria-expanded={searchOpen} className="grid size-11 place-items-center rounded-full text-stone-800 hover:bg-stone-100 lg:hidden">
-            <Search className="size-5" aria-hidden />
-          </button>
+          <>
+            <button type="button" onClick={() => setFilterOpen(true)} aria-label={t('menu.filter')} aria-haspopup="dialog" data-menu-filter={filtered} className="relative grid size-11 place-items-center rounded-full text-stone-800 hover:bg-stone-100">
+              <SlidersHorizontal className="size-5" aria-hidden />
+              {filtered && <span className="absolute right-2 top-2 size-2.5 rounded-full border-2 border-white bg-brand" />}
+            </button>
+            <button type="button" onClick={() => setSearchOpen((v) => !v)} aria-label={t('menu.openSearch')} aria-expanded={searchOpen} className="grid size-11 place-items-center rounded-full text-stone-800 hover:bg-stone-100 lg:hidden">
+              <Search className="size-5" aria-hidden />
+            </button>
+          </>
         }
       />
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
@@ -111,6 +125,23 @@ export function MenuScreen({ initialCategory, initialQuery }: { initialCategory?
           <CartView />
         </aside>
       </div>
+
+      {filterOpen && (
+        <Sheet title={t('menu.filter')} onClose={() => setFilterOpen(false)} footer={<Button className="w-full" onClick={() => setFilterOpen(false)}>{t('home.done')}</Button>}>
+          <h3 className="mb-2 font-extrabold">{t('menu.sortBy')}</h3>
+          <div className="space-y-2">
+            {SORTS.map((value) => (
+              <button key={value} type="button" aria-pressed={sort === value} data-sort={value} onClick={() => setSort(value)} className={cn('flex min-h-12 w-full items-center rounded-2xl border-2 px-4 text-left text-sm font-bold', sort === value ? 'border-stone-900 bg-stone-50' : 'border-stone-200')}>
+                {t(`menu.sort.${value}`)}
+              </button>
+            ))}
+          </div>
+          <label className="mt-4 flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-2xl border border-stone-200 px-4 text-sm font-bold">
+            {t('menu.hideSoldOut')}
+            <input type="checkbox" role="switch" checked={hideSoldOut} onChange={(e) => setHideSoldOut(e.target.checked)} className="size-5 accent-[var(--store-primary)]" />
+          </label>
+        </Sheet>
+      )}
     </>
   );
 }
