@@ -268,10 +268,9 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
-**Next (owner, 2026-11-01): the Rider App gets its design in a new chat.** The owner will send his design there. When he sends a picture and says "copy", copy it as closely as the rules
-allow and do not invent another look. His last picture: five green screens, Login, My Deliveries, Order, Live Tracking, Today, with AI Manager as one added feature that says which of 3–4 orders
-comes first and why. Not decided yet: he undid the last attempt, so ask about anything his new message leaves open. The app is back at commit `61bda40` (red, the first own design).
-The undone attempt is kept, not committed: `git stash list`, "Rider App picture redesign attempt" (green screens, Today as in the picture, Live Tracking, AI Manager tab, `riderStopPlan` with tests). Its last test
+**Rider App frontend built 2026-11-01 (DEMO), approved by the owner the same day; owner: "only front end; all front end, last backend".** All six picture screens, Delivery History, Profile, the design tokens, badges and four-tab bar are committed locally on branch `claude/restaurant-website-chat-699380`, not merged and not pushed. Decisions: no Accept Order; Picked Up is display only (`riderStage`); max 3 in the UI only. Live Tracking and Earnings are DEMO / NOT CONNECTED; COD cash is apart from earnings. Next, only after his approval: merge, test on a real Android phone, and the remaining frontend (below). Backend comes last, with its own approval. To test on this copy with Restaurant OS: production builds on 3100 and 3102 with the browser's 3000 and 3002 routed to them, because the DEMO link only believes those two addresses. Open for the backend: how riders are paid, whether Picked Up becomes a status, the server rule for max 3. Activation's "Open the Rider App" link now opens the LALA sample, not the rider's Restaurant OS restaurant, until real login.
+
+An older undone attempt is kept, not committed: `git stash list`, "Rider App picture redesign attempt" (green screens, AI Manager tab, `riderStopPlan` with tests). Its last test
 run had not finished. Use it only if he wants it. Limits to tell him when they come up: AI Manager is DEMO rules until Phase 10; Live Tracking, km and ETA are NOT CONNECTED until GPS (Phase 11) and a map cost approval.
 
 **Customer App approved 2026-10-31.** Kept from the plan and feedback: login never forced (first visit opens on Login once
@@ -296,7 +295,7 @@ approval: no real backend, custom domain, image upload, Google Play or publishin
 
 **Plan agreed with the owner (2026-11-01):**
 
-- A. **Owner reviews the Rider App and Riders page** and approves or asks for changes (Phase 3 gate). Not yet verified on his real phone.
+- A. Rider App frontend approved 2026-11-01. Not merged yet; not yet verified on his real phone. The Riders page of Restaurant OS has not had a separate design review.
 - B. Refunds and payment reversals (small, closes Phase 1), after his approval. Then the Phase 1 gate.
 - C. Phase 4 backend after his "shuru karo". Before it he prepares: real name, branch, menu and prices, tax and service charge; decides how often the internet drops
   (#13: changes the offline plan) and table ordering from a phone (#19). Explain hosting costs and get approval before any paid service.

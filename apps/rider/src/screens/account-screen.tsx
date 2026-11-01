@@ -2,34 +2,41 @@
 
 import { useRouter } from 'next/navigation';
 import { Download, LogOut, RotateCcw } from 'lucide-react';
+import { ScreenTop } from '@/components/rider-header';
 import { Avatar, Button, Card } from '@/components/ui';
 import { t } from '@/i18n';
 import { getApi, getDemoControls } from '@/lib/api';
 import { useInstallApp } from '@/lib/pwa';
 import { useRider } from './rider-context';
 
+/** Profile: read only. The restaurant Owner changes a rider's details in Restaurant OS. */
 export function AccountScreen() {
-  const { base, me, branch, notify } = useRider();
+  const { base, me, branch, notify, explainDemo } = useRider();
   const router = useRouter();
   const installer = useInstallApp();
-  const row = (label: string, value: string) => (
-    <div className="flex justify-between gap-3 py-2">
-      <dt className="text-sm text-stone-500">{label}</dt>
+  const row = (label: string, value: string, key?: string) => (
+    <div className="flex justify-between gap-3 py-2" data-profile={key}>
+      <dt className="text-sm text-muted">{label}</dt>
       <dd className="text-right text-sm font-bold">{value}</dd>
     </div>
   );
   return (
     <div className="space-y-3">
-      <h1 className="text-2xl font-black tracking-tight">{t('account.title')}</h1>
+      <ScreenTop title={t('account.title')} backHref={base} onExplain={explainDemo} />
       <Card className="flex items-center gap-3">
         <Avatar name={me.name} className="size-14" />
-        <p className="text-lg font-extrabold">{me.name}</p>
+        <div className="min-w-0">
+          <p className="text-lg font-extrabold">{me.name}</p>
+          <p className="text-sm text-muted">{t('account.role')}</p>
+        </div>
       </Card>
-      <Card>
-        <dl className="divide-y divide-stone-100">
+      <Card className="py-2">
+        <dl className="divide-y divide-line">
           {row(t('account.phone'), me.phone)}
           {row(t('account.restaurant'), branch.restaurantName)}
           {row(t('account.branch'), branch.branchName)}
+          {row(t('account.availability'), t(me.riderOnline ? 'availability.online' : 'availability.offline'), 'availability')}
+          {row(t('account.version'), t('account.versionValue'), 'version')}
         </dl>
       </Card>
       {installer.canOffer && (
@@ -40,11 +47,11 @@ export function AccountScreen() {
               {t('account.install')}
             </Button>
           ) : (
-            <p className="text-sm text-stone-700">{t('account.installIos')}</p>
+            <p className="text-sm text-ink">{t('account.installIos')}</p>
           )}
         </Card>
       )}
-      <p className="px-1 text-xs text-stone-500">{t('account.installNote')}</p>
+      <p className="px-1 text-xs text-muted">{t('account.installNote')}</p>
       {getDemoControls().source() === 'SAMPLE' && (
         <Button
           variant="demo"

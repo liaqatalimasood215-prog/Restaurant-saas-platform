@@ -1,14 +1,45 @@
 @import 'tailwindcss';
 
-/* One codebase for all restaurants: the brand colour comes from the restaurant's data (--rider-primary). */
+/*
+ * The Rider App's one set of colours. Screens use the names below (bg-brand, text-muted, border-line ...), never a colour of
+ * their own. One codebase for all restaurants: the brand colour comes from the restaurant's data (--rider-primary).
+ */
 :root {
   --rider-primary: #e31e24;
+  --rider-background: #fafafa;
+  --rider-card: #ffffff;
+  --rider-text: #17171a;
+  --rider-muted: #5f6368;
+  --rider-border: #e6e6e8;
+  --rider-success: #15803d;
+  --rider-success-soft: #dcfce7;
+  --rider-info: #1d4ed8;
+  --rider-info-soft: #dbeafe;
+  --rider-warning: #854d0e;
+  --rider-warning-soft: #fef08a;
+  --rider-hero: #1f2227;
+  --rider-map: #eceef1;
+  --rider-gold: #f5b301;
 }
 
 @theme inline {
   --color-brand: var(--rider-primary);
   --color-brand-dark: color-mix(in srgb, var(--rider-primary) 80%, black);
   --color-brand-soft: color-mix(in srgb, var(--rider-primary) 9%, white);
+  --color-page: var(--rider-background);
+  --color-card: var(--rider-card);
+  --color-ink: var(--rider-text);
+  --color-muted: var(--rider-muted);
+  --color-line: var(--rider-border);
+  --color-success: var(--rider-success);
+  --color-success-soft: var(--rider-success-soft);
+  --color-info: var(--rider-info);
+  --color-info-soft: var(--rider-info-soft);
+  --color-warning: var(--rider-warning);
+  --color-warning-soft: var(--rider-warning-soft);
+  --color-hero: var(--rider-hero);
+  --color-map: var(--rider-map);
+  --color-gold: var(--rider-gold);
   --font-sans: var(--font-rider), ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
@@ -17,8 +48,8 @@ html {
 }
 
 body {
-  background: #f5f5f4;
-  color: #1c1917;
+  background: var(--rider-background);
+  color: var(--rider-text);
 }
 
 dialog::backdrop {

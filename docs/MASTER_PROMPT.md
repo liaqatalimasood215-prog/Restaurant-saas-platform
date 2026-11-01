@@ -542,10 +542,17 @@ Navigation (owner, 2026-10-27):
 
 ### 7.3 Rider App (PWA) — Pilot
 
-- Login with phone + password (RIDER role only). A disabled rider cannot log in.
-- My deliveries: customer name with **tap to call**, address with **Open in Google Maps** (a free
-  link, no paid maps API), items, **amount to collect**.
-- Buttons: **Picked up – On the way** → **Delivered** (confirm cash collected).
+- Login with phone + PIN or password (RIDER role only). A disabled rider cannot log in.
+- Design (owner's picture, 2026-11-01): Login, Home with New Orders / My Orders, Order Details, Live Tracking, My Active
+  Deliveries, Today Summary; bottom bar Home, Orders, Earnings, Profile.
+- Order: customer name and restaurant with **tap to call**, address with **Open in Google Maps** (a free
+  link, no paid maps API), items with the prices saved on the order, **amount to collect**.
+- One button at a time: **Pick Up Order** → **Start Delivery** → **Mark Delivered** (confirm cash collected). No Accept step:
+  the cashier assigns. Pick Up is a display step of the Rider App only (DEMO): the order stays RIDER_ASSIGNED until Start
+  Delivery, and §6 does not change. Whether Picked Up becomes a real status is decided with the backend.
+- Up to 3 deliveries with the rider at a time: shown in the Rider App only, not security; the server rule comes with the backend.
+- COD cash belongs to the restaurant and is never shown as the rider's earnings. Today Summary shows it as a separate card (Cash to Deposit).
+- Live Tracking is a drawn DEMO MAP with the free Google Maps link. Earnings are sample numbers or NOT CONNECTED until the backend decides how riders are paid.
 - Alert on a new assignment (sound + vibration; web push in P7).
 - Today: deliveries done, cash collected, cash settled.
 - Availability (owner, 2026-11-01): the rider sets Online / Offline; Owner, Manager and Cashier see it. An

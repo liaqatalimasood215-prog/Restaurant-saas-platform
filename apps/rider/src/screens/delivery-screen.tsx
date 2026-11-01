@@ -1,34 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, CheckCircle2, MapPin, Navigation, PackageCheck, Phone } from 'lucide-react';
-import { formatPaisa, googleMapsLink, type RiderDelivery } from '@restaurant-saas/shared';
-import { Button, Card, EmptyState, Sheet } from '@/components/ui';
+import { Banknote, Bike, Check, CheckCircle2, ChevronsRight, LocateFixed, MapPin, Navigation, PackageCheck, Phone, Store, Utensils } from 'lucide-react';
+import { MAX_ACTIVE_RIDER_DELIVERIES, canPickUpAnother, formatPaisa, googleMapsLink, isActiveRiderStage, riderStage, type RiderDelivery, type RiderStage } from '@restaurant-saas/shared';
+import { ScreenTop } from '@/components/rider-header';
+import { Button, Card, EmptyState, PrimaryAction, Sheet } from '@/components/ui';
 import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { STATUS_LOOK } from './deliveries-screen';
 import { useRider } from './rider-context';
 
-/** One delivery: call, map, amount to collect, then Picked up – On the way → Delivered + cash confirmed. */
+/** After a step the next button waits this long, so a quick double tap never also runs the next step. */
+const NEXT_STEP_WAIT_MS = 700;
+
+/** One order (owner's picture, screen 3): call, items, money and one button for the next step. */
 export function DeliveryScreen({ id }: { id: string }) {
-  const { base, deliveries, notify } = useRider();
+  const { base, branch, deliveries, notify, explainDemo } = useRider();
   const delivery = deliveries.find((d) => d.id === id);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const back = (
-    <Link href={base} className="-ml-2 inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-sm font-bold text-stone-600 hover:bg-stone-100">
-      <ArrowLeft className="size-5" aria-hidden />
-      {t('delivery.back')}
-    </Link>
-  );
+  const top = (title: string) => <ScreenTop title={title} backHref={base} backLabel={t('delivery.back')} onExplain={explainDemo} />;
   if (!delivery) {
     return (
       <div className="space-y-3">
-        {back}
-        <EmptyState icon={<PackageCheck className="size-10 text-stone-400" aria-hidden />} title={t('delivery.goneTitle')}>
+        {top(t('delivery.goneTitle'))}
+        <EmptyState icon={<PackageCheck className="size-10 text-muted" aria-hidden />} title={t('delivery.goneTitle')}>
           {t('delivery.gone')}
         </EmptyState>
       </div>
@@ -43,83 +41,72 @@ export function DeliveryScreen({ id }: { id: string }) {
     } catch (err) {
       notify(err instanceof Error ? err.message : t('app.errorBody'), 'error');
     } finally {
-      setBusy(false);
       setConfirming(false);
+      setTimeout(() => setBusy(false), NEXT_STEP_WAIT_MS);
     }
   };
   const n = delivery.dailyNumber;
-  const collect = delivery.amountToCollect;
+  const stage = riderStage(delivery);
+  const withRider = deliveries.filter((d) => isActiveRiderStage(riderStage(d))).length;
+  const full = stage === 'NEW' && !canPickUpAnother(withRider);
 
   return (
     <div className="space-y-3">
-      {back}
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-3xl font-black tabular-nums tracking-tight">{t('delivery.title', { n })}</h1>
-        <span className={cn('rounded-full px-3 py-1 text-xs font-bold', STATUS_LOOK[delivery.status])} data-delivery-status={delivery.status}>
-          {t(`status.${delivery.status}`)}
-        </span>
-      </div>
-      <Steps status={delivery.status} />
-      <MoneyCard delivery={delivery} />
+      {top(t('delivery.title', { n }))}
+      <Stepper stage={stage} status={delivery.status} />
 
-      <Card className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-bold text-stone-500">{t('delivery.customer')}</p>
-            <p className="truncate font-extrabold">{delivery.customerName}</p>
-            <p className="text-sm text-stone-600">{delivery.customerPhone}</p>
-          </div>
-          <a href={`tel:${delivery.customerPhone}`} aria-label={t('delivery.callLabel', { name: delivery.customerName })} data-call className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-2xl bg-green-700 px-5 text-sm font-bold text-white hover:bg-green-800">
-            <Phone className="size-5" aria-hidden />
-            {t('delivery.call')}
-          </a>
-        </div>
-        <div className="border-t border-stone-100 pt-3">
-          <p className="text-xs font-bold text-stone-500">{t('delivery.address')}</p>
-          <p className="flex items-start gap-1 font-semibold">
-            <MapPin className="mt-0.5 size-4 shrink-0 text-stone-500" aria-hidden />
-            {delivery.customerAddress}
-          </p>
-          <a href={googleMapsLink(delivery.customerAddress)} target="_blank" rel="noopener noreferrer" data-map className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-stone-300 bg-white px-5 text-sm font-bold text-stone-800 hover:bg-stone-50">
-            <Navigation className="size-5" aria-hidden />
+      <Card className="divide-y divide-line py-1">
+        <Contact
+          heading={t('delivery.pickupFrom')}
+          icon={<Store className="size-6 text-brand" aria-hidden />}
+          name={branch.restaurantName}
+          detail={branch.branchName}
+          phone={branch.phone}
+          callData="restaurant"
+        />
+        <Contact
+          heading={t('delivery.deliverTo')}
+          icon={<MapPin className="size-6 text-brand" aria-hidden />}
+          name={delivery.customerName}
+          detail={delivery.customerAddress}
+          phone={delivery.customerPhone}
+          callData="customer"
+        >
+          <a href={googleMapsLink(delivery.customerAddress)} target="_blank" rel="noopener noreferrer" data-map className="-ml-1 inline-flex min-h-11 items-center gap-2 px-1 text-sm font-bold text-brand">
+            <Navigation className="size-4" aria-hidden />
             {t('delivery.map')}
           </a>
-        </div>
+          {isActiveRiderStage(stage) && (
+            <Link href={`${base}/delivery/${delivery.id}/tracking`} data-tracking className="ml-3 inline-flex min-h-11 items-center gap-2 px-1 text-sm font-bold text-brand">
+              <LocateFixed className="size-4" aria-hidden />
+              {t('tracking.open')}
+            </Link>
+          )}
+        </Contact>
       </Card>
 
-      <Card>
-        <p className="mb-1 text-xs font-bold text-stone-500">{t('delivery.items')}</p>
-        <ul className="space-y-1">
-          {delivery.items.map((item) => (
-            <li key={item.id} className="font-semibold">
-              {item.label}
-              {item.note && <span className="font-normal text-amber-800"> “{item.note}”</span>}
-            </li>
-          ))}
-        </ul>
-        {delivery.note && (
-          <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            <span className="font-bold">{t('delivery.note')}:</span> {delivery.note}
-          </p>
-        )}
-      </Card>
+      <Items delivery={delivery} />
+      <Money delivery={delivery} />
 
-      {delivery.status !== 'DELIVERED' && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="mx-auto max-w-lg">
-            {delivery.status === 'RIDER_ASSIGNED' ? (
-              <Button className="min-h-14 w-full text-base" disabled={busy} onClick={() => void step(() => getApi().pickedUp(delivery.id), t('delivery.wayToast', { n }))}>
-                <Navigation className="size-5" aria-hidden />
-                {t('delivery.pickedUp')}
-              </Button>
-            ) : (
-              <Button variant="success" className="min-h-14 w-full text-base" disabled={busy} onClick={() => setConfirming(true)}>
-                <Check className="size-5" aria-hidden />
-                {t('delivery.delivered')}
-              </Button>
-            )}
-          </div>
-        </div>
+      {stage === 'NEW' && (
+        <PrimaryAction
+          icon={<ChevronsRight className="size-6" />}
+          disabled={busy || full}
+          hint={full ? t('home.capacityFull', { max: MAX_ACTIVE_RIDER_DELIVERIES }) : undefined}
+          onClick={() => void step(() => getApi().confirmPickup(delivery.id), t('delivery.pickUpToast', { n }))}
+        >
+          {t('delivery.pickUp')}
+        </PrimaryAction>
+      )}
+      {stage === 'PICKED_UP' && (
+        <PrimaryAction icon={<Bike className="size-6" />} disabled={busy} onClick={() => void step(() => getApi().pickedUp(delivery.id), t('delivery.wayToast', { n }))}>
+          {t('delivery.start')}
+        </PrimaryAction>
+      )}
+      {stage === 'ON_THE_WAY' && (
+        <PrimaryAction icon={<Check className="size-6" />} disabled={busy} onClick={() => setConfirming(true)}>
+          {t('delivery.deliver')}
+        </PrimaryAction>
       )}
 
       {confirming && (
@@ -127,50 +114,134 @@ export function DeliveryScreen({ id }: { id: string }) {
           title={t('delivery.confirmTitle')}
           onClose={() => setConfirming(false)}
           footer={
-            <>
-              <Button variant="success" className="min-h-14 w-full text-base" disabled={busy} onClick={() => void step(() => getApi().delivered(delivery.id), t('delivery.doneToast', { n }))}>
-                {collect > 0 ? t('delivery.confirmYesCash') : t('delivery.confirmYes')}
-              </Button>
-              <Button variant="ghost" className="w-full" onClick={() => setConfirming(false)}>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="secondary" onClick={() => setConfirming(false)}>
                 {t('delivery.confirmNo')}
               </Button>
-            </>
+              <Button disabled={busy} onClick={() => void step(() => getApi().delivered(delivery.id), t('delivery.doneToast', { n }))}>
+                {t('delivery.confirmYes')}
+              </Button>
+            </div>
           }
         >
-          <p className="text-base font-semibold" data-confirm-text>
-            {collect > 0 ? t('delivery.confirmCash', { amount: formatPaisa(collect) }) : t('delivery.confirmPaid')}
-          </p>
+          <div className="space-y-3" data-confirm-text>
+            {delivery.amountToCollect > 0 ? (
+              <dl className="divide-y divide-line">
+                <div className="flex justify-between gap-3 py-2">
+                  <dt>{t('delivery.customerPay')}</dt>
+                  <dd className="font-black tabular-nums">{formatPaisa(delivery.amountToCollect)}</dd>
+                </div>
+                <div className="flex justify-between gap-3 py-2">
+                  <dt>{t('delivery.cashCollected')}</dt>
+                  <dd className="font-black tabular-nums">{formatPaisa(delivery.amountToCollect)}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="font-semibold">{t('delivery.confirmPaid')}</p>
+            )}
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{t('delivery.confirmDemo')}</p>
+          </div>
         </Sheet>
       )}
     </div>
   );
 }
 
-function Steps({ status }: { status: RiderDelivery['status'] }) {
-  const reached = status === 'RIDER_ASSIGNED' ? 0 : status === 'OUT_FOR_DELIVERY' ? 1 : 2;
-  const labels = [t('delivery.stepRestaurant'), t('delivery.stepWay'), t('delivery.stepDone')];
+/** Done steps are ticked; the ring marks what the rider does next. */
+function Stepper({ stage, status }: { stage: RiderStage; status: RiderDelivery['status'] }) {
+  const doneCount: Record<RiderStage, number> = { NEW: 1, PICKED_UP: 2, ON_THE_WAY: 3, DELIVERED: 4 };
+  const done = doneCount[stage];
+  const steps = [
+    { label: t('delivery.stepAssign'), icon: Check },
+    { label: t('delivery.stepPickUp'), icon: Store },
+    { label: t('delivery.stepWay'), icon: Bike },
+    { label: t('delivery.stepDone'), icon: Check },
+  ];
   return (
-    <ol className="grid grid-cols-3 gap-1" aria-label={t(`status.${status}`)}>
-      {labels.map((label, i) => (
-        <li key={label} className="text-center">
-          <span className={cn('block h-2 rounded-full', i <= reached ? 'bg-brand' : 'bg-stone-200')} />
-          <span className={cn('mt-1 block text-xs font-bold', i <= reached ? 'text-stone-900' : 'text-stone-400')}>{label}</span>
-        </li>
-      ))}
+    <ol className="grid grid-cols-4" aria-label={t(`stage.${stage}`)} data-stage={stage} data-delivery-status={status}>
+      {steps.map((step, i) => {
+        const isDone = i < done;
+        const isNext = i === done;
+        return (
+          <li key={step.label} aria-current={isNext ? 'step' : undefined} className="relative flex flex-col items-center gap-1 text-center">
+            {i > 0 && <span aria-hidden className={cn('absolute right-1/2 top-4 h-0.5 w-full', i <= done ? 'bg-brand' : 'bg-line')} />}
+            <span className={cn('relative grid size-8 place-items-center rounded-full', isDone ? 'bg-brand text-white' : isNext ? 'border-2 border-brand bg-card text-brand' : 'border border-line bg-page text-muted')}>
+              {isDone ? <Check className="size-4" strokeWidth={3} aria-hidden /> : <step.icon className="size-4" aria-hidden />}
+            </span>
+            <span className={cn('text-xs font-bold leading-tight', isDone || isNext ? 'text-ink' : 'text-muted')}>{step.label}</span>
+          </li>
+        );
+      })}
     </ol>
   );
 }
 
-function MoneyCard({ delivery }: { delivery: RiderDelivery }) {
+function Contact({ heading, icon, name, detail, phone, callData, children }: { heading: string; icon: ReactNode; name: string; detail: string; phone: string; callData: string; children?: ReactNode }) {
+  return (
+    <section className="py-2">
+      <h2 className="mb-1 text-sm font-extrabold">{heading}</h2>
+      <div className="flex items-center gap-3">
+        {icon}
+        <div className="min-w-0 flex-1">
+          <p className="font-extrabold">{name}</p>
+          <p className="text-sm text-muted">{detail}</p>
+        </div>
+        <a href={`tel:${phone}`} aria-label={t('delivery.call', { name })} {...(callData === 'customer' ? { 'data-call': true } : { 'data-call-restaurant': true })} className="grid size-11 shrink-0 place-items-center rounded-full border border-line bg-success-soft text-success shadow-sm">
+          <Phone className="size-5" aria-hidden />
+        </a>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** The prices saved on the order. Anything else in the total (delivery fee, tax, discount) is shown as one line; nothing is calculated as a price here. */
+function Items({ delivery }: { delivery: RiderDelivery }) {
+  const rest = delivery.total - delivery.items.reduce((sum, item) => sum + item.lineTotal, 0);
+  return (
+    <Card>
+      <h2 className="mb-2 text-sm font-extrabold">{t('delivery.items', { n: delivery.items.length })}</h2>
+      <ul className="space-y-2">
+        {delivery.items.map((item) => (
+          <li key={item.id} className="flex items-start gap-2">
+            <Utensils className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
+            <span className="min-w-0 flex-1 text-sm font-semibold">
+              {item.label}
+              {item.note && <span className="font-normal text-amber-800"> “{item.note}”</span>}
+            </span>
+            <span className="shrink-0 text-sm tabular-nums">{formatPaisa(item.lineTotal)}</span>
+          </li>
+        ))}
+        {rest !== 0 && (
+          <li className="flex justify-between gap-2 text-sm text-muted" data-charges>
+            <span>{t(rest > 0 ? 'delivery.charges' : 'delivery.discount')}</span>
+            <span className="tabular-nums">{rest > 0 ? formatPaisa(rest) : `- ${formatPaisa(-rest)}`}</span>
+          </li>
+        )}
+      </ul>
+      <p className="mt-2 flex justify-between gap-2 border-t border-line pt-2 font-extrabold">
+        <span>{t('delivery.total')}</span>
+        <span className="text-lg font-black tabular-nums" data-order-total>{formatPaisa(delivery.total)}</span>
+      </p>
+      {delivery.note && (
+        <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <span className="font-bold">{t('delivery.note')}:</span> {delivery.note}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function Money({ delivery }: { delivery: RiderDelivery }) {
   if (delivery.status === 'DELIVERED') {
     return (
-      <Card className="flex items-center gap-3 bg-green-50" data-money="DONE">
-        <CheckCircle2 className="size-8 shrink-0 text-green-700" aria-hidden />
+      <Card className="flex items-center gap-3" data-money="DONE">
+        <CheckCircle2 className="size-8 shrink-0 text-success" aria-hidden />
         <div>
           <p className="font-extrabold">{t('delivery.doneTitle')}</p>
           {delivery.cashCollected > 0 && (
-            <p className="text-sm text-stone-700">
-              {t('delivery.collected')}: <span className="font-bold">{formatPaisa(delivery.cashCollected)}</span>. {delivery.cashSettled ? t('delivery.settled') : t('delivery.handOver')}
+            <p className="text-sm text-muted">
+              {t('delivery.collected')}: <span className="font-bold text-ink">{formatPaisa(delivery.cashCollected)}</span>. {delivery.cashSettled ? t('delivery.settled') : t('delivery.handOver')}
             </p>
           )}
         </div>
@@ -179,16 +250,17 @@ function MoneyCard({ delivery }: { delivery: RiderDelivery }) {
   }
   if (delivery.amountToCollect === 0) {
     return (
-      <Card className="bg-green-50" data-money="PAID">
-        <p className="text-xl font-black text-green-800">{t('delivery.paidTitle')}</p>
-        <p className="text-sm text-stone-700">{t('delivery.paidBody')}</p>
-      </Card>
+      <div className="rounded-2xl bg-success-soft p-3" data-money="PAID">
+        <p className="font-black text-success">{t('delivery.paidTitle')}</p>
+        <p className="text-sm text-ink">{t('delivery.paidBody')}</p>
+      </div>
     );
   }
   return (
-    <Card className="bg-green-50" data-money="COLLECT">
-      <p className="text-sm font-bold text-green-900">{t('delivery.collectTitle')}</p>
-      <p className="text-4xl font-black tabular-nums text-green-800" data-amount-to-collect>{formatPaisa(delivery.amountToCollect)}</p>
-    </Card>
+    <div className="flex items-center gap-3 rounded-2xl border border-brand bg-brand-soft p-3" data-money="COLLECT">
+      <Banknote className="size-7 shrink-0 text-brand" aria-hidden />
+      <p className="min-w-0 flex-1 text-sm font-extrabold text-brand">{t('delivery.cod')}</p>
+      <p className="shrink-0 text-xl font-black tabular-nums text-brand" data-amount-to-collect>{formatPaisa(delivery.amountToCollect)}</p>
+    </div>
   );
 }

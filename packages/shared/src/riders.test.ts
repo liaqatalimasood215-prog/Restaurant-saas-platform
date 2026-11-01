@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canDisableRider, canRiderGoOffline, googleMapsLink, isRiderLinkData, isRiderOnline, riderAssignBlock, riderDayTotals, riderDeliveryFromOrder, type Order, type RiderDelivery } from './index';
+import { MAX_ACTIVE_RIDER_DELIVERIES, canDisableRider, canPickUpAnother, canRiderGoOffline, deliveryAreaLabel, googleMapsLink, isActiveRiderStage, isRiderLinkData, isRiderOnline, riderAssignBlock, riderDayTotals, riderDeliveryFromOrder, riderStage, type Order, type RiderDelivery } from './index';
 
 const rider = { isActive: true, activatedAt: '2026-11-01T10:00:00.000Z' };
 
@@ -58,6 +58,31 @@ test('the day counts delivered orders and splits the cash into settled and still
   assert.deepEqual(totals, { delivered: 3, cashCollected: 215_000, cashSettled: 125_000, cashWithRider: 90_000 });
 });
 
+test('Picked Up is only a display step: the three order statuses stay, and a tap never changes them', () => {
+  assert.equal(riderStage({ status: 'RIDER_ASSIGNED' }), 'NEW');
+  assert.equal(riderStage({ status: 'RIDER_ASSIGNED', pickupTappedAt: null }), 'NEW');
+  assert.equal(riderStage({ status: 'RIDER_ASSIGNED', pickupTappedAt: '2026-11-01T10:00:00.000Z' }), 'PICKED_UP');
+  assert.equal(riderStage({ status: 'OUT_FOR_DELIVERY', pickupTappedAt: '2026-11-01T10:00:00.000Z' }), 'ON_THE_WAY');
+  assert.equal(riderStage({ status: 'DELIVERED' }), 'DELIVERED');
+  assert.ok(!(riderStage({ status: 'RIDER_ASSIGNED', pickupTappedAt: 'x' }) as string).includes('RIDER_ASSIGNED'));
+});
+
+test('three deliveries with the rider is the limit shown in the app; a new order does not count', () => {
+  assert.equal(MAX_ACTIVE_RIDER_DELIVERIES, 3);
+  assert.equal(isActiveRiderStage('NEW'), false);
+  assert.equal(isActiveRiderStage('PICKED_UP'), true);
+  assert.equal(isActiveRiderStage('ON_THE_WAY'), true);
+  assert.equal(isActiveRiderStage('DELIVERED'), false);
+  assert.equal(canPickUpAnother(2), true);
+  assert.equal(canPickUpAnother(3), false);
+});
+
+test('the area is the part of the address before the city', () => {
+  assert.equal(deliveryAreaLabel('House 12, Street 3, Gulberg III, Lahore'), 'Gulberg III');
+  assert.equal(deliveryAreaLabel('Model Town'), 'Model Town');
+  assert.equal(deliveryAreaLabel(''), '');
+});
+
 const order = (over: Partial<Order>): Order =>
   ({
     id: 'o1',
@@ -70,7 +95,7 @@ const order = (over: Partial<Order>): Order =>
     customerAddress: 'Gulberg',
     note: 'Ring twice',
     items: [
-      { id: 'i1', name: 'Classic Pizza', variantName: 'Medium', quantity: 1, unit: 'piece', modifiers: [{ name: 'Cheese' }], note: '', isVoid: false },
+      { id: 'i1', name: 'Classic Pizza', variantName: 'Medium', quantity: 1, unit: 'piece', modifiers: [{ name: 'Cheese' }], note: '', isVoid: false, lineTotal: 95_000 },
       { id: 'i2', name: 'Chicken Karahi', variantName: null, quantity: 2, unit: 'kg', modifiers: [], note: 'Spicy', isVoid: false },
       { id: 'i3', name: 'Cold Drink', variantName: null, quantity: 1, unit: 'piece', modifiers: [], note: '', isVoid: true },
     ],
@@ -88,6 +113,7 @@ const order = (over: Partial<Order>): Order =>
 test('the rider sees the items with units, without voids, and only what is left to collect', () => {
   const view = riderDeliveryFromOrder(order({}));
   assert.deepEqual(view?.items.map((i) => i.label), ['1 × Classic Pizza (Medium) + Cheese', '2 kg Chicken Karahi']);
+  assert.equal(view?.items[0]?.lineTotal, 95_000);
   assert.equal(view?.amountToCollect, 150_000);
   assert.equal(view?.assignedAt, '2026-11-01T10:00:00.000Z');
   assert.equal(view?.pickedUpAt, '2026-11-01T10:05:00.000Z');

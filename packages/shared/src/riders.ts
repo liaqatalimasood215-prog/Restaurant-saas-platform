@@ -48,7 +48,7 @@ export function googleMapsLink(address: string): string {
 export const RIDER_STATUSES = ['RIDER_ASSIGNED', 'OUT_FOR_DELIVERY', 'DELIVERED'] as const;
 export type RiderDeliveryStatus = (typeof RIDER_STATUSES)[number];
 
-/** Only what a rider needs for one delivery. A rider never sees another rider's orders or the rest of the bill. */
+/** Only what a rider needs for one delivery. A rider never sees another rider's orders. */
 export interface RiderDelivery {
   id: Uuid;
   riderId: Uuid;
@@ -58,7 +58,8 @@ export interface RiderDelivery {
   customerPhone: string;
   customerAddress: string;
   note: string;
-  items: { id: Uuid; label: string; note: string }[];
+  /** lineTotal is the price saved on the order; the Rider App never calculates a price */
+  items: { id: Uuid; label: string; note: string; lineTotal: Paisa }[];
   total: Paisa;
   /** Still to take from the customer; 0 = already paid */
   amountToCollect: Paisa;
@@ -69,6 +70,42 @@ export interface RiderDelivery {
   assignedAt: IsoDateTime | null;
   pickedUpAt: IsoDateTime | null;
   deliveredAt: IsoDateTime | null;
+  /** DEMO: the rider tapped Pick Up Order in this browser. The order status does not change (see riderStage). */
+  pickupTappedAt?: IsoDateTime | null;
+  /** Sample data only, until a location service exists; missing = not shown */
+  area?: string;
+  distanceKm?: number;
+  etaMinutes?: number;
+}
+
+/**
+ * What the rider sees (owner's picture, 2026-11-01): New → Picked Up → On the Way → Delivered. This is a display step, not an
+ * order status: the one engine stays RIDER_ASSIGNED → OUT_FOR_DELIVERY → DELIVERED (MASTER_PROMPT.md §6). Picked Up is a DEMO
+ * tap in the Rider App, so Restaurant OS shows "Rider assigned" until Start Delivery. Whether it becomes a real status is
+ * decided with the backend.
+ * Roman Urdu: Picked Up sirf Rider App mein dikhta hai; asli order status nahi badalta.
+ */
+export const RIDER_STAGES = ['NEW', 'PICKED_UP', 'ON_THE_WAY', 'DELIVERED'] as const;
+export type RiderStage = (typeof RIDER_STAGES)[number];
+
+export function riderStage(delivery: Pick<RiderDelivery, 'status' | 'pickupTappedAt'>): RiderStage {
+  if (delivery.status === 'DELIVERED') return 'DELIVERED';
+  if (delivery.status === 'OUT_FOR_DELIVERY') return 'ON_THE_WAY';
+  return delivery.pickupTappedAt ? 'PICKED_UP' : 'NEW';
+}
+
+/** Shown in the Rider App only (owner, 2026-11-01). It is not security: the server enforces it with the backend. */
+export const MAX_ACTIVE_RIDER_DELIVERIES = 3;
+
+/** The food is with the rider. */
+export const isActiveRiderStage = (stage: RiderStage): boolean => stage === 'PICKED_UP' || stage === 'ON_THE_WAY';
+
+export const canPickUpAnother = (activeDeliveries: number): boolean => activeDeliveries < MAX_ACTIVE_RIDER_DELIVERIES;
+
+/** "House 12, Street 3, Gulberg III, Lahore" → "Gulberg III": the part before the city. */
+export function deliveryAreaLabel(address: string): string {
+  const parts = address.split(',').map((part) => part.trim()).filter(Boolean);
+  return (parts.length >= 2 ? parts[parts.length - 2] : parts[0]) ?? '';
 }
 
 const isRiderStatus = (status: string): status is RiderDeliveryStatus => (RIDER_STATUSES as readonly string[]).includes(status);
@@ -93,6 +130,7 @@ export function riderDeliveryFromOrder(order: Order): RiderDelivery | null {
         id: item.id,
         label: `${formatQuantity(item.quantity, item.unit)} ${item.name}${item.variantName ? ` (${item.variantName})` : ''}${item.modifiers.map((m) => ` + ${m.name}`).join('')}`,
         note: item.note,
+        lineTotal: item.lineTotal,
       })),
     total: order.totals.total,
     amountToCollect: amountDue(order.totals.total, order.paidTotal),
@@ -115,7 +153,7 @@ export interface RiderDayTotals {
 }
 
 /** One rider's day, from that rider's deliveries (MASTER_PROMPT.md §7.3). */
-export function riderDayTotals(deliveries: readonly RiderDelivery[]): RiderDayTotals {
+export function riderDayTotals(deliveries: readonly Pick<RiderDelivery, 'status' | 'cashCollected' | 'cashSettled'>[]): RiderDayTotals {
   const done = deliveries.filter((d) => d.status === 'DELIVERED');
   const cashCollected = done.reduce((sum, d) => sum + d.cashCollected, 0);
   const cashSettled = done.filter((d) => d.cashSettled).reduce((sum, d) => sum + d.cashCollected, 0);

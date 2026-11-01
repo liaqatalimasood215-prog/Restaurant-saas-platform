@@ -6,6 +6,9 @@ import {
   RIDER_LINK_DATA,
   RIDER_LINK_RESULT,
   canRiderGoOffline,
+  deliveryAreaLabel,
+  normalizePhone,
+  riderDayTotals,
   checkTransition,
   isRiderLinkData,
   rupeesToPaisa,
@@ -15,17 +18,20 @@ import {
   type RiderLinkData,
 } from '@restaurant-saas/shared';
 import { t } from '@/i18n';
+import { dateKey, daysAgoKey } from '../../dates';
 import { newId } from '../../new-id';
-import { ApiError, type DemoControls, type DemoSource, type RiderApi, type RiderBranch } from '../client';
-import { DEMO_BRANCHES, DEMO_NEW_ORDERS } from './seed';
+import { ApiError, type DemoControls, type DemoSource, type RiderApi, type RiderBranch, type RiderDaySummary, type RiderPastDelivery } from '../client';
+import { DEMO_BRANCHES, DEMO_EARNINGS, DEMO_NEW_ORDERS, DEMO_PAST_DELIVERIES, DEMO_PIN } from './seed';
 
 /**
  * Phase 3 implementation of the RiderApi. A direct visit (also on a phone) uses sample data kept in this browser.
  * Inside the Riders page of Restaurant OS, or a tab opened from it, the app uses that page's real demo orders through
  * a DEMO link, and the rider's steps go back to it. It is NOT a security boundary: the server decides from Phase 4.
  */
-const KEY = 'lala-rider-demo-v1';
+const KEY = 'lala-rider-demo-v2';
 const SESSION_KEY = 'lala-rider-session-v1';
+/** The DEMO Pick Up taps: rider and order ids, never customer details. */
+const PICKUPS_KEY = 'lala-rider-pickups-v1';
 const RESTAURANT_OS_ORIGIN = 'http://localhost:3000';
 const ASK_EVERY_MS = 1000;
 const FIRST_ANSWER_MS = 800;
@@ -47,6 +53,8 @@ interface DemoSession {
 const wait = () => new Promise<void>((resolve) => setTimeout(resolve, 120 + Math.random() * 180));
 const scopeOf = (restaurant: string, branch: string) => `${restaurant}/${branch}`;
 const nowIso = () => new Date().toISOString();
+/** With the rider's id: a tap never follows the order to another rider. */
+const pickupKey = (delivery: Pick<RiderDelivery, 'id' | 'riderId'>) => `${delivery.riderId}:${delivery.id}`;
 
 function startSample(): SampleState {
   const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
@@ -55,12 +63,12 @@ function startSample(): SampleState {
       const deliveries = seed.deliveries.map((d, i): RiderDelivery => ({
         ...d,
         id: `${seed.restaurantSlug}-${i + 1}`,
-        dailyNumber: 11 + i,
+        dailyNumber: (seed.firstNumber ?? 11) + i,
         assignedAt: minutesAgo(90 - i * 15),
         pickedUpAt: d.status === 'RIDER_ASSIGNED' ? null : minutesAgo(80 - i * 15),
         deliveredAt: d.status === 'DELIVERED' ? minutesAgo(60 - i * 15) : null,
       }));
-      return [scopeOf(seed.restaurantSlug, seed.branchSlug), { riders: structuredClone(seed.riders), deliveries, nextNumber: 11 + deliveries.length, newOrders: 0 }];
+      return [scopeOf(seed.restaurantSlug, seed.branchSlug), { riders: structuredClone(seed.riders), deliveries, nextNumber: (seed.firstNumber ?? 11) + deliveries.length, newOrders: 0 }];
     }),
   );
 }
@@ -249,15 +257,20 @@ export class DemoAdapter implements RiderApi, DemoControls {
     return this.accounts(scopeOf(restaurant, branch));
   }
 
-  async login(restaurant: string, branch: string, riderId: string): Promise<void> {
+  demoPin(): string {
+    return DEMO_PIN;
+  }
+
+  /** DEMO: finds the rider by phone; any PIN is accepted. The server checks the real PIN or password. */
+  async login(restaurant: string, branch: string, phone: string, pin: string): Promise<void> {
     await this.ready();
     const scope = scopeOf(restaurant, branch);
-    const account = this.accounts(scope).find((a) => a.id === riderId);
-    if (!account) throw new ApiError('NOT_FOUND', t('login.unknown'));
+    const account = this.accounts(scope).find((a) => (normalizePhone(a.phone) ?? a.phone) === phone);
+    if (!account || !pin) throw new ApiError('NOT_FOUND', t('login.unknown'));
     if (!account.isActive) throw new ApiError('FORBIDDEN', t('login.disabled'));
     if (!account.activatedAt) throw new ApiError('FORBIDDEN', t('login.notActivated'));
-    if (this.linkFor(scope)) await this.command({ kind: 'LOGIN', riderId });
-    this.saveSession({ scope, riderId });
+    if (this.linkFor(scope)) await this.command({ kind: 'LOGIN', riderId: account.id });
+    this.saveSession({ scope, riderId: account.id });
   }
 
   async logout(): Promise<void> {
@@ -296,14 +309,80 @@ export class DemoAdapter implements RiderApi, DemoControls {
     const session = this.currentSession();
     if (!session) return [];
     const link = this.linkFor(session.scope);
-    if (link) return link.deliveries;
-    return this.currentSample().deliveries.filter((d) => d.riderId === session.riderId);
+    const list = link ? link.deliveries : this.currentSample().deliveries.filter((d) => d.riderId === session.riderId);
+    const tapped = this.pickups();
+    return list.map((d) => ({ ...d, pickupTappedAt: tapped[pickupKey(d)] ?? null }));
+  }
+
+  private pickups(): Record<string, string> {
+    try {
+      return JSON.parse(this.sessionStore().getItem(PICKUPS_KEY) ?? '{}') as Record<string, string>;
+    } catch {
+      return {};
+    }
+  }
+
+  async confirmPickup(id: string): Promise<void> {
+    const delivery = await this.getDelivery(id);
+    if (delivery.status !== 'RIDER_ASSIGNED' || delivery.pickupTappedAt) return;
+    try {
+      this.sessionStore().setItem(PICKUPS_KEY, JSON.stringify({ ...this.pickups(), [pickupKey(delivery)]: nowIso() }));
+    } catch {
+      throw new ApiError('CONFLICT', t('app.errorBody'));
+    }
+    this.emit();
   }
 
   async getDelivery(id: string): Promise<RiderDelivery> {
     const found = (await this.listDeliveries()).find((d) => d.id === id);
     if (!found) throw new ApiError('NOT_FOUND', t('delivery.gone'));
     return found;
+  }
+
+  /** Today's deliveries, plus sample older days on sample data. The DEMO link knows only today. */
+  async listHistory(): Promise<RiderPastDelivery[]> {
+    const today: RiderPastDelivery[] = (await this.listDeliveries())
+      .filter((d) => d.status === 'DELIVERED')
+      .map((d) => ({
+        id: d.id,
+        dailyNumber: d.dailyNumber,
+        date: d.deliveredAt ? dateKey(new Date(d.deliveredAt)) : daysAgoKey(0),
+        area: d.area ?? deliveryAreaLabel(d.customerAddress),
+        total: d.total,
+        cashCollected: d.cashCollected,
+        cashSettled: d.cashSettled,
+        canOpen: true,
+      }));
+    const older: RiderPastDelivery[] = this.source() === 'SAMPLE'
+      ? DEMO_PAST_DELIVERIES.map((p) => ({
+          id: `past-${p.number}`,
+          dailyNumber: p.number,
+          date: daysAgoKey(p.daysAgo),
+          area: p.area,
+          total: rupeesToPaisa(p.rupees),
+          cashCollected: p.cod ? rupeesToPaisa(p.rupees) : 0,
+          cashSettled: p.cod,
+          canOpen: false,
+        }))
+      : [];
+    return [...today.sort((a, b) => b.dailyNumber - a.dailyNumber), ...older];
+  }
+
+  async getDaySummary(date: string): Promise<RiderDaySummary> {
+    const finished = (await this.listHistory()).filter((d) => d.date === date);
+    const sample = this.source() === 'SAMPLE' ? DEMO_EARNINGS.find((e) => daysAgoKey(e.daysAgo) === date) : undefined;
+    return {
+      date,
+      totals: riderDayTotals(finished.map((d) => ({ status: 'DELIVERED', cashCollected: d.cashCollected, cashSettled: d.cashSettled }))),
+      earnings: sample
+        ? {
+            deliveryFees: rupeesToPaisa(sample.fees),
+            tips: rupeesToPaisa(sample.tips),
+            bonus: rupeesToPaisa(sample.bonus),
+            total: rupeesToPaisa(sample.fees + sample.tips + sample.bonus),
+          }
+        : null,
+    };
   }
 
   private sampleStep(id: string, to: 'OUT_FOR_DELIVERY' | 'DELIVERED'): void {
@@ -372,7 +451,7 @@ export class DemoAdapter implements RiderApi, DemoControls {
       customerPhone: next.customerPhone,
       customerAddress: next.customerAddress,
       note: '',
-      items: next.items.map((label, i) => ({ id: `item-${i + 1}`, label, note: '' })),
+      items: next.items.map(([label, rupees], i) => ({ id: `item-${i + 1}`, label, note: '', lineTotal: rupeesToPaisa(rupees) })),
       total,
       amountToCollect: total,
       cashCollected: 0,
@@ -395,6 +474,11 @@ export class DemoAdapter implements RiderApi, DemoControls {
   }
 
   resetSample(): void {
+    try {
+      this.sessionStore().removeItem(PICKUPS_KEY);
+    } catch {
+      // Storage blocked: there is nothing saved to clear.
+    }
     this.sample = startSample();
     this.saveSample();
   }

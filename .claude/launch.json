@@ -26,6 +26,18 @@
       "port": 3012
     },
     {
+      "name": "rider-production",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@restaurant-saas/rider", "exec", "next", "start", "--port", "3102"],
+      "port": 3102
+    },
+    {
+      "name": "restaurant-os-production",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@restaurant-saas/restaurant-os", "exec", "next", "start", "--port", "3100"],
+      "port": 3100
+    },
+    {
       "name": "restaurant-os-running",
       "url": "http://localhost:3000",
       "port": 3000

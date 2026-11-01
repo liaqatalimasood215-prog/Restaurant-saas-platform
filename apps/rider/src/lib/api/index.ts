@@ -3,7 +3,7 @@ import { DemoAdapter } from './demo/demo-adapter';
 import { DEMO_BRANCHES } from './demo/seed';
 
 export { ApiError } from './client';
-export type { DemoControls, DemoSource, RiderApi, RiderBranch } from './client';
+export type { DemoControls, DemoSource, RiderApi, RiderBranch, RiderDaySummary, RiderEarnings, RiderPastDelivery } from './client';
 
 let adapter: DemoAdapter | null = null;
 
@@ -22,7 +22,7 @@ export function getDemoControls(): DemoControls {
   return demoAdapter();
 }
 
-export const DEMO_START_PATH = '/aziz-pizza/main';
+export const DEMO_START_PATH = '/lala-restaurant/main';
 
 /** Name and colour for page titles and the install manifest (runs on the server, no browser data). */
 export function branchIdentity(restaurant: string, branch: string) {

@@ -12,6 +12,8 @@ export interface RiderContextValue {
   deliveries: RiderDelivery[];
   /** A short message at the bottom of the screen */
   notify: (text: string, tone?: 'ok' | 'error') => void;
+  /** Opens the "This is a DEMO" explanation */
+  explainDemo: () => void;
 }
 
 export const RiderContext = createContext<RiderContextValue | null>(null);
