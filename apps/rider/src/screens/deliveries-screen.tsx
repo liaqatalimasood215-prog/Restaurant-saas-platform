@@ -10,6 +10,7 @@ import { Button, EmptyState } from '@/components/ui';
 import { t } from '@/i18n';
 import { getApi, getDemoControls } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { daysAgoKey, riderDay } from '@/lib/dates';
 import { useRider } from './rider-context';
 
 type Tab = 'NEW' | 'MINE';
@@ -34,7 +35,8 @@ export function DeliveriesScreen() {
   const [chosenTab, setChosenTab] = useState<Tab | null>(null);
   const newOrders = newOrdersOf(deliveries);
   const mine = withRiderOf(deliveries);
-  const completed = deliveries.filter((d) => d.status === 'DELIVERED').length;
+  const today = daysAgoKey(0);
+  const completed = deliveries.filter((d) => d.status === 'DELIVERED' && (!d.deliveredAt || riderDay(new Date(d.deliveredAt)) === today)).length;
   const tab: Tab = chosenTab ?? (newOrders.length === 0 && mine.length > 0 ? 'MINE' : 'NEW');
   const shown = tab === 'NEW' ? newOrders : mine;
   const online = me.riderOnline;

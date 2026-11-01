@@ -456,6 +456,21 @@ if (await karahi.evaluate(() => window.isSecureContext)) {
   check('the service worker is registered', true);
 }
 
+console.log('The day follows the restaurant, not midnight');
+for (const [label, at, day] of [['after midnight', '2026-11-02T00:30:00+05:00', 'Sun, 1 Nov 2026'], ['just after the day starts', '2026-11-02T06:10:00+05:00', 'Mon, 2 Nov 2026']]) {
+  const night = await newRider();
+  await night.clock.setFixedTime(new Date(at));
+  await night.goto(LALA);
+  await night.locator('[data-login-account]').first().waitFor();
+  await login(night, 'Usman Ali');
+  const homeCount = await stat(night, 'completed');
+  await night.getByRole('link', { name: 'Earnings' }).click();
+  await night.locator('[data-earnings-card]').waitFor();
+  check(`${label}: Home and Today count the same deliveries`, homeCount === '2' && (await today(night, 'delivered')) === '2', `${homeCount}`);
+  check(`${label}: Today is ${day}`, (await night.locator('[data-day]').evaluate((s) => s.selectedOptions[0].textContent)) === day);
+  await night.close();
+}
+
 console.log('Small phones');
 const small = [];
 for (const width of [320, 360, 390, 412]) {

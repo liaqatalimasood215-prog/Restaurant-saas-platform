@@ -452,3 +452,5 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-11-01 | Up to 3 deliveries with the rider, shown in the UI only. Live Tracking and Earnings stay DEMO / NOT CONNECTED. COD cash is never shown as the rider's earnings | Active |
 | 2026-11-01 | Owner approved Phase 1A and said "only front end; all front end, last backend": the whole Rider App frontend is built next (Live Tracking, My Active Deliveries, Today Summary, Delivery History, Profile), backend only after all frontend, with his separate approval | Active |
 | 2026-11-01 | Owner approved the Rider App frontend ("Approve, commit karo"): committed locally on the working branch; no push or merge | Active |
+| 2026-11-01 | Owner ("Haan, merge karo"): the Rider App frontend merged into `phase-1/restaurant-os-ui`; nothing pushed. No GitHub remote is connected yet | Active |
+| 2026-11-02 | The Rider App's "today" is the restaurant's business day (default start 06:00, `riderDay`), found by the walkthrough just after midnight; the branch's own start time comes with the backend | Active |

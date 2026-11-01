@@ -68,7 +68,7 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 
 - Only the Owner creates and changes riders, no public sign-up; the Manager sees them and may take their cash. The rider sets Online / Offline;
   an Offline rider gets no new order. A running delivery keeps the rider Online and enabled.
-- **Rider App frontend from the owner's six-screen picture, built and approved 2026-11-01 (DEMO), not merged yet:** Login, Home, Order Details, Live Tracking, My Active Deliveries, Today Summary,
+- **Rider App frontend from the owner's six-screen picture, built, approved and merged 2026-11-01 (DEMO), not pushed:** Login, Home, Order Details, Live Tracking, My Active Deliveries, Today Summary,
   Delivery History, Profile. No Accept Order. Picked Up is a DEMO display step only (`riderStage`), canonical statuses unchanged. Max 3 is shown in the UI only. Live Tracking and Earnings are
   DEMO / NOT CONNECTED, and COD cash stays apart from earnings. Owner: "only front end; all front end, backend last". No backend, push, merge or deploy without him.
 

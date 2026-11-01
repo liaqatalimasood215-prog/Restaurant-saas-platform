@@ -18,7 +18,7 @@ import {
   type RiderLinkData,
 } from '@restaurant-saas/shared';
 import { t } from '@/i18n';
-import { dateKey, daysAgoKey } from '../../dates';
+import { daysAgoKey, riderDay } from '../../dates';
 import { newId } from '../../new-id';
 import { ApiError, type DemoControls, type DemoSource, type RiderApi, type RiderBranch, type RiderDaySummary, type RiderPastDelivery } from '../client';
 import { DEMO_BRANCHES, DEMO_EARNINGS, DEMO_NEW_ORDERS, DEMO_PAST_DELIVERIES, DEMO_PIN } from './seed';
@@ -58,6 +58,9 @@ const pickupKey = (delivery: Pick<RiderDelivery, 'id' | 'riderId'>) => `${delive
 
 function startSample(): SampleState {
   const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
+  // A sample started just after the day begins still has its finished deliveries today.
+  const today = riderDay(new Date());
+  const doneToday = (n: number) => (riderDay(new Date(minutesAgo(n))) === today ? minutesAgo(n) : nowIso());
   return Object.fromEntries(
     DEMO_BRANCHES.map((seed) => {
       const deliveries = seed.deliveries.map((d, i): RiderDelivery => ({
@@ -66,7 +69,7 @@ function startSample(): SampleState {
         dailyNumber: (seed.firstNumber ?? 11) + i,
         assignedAt: minutesAgo(90 - i * 15),
         pickedUpAt: d.status === 'RIDER_ASSIGNED' ? null : minutesAgo(80 - i * 15),
-        deliveredAt: d.status === 'DELIVERED' ? minutesAgo(60 - i * 15) : null,
+        deliveredAt: d.status === 'DELIVERED' ? doneToday(60 - i * 15) : null,
       }));
       return [scopeOf(seed.restaurantSlug, seed.branchSlug), { riders: structuredClone(seed.riders), deliveries, nextNumber: (seed.firstNumber ?? 11) + deliveries.length, newOrders: 0 }];
     }),
@@ -346,7 +349,7 @@ export class DemoAdapter implements RiderApi, DemoControls {
       .map((d) => ({
         id: d.id,
         dailyNumber: d.dailyNumber,
-        date: d.deliveredAt ? dateKey(new Date(d.deliveredAt)) : daysAgoKey(0),
+        date: d.deliveredAt ? riderDay(new Date(d.deliveredAt)) : daysAgoKey(0),
         area: d.area ?? deliveryAreaLabel(d.customerAddress),
         total: d.total,
         cashCollected: d.cashCollected,
