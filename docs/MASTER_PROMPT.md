@@ -342,10 +342,11 @@ SEO & Sharing (saved; used after the website is online) and QR code (preview, do
 
 ### 5.6 Riders page — Pilot
 
-The Owner or Manager adds a rider (name, phone, password), sets Active/Disabled, sees each rider's
-current deliveries and cash to settle, and sees a preview of the Rider App with an **Open Full App**
-button. No public rider signup. In Phases 1–2 the preview and the button are PLACEHOLDERS (the
-Rider App is built in Phase 3).
+The Owner adds a rider (name, phone; the rider activates the account through a single-use link, §10.3),
+edits, disables or deletes riders. Owner and Manager see who is Online, each rider's current deliveries,
+deliveries today and cash to settle, and a preview of the Rider App with an **Open Full App** button; the
+Manager changes nothing but may take a rider's cash. No public rider signup. A rider with a running delivery
+cannot be disabled or deleted. (Owner, 2026-11-01.)
 
 ### 5.7 End of day
 
@@ -547,8 +548,8 @@ Navigation (owner, 2026-10-27):
 - Buttons: **Picked up – On the way** → **Delivered** (confirm cash collected).
 - Alert on a new assignment (sound + vibration; web push in P7).
 - Today: deliveries done, cash collected, cash settled.
-- Availability status (online/offline), requested by the owner on 2026-10-27: scope decided before
-  Phase 3 (§16 #16).
+- Availability (owner, 2026-11-01): the rider sets Online / Offline; Owner, Manager and Cashier see it. An
+  Offline rider gets no new order. A rider with a running delivery cannot go Offline.
 - Later (P11): GPS live location, rider applications with owner approval, shared delivery pool.
 
 ### 7.4 Platform Admin — P9
@@ -1095,7 +1096,7 @@ decision in `PROJECT_RULES.md` §20.
 | 13 | How often does the internet drop at the restaurant? | Rarely → full offline operation stays in P11 |
 | 14 | Payroll rules (monthly salary, daily wage, advances) | Decided in Phase 8 |
 | 15 | "Master Prompt Version 4" mentioned by the owner | Only v1.0 existed in the Project; v2.0 merges the owner's latest points — share v4 if it exists elsewhere |
-| 16 | Rider availability status (online/offline): who sees it, does it block assignment? | Decide before Phase 3 |
+| 16 | Rider availability status (online/offline): who sees it, does it block assignment? | **Decided 2026-11-01** (§7.3): Owner, Manager and Cashier see it; Offline blocks new orders |
 | 17 | Extra staff roles (Admin, Inventory Staff, Finance Staff) | Not in the permission model; decide before the phase that needs them |
 | 18 | Separately branded Android apps per restaurant (Publishing Stage B) | Evaluated in P11 after a Google Play policy and cost review; no approval is guaranteed |
 | 19 | Dine-in orders from the customer's phone (table ordering): how does a table number reach the waiter and the kitchen? | DEMO screen only since 2026-10-31; decide before Phase 4 joins the website to Restaurant OS |
@@ -1210,3 +1211,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-30 | §5.5 Online App / Website rework (owner's brief): five tabs, status header, previews, two separate publishing flows; custom domain and Android moved forward as DEMO screens only; §14 custom domain row changed from Overkill to Later. Real work stays P9 and P11 (§7.6). |
 | 2026-10-31 | §7.2 Customer App redesigned from the owner's six-screen picture as DEMO screens; OTP, Google, online payments, map and rider contact are NOT CONNECTED screens only; open decision #19 (Dine-in from the customer's phone). |
 | 2026-10-31 | §5.5 Website tab built as DEMO (Online App step D); the previews follow its settings. |
+| 2026-11-01 | §5.6, §7.3, §16 #16: Riders page and Rider App built as DEMO (Phase 3). Only the Owner adds and changes riders; Online / Offline decides who can get a new order; a running delivery keeps the rider Online and enabled. `users.rider_online` to add to the data model in Phase 4. |

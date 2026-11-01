@@ -33,6 +33,9 @@ import type {
   PaymentMethod,
   RiderCashSettlement,
   RiderCashView,
+  RiderLinkCommand,
+  RiderLinkData,
+  RiderOverview,
   Restaurant,
   StaffNotification,
   StaffRole,
@@ -309,6 +312,8 @@ export interface ApiClient {
   /** Takeaway: READY → PICKED_UP at the counter. */
   markPickedUp(orderId: Uuid): Promise<Order>;
   listRiderCash(): Promise<RiderCashView[]>;
+  /** The Riders page: every rider with running deliveries and cash to settle. */
+  listRiders(): Promise<RiderOverview[]>;
   /** The cashier takes the rider's collected cash; one settlement per tap. */
   settleRiderCash(riderId: Uuid, idempotencyKey: string): Promise<RiderCashSettlement>;
 
@@ -420,6 +425,9 @@ export interface DemoControls {
   simulateCustomerOrder(type: Exclude<OrderType, 'DINE_IN'>): Promise<Order>;
   /** Stands in for the Rider App (Phase 3): Picked up – On the way, then Delivered + cash collected. */
   simulateRiderStep(orderId: Uuid): Promise<Order>;
+  /** DEMO link to the Rider App (screens/riders/rider-bridge.ts); from Phase 4 both apps use the API. */
+  riderLinkData(riderId: Uuid | null): RiderLinkData;
+  riderLinkCommand(command: RiderLinkCommand): Promise<void>;
   isSimulatingFailure(): boolean;
   setSimulatedFailure(on: boolean): void;
   resetData(): void;

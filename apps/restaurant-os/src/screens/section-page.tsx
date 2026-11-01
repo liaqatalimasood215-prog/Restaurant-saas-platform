@@ -7,7 +7,6 @@ import { Card, CardBody } from '@/components/ui/card';
 import { t } from '@/i18n';
 import { PREVIEW_FOR_SECTION } from '@/lib/build-plan';
 import { useSession } from '@/lib/session';
-import { AppPreviewScreen } from './app-preview-screen';
 import { ComingSoonScreen } from './coming-soon-screen';
 import { KitchenScreen } from './kitchen/kitchen-screen';
 import { MenuScreen } from './menu/menu-screen';
@@ -15,6 +14,7 @@ import { OnlineAppScreen } from './online-app/online-app-screen';
 import { OnlineOrdersScreen } from './online-orders/online-orders-screen';
 import { OrdersScreen } from './orders/orders-screen';
 import { PosScreen } from './pos/pos-screen';
+import { RidersScreen } from './riders/riders-screen';
 import { SettingsScreen } from './settings/settings-screen';
 import { SummaryScreen } from './summary/summary-screen';
 import { StaffScreen } from './staff/staff-screen';
@@ -41,7 +41,7 @@ function renderSection(section: OsSection, options: SectionOptions) {
   if (section.key === 'online-orders') return <OnlineOrdersScreen />;
   if (section.key === 'orders') return <OrdersScreen key={options.query ?? ''} query={options.query} />;
   if (section.key === 'online-app') return <OnlineAppScreen />;
-  if (section.key === 'riders') return <AppPreviewScreen section={section} />;
+  if (section.key === 'riders') return <RidersScreen />;
   if (section.group === 'COMING_SOON') return <ComingSoonScreen section={section} />;
   return <UpcomingScreen section={section} preview={PREVIEW_FOR_SECTION[section.key] ?? 1} />;
 }

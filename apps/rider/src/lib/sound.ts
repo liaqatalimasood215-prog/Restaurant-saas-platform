@@ -1,0 +1,37 @@
+/**
+ * Alert for a new assignment: sound and vibration (MASTER_PROMPT.md §10.5). Browsers block sound until the rider has
+ * tapped the page once. Free: built-in Web Audio, no sound files, no paid service. Web push for a closed app is Phase 7.
+ */
+let context: AudioContext | null = null;
+
+export function unlockSound(): void {
+  try {
+    context ??= new AudioContext();
+    void context.resume();
+  } catch {
+    // No sound on this device: the message and vibration still work.
+  }
+}
+
+export function alertNewDelivery(): void {
+  try {
+    navigator.vibrate?.([300, 120, 300]);
+  } catch {
+    // no vibration on this device
+  }
+  if (!context) return;
+  try {
+    for (const start of [0, 0.25, 0.5]) {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'square';
+      oscillator.frequency.value = 880;
+      gain.gain.value = 0.15;
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(context.currentTime + start);
+      oscillator.stop(context.currentTime + start + 0.18);
+    }
+  } catch {
+    // no sound on this device
+  }
+}

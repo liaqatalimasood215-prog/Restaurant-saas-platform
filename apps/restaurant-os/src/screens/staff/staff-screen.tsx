@@ -230,7 +230,7 @@ export function StaffScreen() {
  * Shown once after Add / Resend / Reset PIN. Email is NOT CONNECTED yet, so the Owner sends the link
  * himself (copy, or his own WhatsApp — no paid service). A PIN is never shown or sent.
  */
-function LinkDialog({ shown, onClose }: { shown: NonNullable<ShownLink>; onClose: () => void }) {
+export function LinkDialog({ shown, onClose }: { shown: NonNullable<ShownLink>; onClose: () => void }) {
   const toast = useToast();
   const url = `${window.location.origin}/activate?token=${shown.link.token}`;
   const message = t(shown.link.kind === 'PIN_RESET' ? 'staff.link.whatsappPinReset' : 'staff.link.whatsappActivation', { name: shown.name, url });

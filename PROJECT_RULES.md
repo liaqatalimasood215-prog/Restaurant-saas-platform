@@ -74,8 +74,7 @@ Development ports: restaurant-os `3000`, customer `3001`, rider `3002`, api `400
 | Riders | Add/disable riders, assignments, cash to settle, **preview of the Rider App**, **Open Full App** button | `apps/rider` |
 
 These pages manage and preview the real apps; they never replace them. The real apps stay separate
-and are deployed separately. Until an app exists (Customer App: Phase 2, Rider App: Phase 3), its
-preview and its Open Full App button are clearly labelled PLACEHOLDERS.
+and are deployed separately.
 
 ### Restaurant OS navigation (owner, 2026-10-27)
 
@@ -445,3 +444,6 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-10-31 | Owner approves the Customer App ("Approve, Phase C karo": Phase 2 design gate) and starts Online App step C: the website previews and View Website show the Restaurant OS menu, prices and switches through a DEMO browser link; a direct website link keeps its sample data and orders do not reach Restaurant OS until Phase 4; LALA Restaurant can be chosen as a sample in the previews | Active |
 | 2026-10-31 | Owner approves step C and starts step D ("Approve, Phase D karo"): Website tab with Branding, Homepage, Menu display, Delivery & Pickup, Opening hours, Contact, Custom domain, SEO & Sharing, QR code, as DEMO. Products, prices and categories stay in the Menu; phone, address, fee, minimum and time stay in one place. Owner only: look, texts, hours, domain, SEO. Owner and Manager: Delivery / Pickup / Dine-in switches, which work at once like online orders ON/OFF. A saved look change waits for Publish Website on a published website. No real domain, DNS, picture upload or hosting: pictures show Planned, DNS values are an example, the link and QR stay on this computer. Opening hours are shown but do not close the website by themselves until the backend | Active |
 | 2026-10-31 | Owner ("Haan, theek karo", after his phone could not open the QR link): the customer link, Copy and QR code use this computer's Wi-Fi address during development, so they open on a phone on the same Wi-Fi for testing (replaces "the link and QR stay on this computer"). The phone shows sample data and its orders stay on it. View Website and the previews stay on localhost. Development only: the address is never in a production build. Customers' phones still need hosting, with separate approval | Active |
+| 2026-11-01 | Owner ("Haan, shuru karo"): step D of the Online App approved; steps E–H paused, not cancelled; Phase 3 starts with the Rider App and the Riders page together, then refunds, then the backend | Active |
+| 2026-11-01 | Riders (owner, MASTER_PROMPT.md §16 #16): the Owner creates riders, no public sign-up; the Manager sees them and may take their cash. The rider sets Online / Offline; Owner, Manager and Cashier see it; an Offline rider gets no new order; a rider with a running delivery cannot go Offline and cannot be disabled (replaces "Owner or Manager adds a rider") | Active |
+| 2026-11-01 | Rider App is built as DEMO: sample data on a direct link and on a phone; in the Riders page frame or Open Full App it uses the Restaurant OS orders through a DEMO link in one browser. The customer website does not see rider steps until Phase 4 | Active |

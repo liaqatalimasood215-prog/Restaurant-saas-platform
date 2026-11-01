@@ -99,7 +99,7 @@ export function QrSection({ view }: { view: OnlineAppView }) {
   );
 }
 
-function QrImage({ text, label, className }: { text: string; label: string; className: string }) {
+export function QrImage({ text, label, className }: { text: string; label: string; className: string }) {
   const { size, path } = useMemo(() => {
     const modules = qrModules(text);
     let d = '';

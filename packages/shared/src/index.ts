@@ -20,3 +20,4 @@ export * from './settings';
 export * from './reports';
 export * from './online-order';
 export * from './online-app';
+export * from './riders';

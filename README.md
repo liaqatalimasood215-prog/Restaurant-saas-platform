@@ -13,18 +13,19 @@ Read before changing anything:
 
 ## Current stage
 
-**Phase 2 — Customer website: redesigned from the owner's six-screen picture, approved by the owner on 2026-10-31
-(DEMO / PROTOTYPE).** The owner asked for the website first, then the Rider App; Riders page and refunds in
-Phase 1 wait. See [apps/customer/README.md](apps/customer/README.md).
+**Phase 3 — Rider App and Riders page: built 2026-11-01, waiting for the owner's review (DEMO / PROTOTYPE).**
+See [apps/rider/README.md](apps/rider/README.md). Next: refunds, then the backend (Phase 4), each after the owner's approval.
 
-**Online App / Website rework (owner's brief, 2026-10-30):** steps A–C approved, step D (Website tab) built, DEMO only.
-Next steps E–H wait for the owner's approval.
+**Phase 2 — Customer website: redesigned from the owner's six-screen picture, approved by the owner on 2026-10-31
+(DEMO / PROTOTYPE).** See [apps/customer/README.md](apps/customer/README.md).
+
+**Online App / Website rework (owner's brief, 2026-10-30):** steps A–D approved, DEMO only. Steps E–H are paused by the owner, not cancelled.
 
 **Phase 1 — Restaurant OS UI prototype: mostly built (DEMO / PROTOTYPE).** Approved by the owner: Preview 1,
 the waiter → kitchen → cashier workflow (2026-10-28), POS / New Bill, Preview 4 (Orders, Online Orders),
 Tables management and the Staff design (2026-10-30).
 
-Built in Preview 5: Menu, Settings, Today's Summary, Online App. Still to build in Phase 1: Riders; refunds and
+Built in Preview 5: Menu, Settings, Today's Summary, Online App, Riders. Still to build in Phase 1: refunds and
 payment reversals. Nothing is connected to a real backend yet (Phase 4).
 
 ## Folder map
@@ -32,11 +33,11 @@ payment reversals. Nothing is connected to a real backend yet (Phase 4).
 | Folder | What it is | Status |
 |---|---|---|
 | `docs/` | Master prompt v2.1, AI Manager plan | Written |
-| `packages/shared` | Seven roles (Super Waiter, Service Waiter) and permission matrix, sidebar sections, order engine (dine-in, delivery, takeaway), kitchen tickets, pricing engine, payments/refunds, business day, selling units, API data types | NOT CONNECTED — 88 unit tests pass |
+| `packages/shared` | Seven roles (Super Waiter, Service Waiter) and permission matrix, sidebar sections, order engine (dine-in, delivery, takeaway), kitchen tickets, pricing engine, payments/refunds, business day, selling units, API data types | NOT CONNECTED — 107 unit tests pass |
 | `apps/restaurant-os` | Restaurant OS (Next.js, Tailwind) with ApiClient + DemoAdapter; installable PWA | DEMO / PROTOTYPE |
 | `backend/api/prisma/schema.prisma` | Database design draft (delivery only, 4 roles) | NOT CONNECTED — draft, not validated; Phase 4 |
 | `apps/customer` | Customer website: one app, a brand per restaurant; deploys on its own | DEMO / PROTOTYPE — Phase 2 |
-| `apps/rider` | Rider App (PWA) | Not started — Phase 3 |
+| `apps/rider` | Rider App (PWA): one app, a brand per restaurant; deploys on its own | DEMO / PROTOTYPE — Phase 3 |
 | `backend/api` (NestJS) | The one backend | Not started — Phase 4 |
 | `apps/admin` | Platform Admin | Phase 9 |
 
@@ -47,7 +48,7 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 
 | Feature | Status |
 |---|---|
-| Shared rules: roles, permissions, order and ticket transitions, bill formula (Test A Rs. 4,200 → Rs. 5,900, Test C), payments, refunds, business day, units | NOT CONNECTED — 57 unit tests pass |
+| Shared rules: roles, permissions, order and ticket transitions, bill formula (Test A Rs. 4,200 → Rs. 5,900, Test C), payments, refunds, business day, units | NOT CONNECTED — 107 unit tests pass |
 | Layout: sidebar always visible (tablet/desktop), bottom navigation (phone), one feature per screen; sidebar starts with POS, Tables, Orders, Online Orders | DEMO / PROTOTYPE |
 | One small "Demo mode" indicator with explanation (no live connection is claimed) | DEMO / PROTOTYPE |
 | DEMO login (pick an account, no password); profile top-right with Log out; nobody can change their own role | DEMO / PROTOTYPE — real phone + password login in Phase 4 |
@@ -60,9 +61,9 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | Installable app (PWA): manifest, icons, Install App in the profile and on the login screen | DEMO / PROTOTYPE — needs HTTPS to install on a real phone (hosting needs owner approval); no offline data |
 | Notifications: food ready (Service Waiter), bill requested (Cashier), bill accepted (waiter) with message, sound and vibration | DEMO / PROTOTYPE — between tabs of one browser only |
 | Owner workflow + Test A steps 1–6 + safety checks (automated walkthrough) | DEMO / PROTOTYPE — passes |
-| Test A step 7 (Today's Summary) | PLACEHOLDER — Preview 5 |
+| Test A step 7 (Today's Summary) | DEMO / PROTOTYPE — passes in the walkthrough |
 | Online Orders: customer orders with a repeating alarm, Accept with prep time / Reject with reason, phone delivery (known phone fills name and address) and takeaway orders, kitchen tickets by station, automatic Preparing / Ready, assign or change rider, Picked up, takeaway payment and receipt, rider cash to settle, Cancel with reason | DEMO / PROTOTYPE |
-| Customer orders and rider steps (Picked up – On the way, Delivered + cash collected) | DEMO / PROTOTYPE — simulated by DEMO buttons until the Customer App (Phase 2) and Rider App (Phase 3) exist |
+| Customer orders and rider steps (Picked up – On the way, Delivered + cash collected) on Online Orders | DEMO / PROTOTYPE — DEMO buttons; rider steps also from the Rider App through the DEMO link; website orders reach Restaurant OS in Phase 4 |
 | Orders: today / all, search (number, table, customer, phone), filter by type and status, detail with items, payments, kitchen tickets and full timeline; header search | DEMO / PROTOTYPE |
 | Test D (online delivery → accept → kitchen → rider → delivered → cash settled) | DEMO / PROTOTYPE — walkthrough passes with DEMO customer/rider buttons |
 | Refunds and payment reversals | PLACEHOLDER — next step of Phase 1 |
@@ -71,7 +72,8 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | Today's Summary: sales, average bill, cash received, tips, open bills, refunds, tax + service; sales by order type, payments by method, top items, tips per waiter, discounts / voids / refunds / cancellations with who and why; earlier business days | DEMO / PROTOTYPE — Preview 5 step 3; Test A step 7 passes in the walkthrough |
 | Online App: online orders ON/OFF, delivery fee, minimum order, prep time, customer link and QR code, product Online ON/OFF | DEMO / PROTOTYPE — Preview 5 step 4; switches and link NOT CONNECTED to the website until Phase 4 |
 | Online App / Website page: tabs (Overview, Website, Mobile App, Android App, Settings), status header, Publish Website apart from Android, website and phone previews, View Website | DEMO / PROTOTYPE — publishing states are demo only, nothing goes online; previews show the real `apps/customer` with its own sample data; domain, PWA and Android tabs show plans and honest states only (PLACEHOLDER until later steps) |
-| Riders page: app preview + Open Full App | PLACEHOLDER — Rider App in Phase 3 |
+| Riders page: Owner adds, edits, disables, deletes riders (activation link); who is Online, now carrying, delivered today, cash to settle, Take cash; real Rider App in a phone frame, Open Full App, phone link and QR | DEMO / PROTOTYPE — `walkthrough:riders` passes |
+| Rider App: DEMO login, My deliveries, Online / Offline, delivery with call, map link and amount to collect, Picked up – On the way, Delivered + cash, Today, Account; new-order message, sound, vibration | DEMO / PROTOTYPE — `walkthrough` in `apps/rider` passes; joined to Restaurant OS only by a DEMO link in one browser; a phone shows sample data; real login Phase 4, live sync Phase 5 |
 | Customer website: Login, Home, Menu, Product, Cart with checkout, Tracking, Orders, Account, bottom bar; three sample brands, branch selector, install offer, offline message; phone, tablet, desktop | DEMO / PROTOTYPE — `walkthrough` in `apps/customer` (182 checks) passes on dev and on the production build; orders NOT CONNECTED to Restaurant OS until Phase 4 |
 | Customer website: OTP and Google login, JazzCash / Easypaisa / Card, map and rider contact | NOT CONNECTED — screens only, clearly labelled; no paid service, no money moves |
 | Dashboard, Customers, Finance & Reports (P7), Inventory & Suppliers, Payroll (P8), AI Manager (P10) | PLACEHOLDER — Coming Soon |
@@ -133,6 +135,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-31 | Owner approves the Customer App. Online App step C: previews and View Website show the Restaurant OS menu, prices and switches (DEMO browser link, `website-bridge.ts` and the website's DemoAdapter); LALA sample can be chosen in the previews; a direct link keeps its sample data; orders still do not reach Restaurant OS | 94 shared tests (1 new), typecheck, lint and build of both apps pass; `walkthrough:online-app` covers orders OFF, dish OFF, a new dish, the fee on the bill, the direct link and LALA; all eight Restaurant OS walkthroughs and the customer walkthrough pass; not tested on a real phone; not pushed, not deployed |
 | 2026-10-31 | Online App step D: Website tab with Branding, Homepage, Menu display, Delivery & Pickup, Opening hours, Contact, Custom domain, SEO & Sharing, QR code (preview, download), beside the real website in a phone shape. Rules in `packages/shared/src/online-app.ts`; a saved look change waits for Publish Website; demo data version 15. No real domain, DNS, upload or hosting | 98 shared tests (4 new), typecheck, lint and build of both apps; `walkthrough:online-app` covers every part, refused values, Publish, the Manager and all nine parts at four screen sizes; all eight Restaurant OS walkthroughs and the customer walkthrough; not tested on a real phone; not pushed, not deployed |
 | 2026-10-31 | QR code on the owner's phone: the customer link, Copy and QR use this computer's Wi-Fi address in development (next.config.ts); the website allows that address and no longer needs crypto.randomUUID (missing on plain HTTP) | Customer walkthrough 181 checks on the Wi-Fi address and 182 on localhost, Online App walkthrough, 98 unit tests, typecheck, lint and build pass. Address not in the production build. Not verified: the owner's real phone |
+| 2026-11-01 | Phase 3: Rider App (`apps/rider`, port 3002) and Riders page, DEMO. Owner creates riders; Online / Offline decides who gets a new order; a running delivery keeps the rider Online and enabled. Riders page frame and Open Full App use the Restaurant OS orders through a DEMO link in one browser; a phone shows sample data | 107 unit tests, nine Restaurant OS walkthroughs, customer 182 checks, rider 73 checks (72 on the Wi-Fi address), typecheck, lint and build pass. Not verified: a real phone, real sound, PWA install |
 
 ## Commands
 
@@ -155,7 +158,9 @@ pnpm --filter @restaurant-saas/restaurant-os walkthrough:staff    # staff list, 
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:menu     # categories, items with sizes / add-ons, prices, stock, delete
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:settings # tax / service for new bills only, branch, receipt, day, stations
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:online-app # online ON/OFF, fee, minimum, link and QR
+pnpm --filter @restaurant-saas/restaurant-os walkthrough:riders   # Riders page + Rider App: assign, on the way, delivered, cash, Online / Offline, disable
 pnpm --filter @restaurant-saas/customer walkthrough                 # customer website: order, tracking, account, second brand
+pnpm --filter @restaurant-saas/rider walkthrough                    # Rider App on sample data: login, delivery, Today, Offline, second brand
 ```
 
 Screenshots are written to `screenshots/` (git-ignored).

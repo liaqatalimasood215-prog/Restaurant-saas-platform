@@ -4,12 +4,20 @@ import {
   MAX_QUANTITY_PER_LINE,
   MAX_TABLE_SEATS,
   PIN_LENGTH,
+  RIDER_ASSIGN_MESSAGES,
+  RIDER_BUSY_MESSAGE,
+  RIDER_DISABLE_MESSAGE,
   amountDue,
   automaticOrderSteps,
   businessDate,
   calculateBill,
+  canDisableRider,
   canManageStaffAccount,
+  canRiderGoOffline,
   checkPin,
+  isRiderOnline,
+  riderAssignBlock,
+  riderDeliveryFromOrder,
   canPublishWebsite,
   checkOnlineSettings,
   publishedWebsite,
@@ -105,7 +113,11 @@ import {
   type PaymentEntry,
   type Permission,
   type RiderCashSettlement,
+  type RiderAccount,
   type RiderCashView,
+  type RiderLinkCommand,
+  type RiderLinkData,
+  type RiderOverview,
   type StaffNotification,
   type StaffUser,
   type TicketStatus,
@@ -159,6 +171,14 @@ function wait(): Promise<void> {
 
 const nowIso = () => new Date().toISOString();
 const newId = () => crypto.randomUUID();
+const riderAccount = (rider: StaffUser): RiderAccount => ({
+  id: rider.id,
+  name: rider.name,
+  phone: rider.phone,
+  isActive: rider.isActive,
+  activatedAt: rider.activatedAt,
+  riderOnline: isRiderOnline(rider),
+});
 
 const RULE_MESSAGES: Record<TransitionFailure | TicketTransitionFailure, string> = {
   NOT_ALLOWED_STEP: 'This step is not allowed from the current status.',
@@ -1438,8 +1458,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
       this.store.update((data) => {
         const user = this.require(data, 'order.manage');
         const order = this.findOrder(data, orderId);
-        const rider = data.staff.find((s) => s.id === riderId && s.role === 'RIDER' && s.isActive);
+        const rider = data.staff.find((s) => s.id === riderId && s.role === 'RIDER' && !s.archivedAt);
         if (!rider) throw new ApiError('VALIDATION', 'Choose an active rider.');
+        const block = riderAssignBlock(rider);
+        if (block) throw new ApiError('VALIDATION', RIDER_ASSIGN_MESSAGES[block]);
         if (order.status === 'RIDER_ASSIGNED') {
           // Change rider before pickup.
           if (order.riderId !== rider.id) {
@@ -1508,6 +1530,33 @@ export class DemoAdapter implements ApiClient, DemoControls {
             activeDeliveries: data.orders.filter((o) => o.riderId === rider.id && ACTIVE_DELIVERY.includes(o.status)).length,
             cashToSettle: this.riderCashAmount(unsettled, rider.id),
             unsettledOrderIds: unsettled.map((o) => o.id),
+          };
+        });
+    });
+  }
+
+  listRiders(): Promise<RiderOverview[]> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'riders.view');
+      const today = businessDate(new Date(), data.branch.timezone, data.branch.businessDayStart);
+      return data.staff
+        .filter((s) => s.role === 'RIDER' && !s.archivedAt)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((rider) => {
+          const own = data.orders.filter((o) => o.riderId === rider.id).map(riderDeliveryFromOrder).filter((d) => d !== null);
+          const latest = data.invites.filter((i) => i.userId === rider.id).at(-1);
+          return {
+            account: riderAccount(rider),
+            employeeCode: rider.employeeCode,
+            email: rider.email,
+            branchId: rider.branchId,
+            invited: latest?.kind === 'ACTIVATION' && latest.state === 'PENDING' && !rider.activatedAt,
+            running: own
+              .filter((d) => d.status !== 'DELIVERED')
+              .map((d) => ({ orderId: d.id, dailyNumber: d.dailyNumber, status: d.status, customerName: d.customerName })),
+            deliveredToday: data.orders.filter((o) => o.riderId === rider.id && o.status === 'DELIVERED' && o.businessDate === today).length,
+            cashToSettle: this.riderCashAmount(this.riderCashOrders(data, rider.id), rider.id),
           };
         });
     });
@@ -2355,6 +2404,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (removesLastOwner(data.staff, target.id, { role: target.role, isActive: active })) {
           throw new ApiError('CONFLICT', 'The restaurant needs at least one active Owner.');
         }
+        if (!active && !canDisableRider(this.runningDeliveries(data, target.id))) throw new ApiError('CONFLICT', RIDER_DISABLE_MESSAGE);
         target.isActive = active;
         // Disable: every open session ends now. Enable: old sessions stay ended, so a fresh login is needed.
         this.endSessions(data, target.id);
@@ -2398,6 +2448,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (removesLastOwner(data.staff, target.id, { role: target.role, isActive: false })) {
           throw new ApiError('CONFLICT', 'The restaurant needs at least one active Owner.');
         }
+        if (!canDisableRider(this.runningDeliveries(data, target.id))) throw new ApiError('CONFLICT', RIDER_DISABLE_MESSAGE);
         this.endSessions(data, target.id);
         for (const invite of data.invites) if (invite.userId === target.id && invite.state === 'PENDING') invite.state = 'REVOKED';
         if (this.staffIsUsed(data, target.id)) {
@@ -2598,36 +2649,79 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const order = this.findOrder(data, orderId);
         const riderId = order.riderId;
         if (!riderId) throw new ApiError('CONFLICT', 'No rider is assigned.');
-        const to: OrderStatus = order.status === 'RIDER_ASSIGNED' ? 'OUT_FOR_DELIVERY' : 'DELIVERED';
-        const check = checkTransition({ type: order.type, from: order.status, to, role: 'RIDER', isAssignedRider: true });
-        if (!check.ok) throw ruleError(check.reason);
-        setStatus(order, to, riderId, 'Rider App (DEMO)');
-        if (to === 'DELIVERED') {
-          // Cash on Delivery: the rider confirms the cash collected; the cashier settles it later.
-          const due = amountDue(order.totals.total, order.paidTotal);
-          if (due > 0) {
-            order.payments.push({
-              id: newId(),
-              restaurantId: order.restaurantId,
-              branchId: order.branchId,
-              orderId: order.id,
-              kind: 'PAYMENT',
-              method: 'CASH',
-              amount: due,
-              tipAmount: 0,
-              cashReceived: due,
-              changeGiven: 0,
-              reference: 'Cash on Delivery',
-              receivedBy: riderId,
-              relatedPaymentId: null,
-              reason: null,
-              createdAt: nowIso(),
-            });
-            recalculate(order);
-            giveInvoiceNumber(data, order);
-          }
-        }
+        this.riderStep(data, order, riderId, order.status === 'RIDER_ASSIGNED' ? 'OUT_FOR_DELIVERY' : 'DELIVERED');
         return order;
+      }),
+    );
+  }
+
+  private riderStep(data: DemoData, order: Order, riderId: string, to: OrderStatus): void {
+    const check = checkTransition({ type: order.type, from: order.status, to, role: 'RIDER', isAssignedRider: order.riderId === riderId });
+    if (!check.ok) throw ruleError(check.reason);
+    setStatus(order, to, riderId, 'Rider App (DEMO)');
+    if (to !== 'DELIVERED') return;
+    // Cash on Delivery: the rider confirms the cash collected; the cashier settles it later.
+    const due = amountDue(order.totals.total, order.paidTotal);
+    if (due === 0) return;
+    order.payments.push({
+      id: newId(),
+      restaurantId: order.restaurantId,
+      branchId: order.branchId,
+      orderId: order.id,
+      kind: 'PAYMENT',
+      method: 'CASH',
+      amount: due,
+      tipAmount: 0,
+      cashReceived: due,
+      changeGiven: 0,
+      reference: 'Cash on Delivery',
+      receivedBy: riderId,
+      relatedPaymentId: null,
+      reason: null,
+      createdAt: nowIso(),
+    });
+    recalculate(order);
+    giveInvoiceNumber(data, order);
+  }
+
+  private runningDeliveries(data: DemoData, riderId: string): number {
+    return data.orders.filter((o) => o.riderId === riderId && ACTIVE_DELIVERY.includes(o.status)).length;
+  }
+
+  riderLinkData(riderId: string | null): RiderLinkData {
+    const data = this.store.read();
+    const today = businessDate(new Date(), data.branch.timezone, data.branch.businessDayStart);
+    return {
+      restaurantSlug: data.restaurant.slug,
+      branchSlug: data.branch.slug,
+      restaurantName: data.restaurant.name,
+      branchName: data.branch.name,
+      riders: data.staff.filter((s) => s.role === 'RIDER' && !s.archivedAt).map(riderAccount),
+      deliveries: data.orders
+        .filter((o) => o.riderId === riderId && riderId !== null && (o.businessDate === today || ACTIVE_DELIVERY.includes(o.status)))
+        .map(riderDeliveryFromOrder)
+        .filter((d) => d !== null),
+    };
+  }
+
+  /** One rider's step from the Rider App. A repeated tap changes nothing. DEMO: the server checks the real login. */
+  riderLinkCommand(command: RiderLinkCommand): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const rider = data.staff.find((s) => s.id === command.riderId && s.role === 'RIDER' && !s.archivedAt);
+        if (!rider?.isActive) throw new ApiError('FORBIDDEN', 'This rider account is disabled.');
+        if (command.kind === 'LOGIN') {
+          if (!rider.activatedAt) throw new ApiError('FORBIDDEN', 'Open the activation link first.');
+          rider.lastLoginAt = nowIso();
+        } else if (command.kind === 'SET_ONLINE') {
+          if (!command.online && !canRiderGoOffline(this.runningDeliveries(data, rider.id))) throw new ApiError('CONFLICT', RIDER_BUSY_MESSAGE);
+          rider.riderOnline = command.online;
+        } else {
+          const order = this.findOrder(data, command.orderId);
+          if (order.riderId !== rider.id) throw new ApiError('NOT_FOUND', 'This delivery is no longer yours.');
+          const to = command.kind === 'PICKED_UP' ? 'OUT_FOR_DELIVERY' : 'DELIVERED';
+          if (order.status !== to) this.riderStep(data, order, rider.id, to);
+        }
       }),
     );
   }

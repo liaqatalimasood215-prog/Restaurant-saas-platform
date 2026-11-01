@@ -12,6 +12,7 @@ import { ErrorState, LoadingState } from '@/components/ui/states';
 import { t } from '@/i18n';
 import { ApiError, getApi } from '@/lib/api';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
+import { RIDER_APP_ORIGIN } from './riders/rider-bridge';
 
 /**
  * Activation / PIN-reset page (owner, 2026-10-29). Opened from the single-use link the Owner sends;
@@ -50,10 +51,21 @@ export function ActivationScreen({ token }: { token: string }) {
       <div className="space-y-3 text-center">
         <CheckCircle2 className="mx-auto size-12 text-green-600" aria-hidden />
         <h1 className="text-xl font-extrabold text-slate-900">{t('activate.done')}</h1>
-        <p className="text-sm text-slate-600">{t('activate.doneBody')}</p>
-        <Button className="w-full" size="lg" onClick={() => router.replace('/')}>
-          {t('activate.goToLogin')}
-        </Button>
+        {info.data?.role === 'RIDER' ? (
+          <>
+            <p className="text-sm text-slate-600">{t('activate.doneRiderBody')}</p>
+            <a href={RIDER_APP_ORIGIN} className="inline-flex min-h-14 w-full items-center justify-center rounded-xl bg-brand px-4 font-bold text-white hover:bg-brand-dark">
+              {t('activate.goToRiderApp')}
+            </a>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-slate-600">{t('activate.doneBody')}</p>
+            <Button className="w-full" size="lg" onClick={() => router.replace('/')}>
+              {t('activate.goToLogin')}
+            </Button>
+          </>
+        )}
       </div>
     );
   } else if (info.loading && !info.data) {

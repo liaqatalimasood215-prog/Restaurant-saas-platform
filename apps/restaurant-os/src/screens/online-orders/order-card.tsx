@@ -51,7 +51,9 @@ export function OrderCard({
 }) {
   const { order, names } = view;
   const [prep, setPrep] = useState(defaultPrep);
-  const [riderId, setRiderId] = useState(order.riderId ?? riders[0]?.id ?? '');
+  const [wantedRider, setRiderId] = useState(order.riderId ?? '');
+  // A rider chosen earlier may have gone Offline since.
+  const riderId = riders.some((r) => r.id === wantedRider) ? wantedRider : (riders[0]?.id ?? '');
   const due = Math.max(0, order.totals.total - order.paidTotal);
   const canCancel = availableActions(order.type, order.status, role).some((a) => a.to === 'CANCELLED');
   const channel = order.channel === 'CUSTOMER_APP' ? t('online.channelApp') : order.channel === 'PHONE' ? t('online.channelPhone') : t('online.channelCounter');
@@ -164,7 +166,10 @@ export function OrderCard({
           </div>
         )}
 
-        {order.status === 'READY' && order.type === 'DELIVERY' && (
+        {order.status === 'READY' && order.type === 'DELIVERY' && riders.length === 0 && (
+          <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">{t('online.noRiderOnline')}</p>
+        )}
+        {order.status === 'READY' && order.type === 'DELIVERY' && riders.length > 0 && (
           <div className="flex gap-2">
             <select
               value={riderId}

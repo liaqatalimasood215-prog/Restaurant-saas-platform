@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { BellRing, Bike, FlaskConical, Phone, ShoppingBag } from 'lucide-react';
-import { formatPaisa, type Order, type OrderStatus, type OrderView } from '@restaurant-saas/shared';
+import { formatPaisa, isRiderOnline, riderAssignBlock, type Order, type OrderStatus, type OrderView } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,7 @@ const DONE: OrderStatus[] = ['DELIVERED', 'PICKED_UP', 'REJECTED', 'CANCELLED'];
 /**
  * Online Orders (MASTER_PROMPT.md §5.2–§5.4, §7.1 Cashier / POS — online): customer orders with a
  * repeating alarm, accept with prep time or reject, phone delivery and takeaway orders, riders and
- * rider cash. Customer App (Phase 2) and Rider App (Phase 3) steps are simulated with DEMO buttons.
+ * rider cash. Customer and rider steps can also be done with DEMO buttons until the backend joins the apps (Phase 4).
  */
 export function OnlineOrdersScreen() {
   const { data: session } = useSession();
@@ -110,7 +110,8 @@ export function OnlineOrdersScreen() {
     );
   }
 
-  const riders = riderCash.data.map((r) => r.rider);
+  // A new order goes only to a rider who may take it: active, activated and Online.
+  const riders = riderCash.data.map((r) => r.rider).filter((r) => riderAssignBlock(r) === null);
   const byStatus = (statuses: OrderStatus[]) => orders.data?.filter((v) => statuses.includes(v.order.status)) ?? [];
   const done = byStatus(DONE).reverse();
   const card = (view: OrderView) => (
@@ -175,7 +176,10 @@ export function OnlineOrdersScreen() {
             <CardBody className="space-y-3">
               {riderCash.data.map((r) => (
                 <div key={r.rider.id} className="rounded-xl bg-slate-50 p-3">
-                  <p className="font-bold text-slate-900">{r.rider.name}</p>
+                  <p className="flex items-center justify-between gap-2 font-bold text-slate-900">
+                    {r.rider.name}
+                    {!isRiderOnline(r.rider) && <Badge>{t('online.riderOffline')}</Badge>}
+                  </p>
                   <p className="text-xs text-slate-600">{t('online.activeDeliveries', { n: r.activeDeliveries })}</p>
                   <p className="mt-1 flex justify-between text-sm">
                     <span>{t('online.cashToSettle')}</span>

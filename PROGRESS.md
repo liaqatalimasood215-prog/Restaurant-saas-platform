@@ -5,7 +5,7 @@
 > mein sab se pehle likhein: **"PROGRESS.md aur CLAUDE.md padho, phir wahin se jaari rakho."**
 > Naya project mat banana, code mat badalna jab tak kaam na diya jaye.
 
-**Last updated:** 2026-10-31 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
+**Last updated:** 2026-11-01 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
 everything in very easy Roman Urdu, code and documents in English)
 
 ---
@@ -18,7 +18,7 @@ everything in very easy Roman Urdu, code and documents in English)
    project. Do not create a new project."*
 3. Claude reads, in this order: `CLAUDE.md` (loads `PROJECT_RULES.md`) → this file → `README.md`
    (status table + progress log) → `docs/MASTER_PROMPT.md` only for the sections the task needs.
-4. Start the preview: `.claude/launch.json` has `restaurant-os` (port 3000) and `customer` (port 3001). `pnpm dev` starts both.
+4. Start the preview: `.claude/launch.json` has `restaurant-os` (port 3000), `customer` (port 3001) and `rider` (port 3002). `pnpm dev` starts all three.
    If another chat already runs them, use `restaurant-os-running` and `customer-running`: they attach to the running servers (Next.js allows one dev server per app folder).
 5. Before any new work run `pnpm install`, `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build` (see §8)
    to confirm the starting point is green.
@@ -63,9 +63,10 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | POS / New Bill (rebuilt many times at the owner's request) | **Approved** 2026-10-30 |
 | Tables management (Manage Areas, Add Table, Cleaning, Out of service — owner request 2026-10-29) | **Approved** 2026-10-30 (Cleaning stays manual — owner) |
 | Staff upgrade + redesign (Owner-only, activation links, PIN, Deactivate ends sessions, employee list, 3-step wizard, Role Permissions — owner requests 2026-10-29) | **Approved** 2026-10-30 (DEMO frontend); backend parts wait for Phase 4–6 |
-| Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Started** 2026-10-30 ("shuru karo"). Steps 1 **Menu**, 2 **Settings**, 3 **Today's Summary** and 4 **Online App: built**; Riders and refunds **paused** (owner: website first) |
+| Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Started** 2026-10-30 ("shuru karo"). Steps 1 **Menu**, 2 **Settings**, 3 **Today's Summary**, 4 **Online App** and **Riders: built**; refunds still to do |
+| Phase 3 Rider App + Riders page | **Started** 2026-11-01 ("Haan, shuru karo"); **built, waiting for the owner's review** |
 | Phase 2 customer website (`apps/customer`) | **Approved** 2026-10-31 ("Approve, Phase C karo"): redesigned from the owner's six-screen picture, DEMO |
-| Online App / Website rework (owner's brief, steps A–H) | Steps A, B and C **approved**; step D **built 2026-10-31, waiting for the owner's review**; steps E–H not started |
+| Online App / Website rework (owner's brief, steps A–H) | Steps A–D **approved** (D on 2026-11-01); steps E–H **paused** by the owner, not cancelled |
 
 ## 4. What is built (all DEMO / PROTOTYPE unless noted)
 
@@ -107,7 +108,8 @@ Last work: Tables management (2026-10-29), one local commit on `phase-1/restaura
 | Settings | Owner only: restaurant and branch (name, phone, address), tax rate and switches (prices include tax, tax on service / delivery), dine-in service charge, round to rupee, live example bill, delivery fee, minimum order, usual prep time, business day start, receipt top / bottom text with preview, kitchen stations (add, edit warn / late minutes and "ready at once", reorder, remove only when unused). **Every order keeps the bill settings it was made with** (`order.pricing`): a Settings change affects new bills only. Rules: `packages/shared/src/settings.ts` |
 | Today's Summary | One business day (pick earlier days): sales of paid bills (big number), average bill, cash received (and cash still with riders), tips, open bills and amount due, refunds, tax + service; sales by order type, payments by method, top items by sales, tips per waiter, discounts / voids / refunds / cancellations with who and why. Permission "Reports" (Owner; Manager when Role Permissions allow). Calculation: `packages/shared/src/reports.ts` (Test A step 7 unit test) |
 | Online App / Website | Rework steps B–D, owner's reference picture in the app's own colours. The **Website** tab now has nine parts beside a phone preview: Branding, Homepage, Menu display (with product Online ON/OFF), Delivery & Pickup, Opening hours, Contact, Custom domain (DEMO steps), SEO & Sharing, QR code (preview, download). Saved settings reach the previews at once; on a published website they wait for Publish Website. Owner only, except the Delivery / Pickup / Dine-in switches. Tabs as first built: **Overview** (status header with link, copy, View Website, Publish Website and the orders ON/OFF switch; cards Website, Installable App, Android App; Website Preview Desktop / Mobile and phone preview, both the real `apps/customer` in a frame), **Website** (customer link and QR code, custom domain = Planned, product Online ON/OFF with search), **Mobile App (PWA)** (honest list: offline = Planned, install = needs hosting), **Android App** (5 steps, screens only), **Settings** (delivery fee, minimum order, prep time, same values as Settings). Publish Website is a demo state, Owner only (`onlineApp.publish`), and never touches Android. The DEMO customer buttons on Online Orders obey the switches and the minimum order. Link NOT CONNECTED: during development the shared link, Copy and QR use this computer's Wi-Fi address (`customerShareUrl`, `NEXT_PUBLIC_LAN_ADDRESS` from `next.config.ts`, read when the server starts), so a phone on the same Wi-Fi can open the website for testing; View Website and the previews stay on localhost; customers' phones need hosting. Rules: `packages/shared/src/online-app.ts`; screens: `apps/restaurant-os/src/screens/online-app/` |
-| Placeholders | Riders (Preview 5); Dashboard, Customers, Finance & Reports, Inventory, Payroll, AI Manager (Coming Soon) |
+| Riders | Totals (Online now, deliveries running, cash to settle), one card per rider (phone, Online / Offline / Disabled / Invited, now carrying, delivered today, cash to settle, Take cash), the real Rider App in a phone frame with "Show the app as", Open Full App, phone link and QR. Owner: Add Rider (name, mobile, activation link), Edit, New link, Disable / Enable, Delete. Manager: sees, may take cash. Cashier: no page, takes cash on Online Orders. Online Orders offers only Online, activated riders and says so when nobody is Online. Screen: `apps/restaurant-os/src/screens/riders/` |
+| Placeholders | Dashboard, Customers, Finance & Reports, Inventory, Payroll, AI Manager (Coming Soon) |
 
 ### 4.3 Customer website (`apps/customer`, Phase 2, DEMO / PROTOTYPE)
 
@@ -126,6 +128,16 @@ bar below 1024 px. **NOT CONNECTED screens only:** OTP, Google, JazzCash / Easyp
 `src/lib/api/demo` (marked `// DEMO`, localStorage `lala-store-demo-v2`, cart `lala-store-cart-v2`), text in `src/i18n/en.ts`,
 rules and money only from `packages/shared` (not changed by the redesign). Run and publish notes: `apps/customer/README.md`.
 Its own sample data on a direct link. Inside the Online App previews, or a tab opened with View Website, it shows the Restaurant OS menu, prices and switches (DEMO browser link: `apps/restaurant-os/src/screens/online-app/website-bridge.ts`, the website's DemoAdapter, `isWebsitePreviewData` in shared), with its own cart. **Orders do not reach Restaurant OS** until Phase 4.
+
+### 4.4 Rider App (`apps/rider`, Phase 3, DEMO / PROTOTYPE)
+
+One Next.js app on port 3002 at `/<restaurant>/<branch>` (`aziz-pizza/main`, `demo-karahi/main`; `/` goes to the first). Screens: DEMO Login (pick an account; disabled and
+not-activated riders refused; no public sign-up), My deliveries with the Online / Offline switch, Delivery (tap to call, free Google Maps link, amount to collect, Picked up – On the way,
+Delivered + cash confirmation, double tap safe), Today (done, collected, given, with the rider), Account, bottom bar. New assignment: message, beep, vibration. Installable PWA on HTTPS,
+no offline data. Same pattern: `getApi()`, DemoAdapter in `src/lib/api/demo` (marked `// DEMO`), text in `src/i18n/en.ts`, rules in `packages/shared/src/riders.ts`.
+**Two data sources:** direct link and phone = sample data with labelled DEMO buttons (`lala-rider-demo-v1`); Riders page frame and Open Full App = Restaurant OS orders through a DEMO
+browser link (`screens/riders/rider-bridge.ts`, mounted in the app shell; the rider tab asks every second; closing Restaurant OS shows a clear message). It never crosses devices: a phone
+always shows sample data until Phases 4–5. The customer website does not see rider steps until Phase 4. The DEMO rider buttons on Online Orders stay; `walkthrough:online` uses them.
 
 DEMO accounts (restaurant "Aziz Pizza — DEMO"): Aziz Ahmed 101 OWNER · Sana Khan 102 MANAGER · Bilal
 Hussain 103 CASHIER · Imran Ali 104 Super WAITER · Usman Tariq 105 SERVICE_WAITER (T1–T8) · Kashif Raza
@@ -183,9 +195,13 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 
 ## 7. Test status (last run, all green)
 
-- `pnpm test` — 98 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-10-31, Online App
-  rework step D; the build covers both apps). All eight Restaurant OS walkthroughs and the customer walkthrough ran
-  after step D and pass. A full-page screenshot leaves the website frames empty although they show on screen: use viewport screenshots.
+- `pnpm test` — 107 unit tests pass. `pnpm typecheck`, `pnpm lint` and `pnpm build` pass (2026-11-01, Rider App; the build
+  covers all three apps). All nine Restaurant OS walkthroughs, the customer walkthrough and the rider walkthrough ran and pass.
+  A full-page screenshot leaves the website frames empty although they show on screen: use viewport screenshots.
+- `pnpm --filter @restaurant-saas/rider walkthrough` — 73 checks on localhost, 72 on the Wi-Fi address (no service worker there), on phone, tablet and
+  desktop sizes. `... restaurant-os walkthrough:riders` — Add Rider, activation, permissions, assign → app alert → On the way → Delivered → Take cash, Online / Offline, Disable, closed tab.
+  Not verified: a real phone, the real sound (a tap is needed first; the vibration call is checked), PWA install on a phone (needs HTTPS).
+- If walkthroughs fail with `ERR_CONNECTION_REFUSED`, the dev server stopped (a sleeping computer or a closed chat): start it and run them again.
 - Customer App redesign (2026-10-31): `pnpm --filter @restaurant-saas/customer lint`, `typecheck` and `build` pass.
 - `pnpm --filter @restaurant-saas/customer walkthrough` — 182 checks on phone, tablet and desktop sizes, on the dev
   server and on the production build (after `build`: preview `customer-production` in `.claude/launch.json`, port 3012,
@@ -231,8 +247,8 @@ backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.
 
 ```bash
 pnpm install
-pnpm dev                                   # Restaurant OS on http://localhost:3000, website on :3001
-pnpm test                                  # shared rules (98 unit tests)
+pnpm dev                                   # Restaurant OS on http://localhost:3000, website on :3001, Rider App on :3002
+pnpm test                                  # shared rules (107 unit tests)
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -241,6 +257,8 @@ pnpm --filter @restaurant-saas/restaurant-os walkthrough:online
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:pos
 pnpm --filter @restaurant-saas/restaurant-os screenshots
 pnpm --filter @restaurant-saas/customer walkthrough               # customer website
+pnpm --filter @restaurant-saas/rider walkthrough                  # Rider App on sample data
+pnpm --filter @restaurant-saas/restaurant-os walkthrough:riders   # Riders page + Rider App together
 ```
 
 Working notes that saved time: use the Edit tool for multi-line code changes (long shell here-docs with
@@ -268,15 +286,14 @@ approval: no real backend, custom domain, image upload, Google Play or publishin
 - E PWA screens. F Android screens
   (mock states, no real tooling). G tenant by domain with mock data; the "One website, every restaurant" start page becomes a
   developer page only. H full check, screenshots, documents.
-- Each next step waits for the owner's approval. Riders page, refunds and Rider App stay paused.
+- E–H are paused by the owner (2026-11-01), not cancelled.
 
-**Before that (owner, 2026-10-30): website first, then rider.** The customer website is built; next:
+**Plan agreed with the owner (2026-11-01):**
 
-- A. Owner reviews the website and approves it or asks for changes (Phase 2 gate).
-- B. Rider App (Phase 3) after his "shuru karo". First ask: the owner said "rider sign up", but the decision log says
-  riders are created by the owner with no public signup. Recommended: keep owner-created riders, or let a rider
-  apply and the owner approve. Also decide rider Online / Offline (§10).
-- C. The paused Phase 1 items below (Riders page, refunds, Phase 1 gate) when he says so.
+- A. **Owner reviews the Rider App and Riders page** and approves or asks for changes (Phase 3 gate). Not yet verified on his real phone.
+- B. Refunds and payment reversals (small, closes Phase 1), after his approval. Then the Phase 1 gate.
+- C. Phase 4 backend after his "shuru karo". Before it he prepares: real name, branch, menu and prices, tax and service charge; decides how often the internet drops
+  (#13: changes the offline plan) and table ordering from a phone (#19). Explain hosting costs and get approval before any paid service.
 - The website brief he pasted was cut off at the top: items 1–8 may hold more wishes; ask him to resend if they matter.
 
 Older list, kept for the paused items:
@@ -307,8 +324,8 @@ Older list, kept for the paused items:
 - Staff (not built, owner's long request 2026-10-29): Email / WhatsApp / POS-PIN invite methods (panel 4 of the
   picture), extra roles (Dispatcher, Inventory, Finance), photo upload (Phase 7), Import Staff, custom roles.
 - Staff: what is the primary login on a new device — phone + password (current rule, recommended; the
-  activation page would then also set a password) or something else? Decide before Phase 4. Riders are still
-  added on the Riders page (Preview 5) and follow the same Owner-only rule.
+  activation page would then also set a password) or something else? Decide before Phase 4. Riders are
+  added on the Riders page and follow the same Owner-only rule.
 - Tables: Cleaning stays **manual** (owner, 2026-10-29): staff press the sparkle button on a free table; a
   paid table does not go to Cleaning by itself. Settings (Preview 5) no longer needs areas/tables — they live on the Tables screen.
 - Real food photos: owner may want them before Phase 7 (needs his own photos; never use other people's).
@@ -319,7 +336,7 @@ Older list, kept for the paused items:
 - Optional pricing setting "different tax rate per payment method" is not in the pricing engine yet.
 - Half-kg portions need a size (variant) or decimal quantities — decide with the real menu.
 - `backend/api/prisma/schema.prisma` is an unvalidated draft (delivery only, 4 roles) — Phase 4.
-- Open owner decisions: `docs/MASTER_PROMPT.md` §16 (#16 rider availability before Phase 3).
+- Open owner decisions: `docs/MASTER_PROMPT.md` §16 (#13 internet drops and #19 table ordering before Phase 4).
 - A full customer list/screen is not built (search finds customers from earlier orders only).
 
 ## 11. Where the history lives

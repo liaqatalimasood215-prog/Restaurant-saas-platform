@@ -7,6 +7,7 @@ import { ToastProvider } from '@/components/ui/toast';
 import { useSession } from '@/lib/session';
 import { registerServiceWorker } from '@/lib/pwa';
 import { LoginScreen } from '@/screens/login-screen';
+import { useRiderBridge } from '@/screens/riders/rider-bridge';
 import { BottomNav } from './bottom-nav';
 import { Header } from './header';
 import { NotificationsProvider } from './notifications';
@@ -22,6 +23,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => registerServiceWorker(), []);
+  useRiderBridge();
 
   // The activation page is opened from the Owner's link before the person can log in.
   if (pathname === '/activate') return <ToastProvider>{children}</ToastProvider>;

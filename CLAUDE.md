@@ -42,9 +42,11 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
   (owner, 2026-10-30: "first website, then rider"): `apps/customer`, port 3001, DEMO, not connected to Restaurant OS until
   Phase 4; `pnpm --filter @restaurant-saas/customer walkthrough`. OTP, payments except cash, map and rider contact are screens
   only, marked NOT CONNECTED. Run and publish notes: `apps/customer/README.md`.
-- **Next (only after approval and "shuru karo"):** Rider App (Phase 3). The Riders page and refunds in Phase 1 are paused.
-  Details and open questions: `PROGRESS.md` §9–§10.
-- The Online App page previews the real customer website; the Rider App (Phase 3) stays a PLACEHOLDER inside Restaurant OS.
+- **Phase 3 Rider App and the Riders page built 2026-11-01 (DEMO), waiting for the owner's review** (owner: "Haan, shuru karo"): `apps/rider`, port 3002,
+  `pnpm --filter @restaurant-saas/rider walkthrough`, `walkthrough:riders` in Restaurant OS. Direct link and phone = sample data; Riders page frame and
+  Open Full App = Restaurant OS orders through a DEMO link in one browser. Rules: `packages/shared/src/riders.ts`. Notes: `apps/rider/README.md`.
+- **Next (only after approval):** refunds, then Phase 4 backend. Online App steps E–H are paused. Details and open questions: `PROGRESS.md` §9–§10.
+- The Online App page previews the real customer website; the Riders page previews the real Rider App.
 - Never start a phase until the owner says "shuru karo" or approves it. Never push, deploy or
   connect a paid service without the owner's approval.
 
@@ -61,6 +63,11 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - Owner/Manager may give a discount (reason required) also on a new bill; the Cashier may not.
 - The POS fits one screen (tested at 1278×627, 1440×900, 1024×768); totals and Send to Kitchen / Bill Now
   stay visible. Product pictures are emoji until real photos (Phase 7).
+
+## Riders — owner decisions (2026-11-01)
+
+- Only the Owner creates and changes riders, no public sign-up; the Manager sees them and may take their cash. The rider sets Online / Offline;
+  an Offline rider gets no new order. A running delivery keeps the rider Online and enabled.
 
 ## Tables — owner decisions (2026-10-29)
 
@@ -119,7 +126,7 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 
 ```bash
 pnpm install
-pnpm dev          # restaurant-os :3000 (customer :3001, rider :3002, api :4000 in later phases)
+pnpm dev          # restaurant-os :3000, customer :3001, rider :3002 (api :4000 in a later phase)
 pnpm test         # shared rules (unit tests)
 pnpm typecheck
 pnpm lint
@@ -133,4 +140,4 @@ Keep the repository in a short folder path — Windows' 260-character path limit
 
 - `backend/api/prisma/schema.prisma` is an unvalidated draft (delivery only, 4 roles) — Phase 4 work.
 - Pricing engine: the optional "different tax rate per payment method" setting is not built yet.
-- Open owner decisions: MASTER_PROMPT.md §16 (#16 rider availability before Phase 3).
+- Open owner decisions: MASTER_PROMPT.md §16 (#13 internet drops and #19 table ordering before Phase 4).

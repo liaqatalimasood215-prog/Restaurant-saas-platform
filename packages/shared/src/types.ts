@@ -80,6 +80,8 @@ export interface StaffUser extends RestaurantScoped {
   /** This person's own permissions; null = follows the role (Role Permissions) */
   permissions: Permission[] | null;
   lastLoginAt: IsoDateTime | null;
+  /** Riders: set by the rider in the Rider App; missing = Online (riders.ts) */
+  riderOnline?: boolean;
 }
 
 /** One role on the Role Permissions screen. */

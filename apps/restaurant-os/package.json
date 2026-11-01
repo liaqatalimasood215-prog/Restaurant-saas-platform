@@ -17,7 +17,8 @@
     "walkthrough:staff": "node scripts/walkthrough-staff.mjs",
     "walkthrough:menu": "node scripts/walkthrough-menu.mjs",
     "walkthrough:settings": "node scripts/walkthrough-settings.mjs",
-    "walkthrough:online-app": "node scripts/walkthrough-online-app.mjs"
+    "walkthrough:online-app": "node scripts/walkthrough-online-app.mjs",
+    "walkthrough:riders": "node scripts/walkthrough-riders.mjs"
   },
   "dependencies": {
     "@restaurant-saas/shared": "workspace:*",
