@@ -268,6 +268,12 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
+**Next (owner, 2026-11-01): the Rider App gets its design in a new chat.** The owner will send his design there. When he sends a picture and says "copy", copy it as closely as the rules
+allow and do not invent another look. His last picture: five green screens, Login, My Deliveries, Order, Live Tracking, Today, with AI Manager as one added feature that says which of 3–4 orders
+comes first and why. Not decided yet: he undid the last attempt, so ask about anything his new message leaves open. The app is back at commit `61bda40` (red, the first own design).
+The undone attempt is kept, not committed: `git stash list`, "Rider App picture redesign attempt" (green screens, Today as in the picture, Live Tracking, AI Manager tab, `riderStopPlan` with tests). Its last test
+run had not finished. Use it only if he wants it. Limits to tell him when they come up: AI Manager is DEMO rules until Phase 10; Live Tracking, km and ETA are NOT CONNECTED until GPS (Phase 11) and a map cost approval.
+
 **Customer App approved 2026-10-31.** Kept from the plan and feedback: login never forced (first visit opens on Login once
 with Skip); Dine-in DEMO only (open decision #19, MASTER_PROMPT.md §16); COD default, other payments take no money; LALA is
 sample data; food pictures stay emoji, no photos from the internet; the customer calls the rider while a rider has the order.
