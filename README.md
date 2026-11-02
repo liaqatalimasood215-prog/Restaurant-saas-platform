@@ -140,6 +140,7 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-11-01 | Rider App frontend from the owner's six-screen picture, DEMO: tokens, badges, four-tab bar, Login, Home, Order Details, Live Tracking (DEMO MAP), My Active Deliveries, Today Summary (COD cash apart from earnings), Delivery History, Profile; no Accept, Picked Up is display only, max 3 in the UI only; backend untouched | 110 shared tests, rider `walkthrough` 274 checks, `walkthrough:riders`, `walkthrough:online` and customer `walkthrough` pass on ports 3000–3002; approved by the owner |
 | 2026-11-02 | Refunds and Correct Payment (DEMO), Orders page, Owner and Manager: new entries only, refund slip, money counted on the day it moved; backend untouched | RESULT_PLACEHOLDER |
 | 2026-11-02 | Sub-orders, owner's way of working (DEMO): each customer at a shared table is an own order with an own bill and invoice, and the table is free when none is open. The first attempt (one order per table) was replaced the same day, at the owner's correction | `walkthrough:sub-orders` and 4 new unit tests pass |
+| 2026-11-03 | Previews: a blank Customer or Rider App preview meant that app was not running. Each preview now says so and returns by itself | `walkthrough:previews` passes |
 
 ## Commands
 

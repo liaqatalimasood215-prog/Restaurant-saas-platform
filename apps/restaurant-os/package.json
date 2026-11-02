@@ -21,7 +21,8 @@
     "walkthrough:riders": "node scripts/walkthrough-riders.mjs",
     "walkthrough:refunds": "node scripts/walkthrough-refunds.mjs",
     "walkthrough:connected": "node scripts/walkthrough-connected.mjs",
-    "walkthrough:sub-orders": "node scripts/walkthrough-sub-orders.mjs"
+    "walkthrough:sub-orders": "node scripts/walkthrough-sub-orders.mjs",
+    "walkthrough:previews": "node scripts/walkthrough-previews.mjs"
   },
   "dependencies": {
     "@restaurant-saas/shared": "workspace:*",

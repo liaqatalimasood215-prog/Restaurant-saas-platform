@@ -11,6 +11,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { t } from '@/i18n';
+import { AppPreviewFrame } from '@/components/app-preview-frame';
 import { getApi, type StaffLink } from '@/lib/api';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
@@ -399,7 +400,9 @@ function RiderAppPreview({ riders, path }: { riders: RiderOverview[]; path: stri
             <div className="flex justify-center">
               {/* Inside the frame: exactly 390 × 800 at 70 %, so the app's bottom bar is never cut off. */}
               <div className="box-content h-[560px] w-[273px] overflow-hidden rounded-[2.25rem] border-[6px] border-slate-800 bg-white py-3" data-rider-phone>
-                <iframe key={url} src={url} title={t('riders.previewFrame')} className="h-[800px] w-[390px] origin-top-left scale-[0.7] border-0" />
+                <AppPreviewFrame origin={RIDER_APP_ORIGIN} appName={t('appPreview.riderApp')}>
+                  <iframe key={url} src={url} title={t('riders.previewFrame')} className="h-[800px] w-[390px] origin-top-left scale-[0.7] border-0" />
+                </AppPreviewFrame>
               </div>
             </div>
             {/* rel="opener": the Rider App tab asks this page for its orders (rider-bridge.ts). */}

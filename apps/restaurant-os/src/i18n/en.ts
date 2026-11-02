@@ -1244,6 +1244,12 @@ export const en = {
     },
     demoNote: 'DEMO: the PIN is checked and then forgotten — it is not saved. Real PIN storage (hashed on the server) comes in Phase 4.',
   },
+  appPreview: {
+    customerApp: 'The Customer App',
+    riderApp: 'The Rider App',
+    notRunning: '{app} is not running on this computer',
+    notRunningHint: 'This preview comes back by itself as soon as the app is started. Run "pnpm dev", or ask Claude to start it.',
+  },
   pos: {
     subOrderWho: 'Which customer is this order for?',
     newSubOrder: 'New sub-order',

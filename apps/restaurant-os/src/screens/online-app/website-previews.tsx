@@ -6,9 +6,10 @@ import type { OnlineAppView } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { t } from '@/i18n';
+import { AppPreviewFrame } from '@/components/app-preview-frame';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/lib/session';
-import { customerUrl } from './online-parts';
+import { CUSTOMER_APP_ORIGIN, customerUrl } from './online-parts';
 
 export type PreviewDevice = 'desktop' | 'mobile';
 
@@ -72,7 +73,9 @@ export function LivePreview({ view, path, onPath, device, onDevice }: { view: On
         <div ref={boxRef} className="w-full">
           {boxWidth > 0 && (
             <div className={cn('overflow-hidden rounded-xl border border-slate-200 bg-white', device === 'mobile' && 'mx-auto')} style={{ width: width * scale, height }} data-preview-device={device}>
-              <iframe src={customerUrl(path)} title={t('onlineApp.previewFrame')} className="origin-top-left border-0" style={{ width, height: height / scale, transform: `scale(${scale})` }} />
+              <AppPreviewFrame origin={CUSTOMER_APP_ORIGIN} appName={t('appPreview.customerApp')}>
+                <iframe src={customerUrl(path)} title={t('onlineApp.previewFrame')} className="origin-top-left border-0" style={{ width, height: height / scale, transform: `scale(${scale})` }} />
+              </AppPreviewFrame>
             </div>
           )}
         </div>
@@ -99,7 +102,9 @@ export function PhonePreview({ path }: { path: string }) {
       <CardBody className="flex justify-center">
         {/* Inside the frame: exactly 390 × 800 at 70 %, with white above and below, so the website's bottom bar is never cut off. */}
         <div className="box-content h-[560px] w-[273px] overflow-hidden rounded-[2.25rem] border-[6px] border-slate-800 bg-white py-3" data-phone-screen>
-          <iframe src={customerUrl(path)} title={t('onlineApp.previewPhoneFrame')} loading="lazy" className="h-[800px] w-[390px] origin-top-left scale-[0.7] border-0" />
+          <AppPreviewFrame origin={CUSTOMER_APP_ORIGIN} appName={t('appPreview.customerApp')}>
+            <iframe src={customerUrl(path)} title={t('onlineApp.previewPhoneFrame')} loading="lazy" className="h-[800px] w-[390px] origin-top-left scale-[0.7] border-0" />
+          </AppPreviewFrame>
         </div>
       </CardBody>
     </Card>

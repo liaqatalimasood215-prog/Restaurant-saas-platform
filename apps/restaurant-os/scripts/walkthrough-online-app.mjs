@@ -308,6 +308,8 @@ await section('delivery');
 const howSheet = async (count) => {
   await phoneFrame.locator('[data-ordering-bar]').dispatchEvent('click'); // the frame is scaled and may sit under the page header
   await phoneFrame.locator('[data-mode-tabs]').waitFor();
+  // The frame hears about a saved setting a moment later (DEMO link): wait for it, and fail if it never comes.
+  for (let i = 0; i < 25 && (await phoneFrame.locator('[data-mode]').count()) !== count; i++) await owner.waitForTimeout(200);
   assert.equal(await phoneFrame.locator('[data-mode]').count(), count);
   await phoneFrame.getByRole('button', { name: 'Done' }).dispatchEvent('click');
   await phoneFrame.locator('[data-mode-tabs]').waitFor({ state: 'detached' });

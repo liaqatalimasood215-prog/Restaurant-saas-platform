@@ -269,6 +269,8 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
+**Previews, 2026-11-03:** every preview needs its own app running (3001, 3002): start all three with `pnpm dev`. A frame now says when its app is not running. The Wi-Fi address in the link and QR is read when Restaurant OS starts: after changing network, restart it.
+
 **Sub-orders built 2026-11-02 (DEMO), waiting for the owner's review.** He rejected the first version (one order per table, customer numbers on items): his customers are strangers who arrive and leave at different times, and he confirmed this flow: the waiter opens T1, New sub-order; at the counter the customer says "Table 1", the cashier sees T1-1 Chicken and T1-2 Coffee, asks the waiter with Call Waiter if unsure, taps one and bills only that. Each sub-order is an own order with an own invoice. "Whole table on one bill" stays from his earlier Option 3; there is no combined printed bill yet, each order prints its own. The demo menu has no Coffee: he can add it on the Menu page (walkthroughs count the seeded items).
 
 **DEMO connection and sounds built 2026-11-02, waiting for the owner's review.** Open a Restaurant OS tab, then `localhost:3001/aziz-pizza/main` and `localhost:3002/aziz-pizza/main` in the same browser. `walkthrough:connected` checks the whole path. The hidden `/demo-link` page must never use storage: in the browser test its storage was separate, and writing from it wiped orders. Limits: one browser only; keep a Restaurant OS tab open; sound starts after the first tap on a page, and the voice depends on the device; phones keep sample data until the backend.
