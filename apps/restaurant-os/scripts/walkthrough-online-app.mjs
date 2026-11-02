@@ -217,6 +217,8 @@ await websiteTab.reload();
 await websiteTab.locator('[data-cart-line="Preview Test Dish"]').waitFor();
 await websiteTab.close();
 const elsewhere = await context.newPage();
+// Without this flag the website now joins an open Restaurant OS tab; this check is about a browser that has none.
+await elsewhere.addInitScript(() => window.localStorage.setItem('lala-demo-no-link', '1'));
 await elsewhere.goto(`${LINK}/menu`);
 await elsewhere.getByText('Classic Pizza').first().waitFor();
 await elsewhere.setViewportSize(PHONE);

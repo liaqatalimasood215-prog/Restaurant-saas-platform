@@ -37,7 +37,7 @@ Try <http://localhost:3001> for the sample restaurants: `lala-restaurant/main` (
 | Part | Status |
 |---|---|
 | Prices and totals | Shown with the shared rules (`packages/shared`), and worked out again when the order is placed |
-| Orders reaching Restaurant OS, the same menu, Online ON/OFF | NOT CONNECTED: backend, Phase 4 |
+| Orders reaching Restaurant OS, the same menu, Online ON/OFF | DEMO on `/aziz-pizza/main`: one browser on this computer, a Restaurant OS tab open, hidden page `/demo-link`; steps come back to tracking with a voice. Everywhere else and other phones: NOT CONNECTED until the backend, Phase 4 |
 | Live tracking | NOT CONNECTED: Phase 5 (no GPS map in the first version) |
 | Product photos | Food pictures chosen by name until photo upload (Phase 7) |
 

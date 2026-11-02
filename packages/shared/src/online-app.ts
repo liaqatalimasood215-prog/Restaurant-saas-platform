@@ -7,7 +7,9 @@
  */
 import { normalizePhone } from './phone';
 import { isValidEmail } from './staff';
-import type { MenuCategory, MenuItem, ModifierGroup, OrderPricing, Paisa } from './types';
+import type { OrderStatus } from './order-status';
+import type { BillTotals } from './pricing';
+import type { DraftItemInput, IsoDateTime, MenuCategory, MenuItem, ModifierGroup, OrderPricing, Paisa } from './types';
 
 export type WebsitePublishState = 'DRAFT' | 'PUBLISHING' | 'LIVE' | 'CHANGES_PENDING' | 'FAILED' | 'DOMAIN_REQUIRED';
 
@@ -272,4 +274,46 @@ export function canPublishWebsite(publishing: OnlinePublishing): boolean {
 /** Publish Website: changes the website only. Every Android field stays as it was. */
 export function publishedWebsite(publishing: OnlinePublishing, at: string): OnlinePublishing {
   return { ...publishing, websiteState: 'LIVE', websitePublishedAt: at };
+}
+
+/**
+ * DEMO link for orders, until the backend joins the apps (Phase 4): the website sends what was chosen to Restaurant OS in the
+ * same browser, which prices it and makes the one order, and tells the tracking page each step. No other device sees this.
+ * Roman Urdu: Isi browser mein website ka order Restaurant OS tak jata hai; doosre phone tak nahi.
+ */
+export const CUSTOMER_LINK_ORDER = 'lala-customer-link-order';
+export const CUSTOMER_LINK_RESULT = 'lala-customer-link-result';
+export const CUSTOMER_LINK_TRACK = 'lala-customer-link-track';
+export const CUSTOMER_LINK_STATUS = 'lala-customer-link-status';
+
+export interface CustomerLinkOrder {
+  type: 'DELIVERY' | 'TAKEAWAY';
+  name: string;
+  phone: string;
+  address: string;
+  note: string;
+  lines: DraftItemInput[];
+  idempotencyKey: string;
+}
+
+export interface CustomerLinkPlaced {
+  token: string;
+  dailyNumber: number;
+  totals: BillTotals;
+  prepMinutes: number;
+}
+
+export interface CustomerLinkStatus {
+  token: string;
+  status: OrderStatus;
+  dailyNumber: number;
+  prepMinutes: number;
+  riderName: string | null;
+  history: { status: OrderStatus; at: IsoDateTime }[];
+}
+
+/** A message from another window is not trusted: the shape is checked before use. */
+export function isCustomerLinkOrder(value: unknown): value is CustomerLinkOrder {
+  const o = value as Partial<CustomerLinkOrder> | null;
+  return !!o && (o.type === 'DELIVERY' || o.type === 'TAKEAWAY') && typeof o.name === 'string' && typeof o.phone === 'string' && typeof o.address === 'string' && typeof o.note === 'string' && Array.isArray(o.lines) && typeof o.idempotencyKey === 'string';
 }

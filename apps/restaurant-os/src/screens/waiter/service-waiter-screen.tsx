@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, ChefHat, Users } from 'lucide-react';
 import {
+  orderPlaceName,
   formatQuantity,
   type KitchenStation,
   type KitchenTicket,
@@ -84,8 +85,10 @@ export function ServiceWaiterScreen({ tableId }: { tableId?: string }) {
   };
 
   const readyCount = (o: Order) => o.tickets.filter((tk) => tk.status === 'READY').length;
+  // One card per customer: a shared table has one for each sub-order.
   const busyTables = floor.data.tables
-    .filter((e): e is TableBoardEntry & { order: Order } => e.order !== null && (!tableId || e.table.id === tableId))
+    .filter((e) => !tableId || e.table.id === tableId)
+    .flatMap((e) => e.orders.map((order) => ({ ...e, order })))
     .sort((a, b) => readyCount(b.order) - readyCount(a.order) || a.table.sort - b.table.sort);
   const myTables = floor.data.tables.map((e) => e.table.name).join(', ');
 
@@ -99,7 +102,7 @@ export function ServiceWaiterScreen({ tableId }: { tableId?: string }) {
         <div className="grid gap-4 lg:grid-cols-2">
           {busyTables.map((entry) => (
             <TableCard
-              key={entry.table.id}
+              key={entry.order.id}
               entry={entry}
               stations={menu.data?.stations ?? []}
               pending={pending}
@@ -139,7 +142,7 @@ function TableCard({
       <CardBody className="space-y-4">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-5xl font-black leading-none text-slate-900">{entry.table.name}</p>
+            <p className="text-5xl font-black leading-none text-slate-900">{orderPlaceName(entry.table.name, order)}</p>
             <p className="mt-1 flex items-center gap-2 text-sm text-slate-600">
               <Users className="size-4" aria-hidden />
               {t('tables.guests', { n: order.guests ?? 0 })} · {t('waiter.orderNumber', { n: order.dailyNumber })}

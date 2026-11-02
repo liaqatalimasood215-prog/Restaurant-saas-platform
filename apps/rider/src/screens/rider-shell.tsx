@@ -12,7 +12,7 @@ import { ApiError, getApi, getDemoControls } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { registerServiceWorker, useOnline } from '@/lib/pwa';
-import { alertNewDelivery, unlockSound } from '@/lib/sound';
+import { alertNewDelivery, speakNewDelivery, unlockSound } from '@/lib/sound';
 import { LoginScreen } from './login-screen';
 import { RiderContext } from './rider-context';
 
@@ -56,6 +56,7 @@ export function RiderShell({ restaurant, branch, children }: { restaurant: strin
       if (fresh) {
         setAlerted({ id: fresh.id, dailyNumber: fresh.dailyNumber });
         alertNewDelivery();
+        speakNewDelivery(fresh.dailyNumber);
       }
     }
     known.current = new Set(deliveries.map((d) => d.id));

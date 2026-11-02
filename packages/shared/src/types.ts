@@ -295,6 +295,10 @@ export interface Order extends BranchScoped {
   /** Given when the order is paid; sequential per branch, never reused */
   invoiceNumber: number | null;
   tableId: Uuid | null;
+  /** Which customer at the table this is (T1-2 = 2); missing = the first. See sub-orders.ts */
+  subOrderNo?: number;
+  /** Another customer sat at the table while this order was open: it is called T1-1, not T1 */
+  tableShared?: boolean;
   waiterId: Uuid | null;
   guests: number | null;
   customerName: string | null;
@@ -432,7 +436,12 @@ export interface DaySummaryView {
 export interface TableBoardEntry {
   table: DiningTable;
   status: TableStatus;
+  /** The first open sub-order; null = nobody is seated */
   order: Order | null;
+  /** Every open sub-order of the table, by number */
+  orders: Order[];
+  /** The number the next customer at this table gets */
+  nextSubOrderNo: number;
   waiterName: string | null;
 }
 

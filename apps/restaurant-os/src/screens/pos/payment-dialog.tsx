@@ -16,10 +16,35 @@ const METHODS: { method: PaymentMethod; icon: typeof Banknote }[] = [
 ];
 
 /** Rupees typed by the cashier → paisa, or null when the text is not a valid amount. */
-function toPaisa(text: string): number | null {
+export function toPaisa(text: string): number | null {
   if (text.trim() === '') return 0;
   const value = Number(text);
   return Number.isFinite(value) && value >= 0 ? rupeesToPaisa(value) : null;
+}
+
+/** Cash, Card or Wallet. */
+export function MethodPicker({ value, onChange, label, hide }: { value: PaymentMethod | null; onChange: (method: PaymentMethod) => void; label: string; hide?: PaymentMethod }) {
+  const shown = METHODS.filter(({ method }) => method !== hide);
+  return (
+    <div className={cn('mb-4 grid gap-2', shown.length === 2 ? 'grid-cols-2' : 'grid-cols-3')} role="radiogroup" aria-label={label}>
+      {shown.map(({ method: m, icon: Icon }) => (
+        <button
+          key={m}
+          type="button"
+          role="radio"
+          aria-checked={value === m}
+          onClick={() => onChange(m)}
+          className={cn(
+            'flex min-h-14 flex-col items-center justify-center rounded-xl border-2 text-sm font-bold',
+            value === m ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 text-slate-700',
+          )}
+        >
+          <Icon className="size-5" aria-hidden />
+          {t(`pos.method${m}`)}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -106,24 +131,7 @@ export function PaymentDialog({
         <span className="text-2xl font-black text-slate-900">{formatPaisa(due)}</span>
       </p>
 
-      <div className="mb-4 grid grid-cols-3 gap-2" role="radiogroup" aria-label={t('pos.method')}>
-        {METHODS.map(({ method: m, icon: Icon }) => (
-          <button
-            key={m}
-            type="button"
-            role="radio"
-            aria-checked={method === m}
-            onClick={() => setMethod(m)}
-            className={cn(
-              'flex min-h-14 flex-col items-center justify-center rounded-xl border-2 text-sm font-bold',
-              method === m ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 text-slate-700',
-            )}
-          >
-            <Icon className="size-5" aria-hidden />
-            {t(`pos.method${m}`)}
-          </button>
-        ))}
-      </div>
+      <MethodPicker value={method} onChange={setMethod} label={t('pos.method')} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">

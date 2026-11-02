@@ -259,7 +259,7 @@ export function CartScreen() {
                 {error.text}
               </p>
             )}
-            <Button className="w-full" disabled={busy || !canOrder || !online || short > 0} onClick={() => void place()}>
+            <Button className="w-full" disabled={busy || (profile.loading && !saved) || !canOrder || !online || short > 0} onClick={() => void place()}>
               {placeLabel}
             </Button>
           </div>

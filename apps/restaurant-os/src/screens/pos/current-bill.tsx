@@ -21,6 +21,8 @@ import {
   calculateBill,
   formatPaisa,
   formatQuantity,
+  orderPlaceName,
+  subOrderLabel,
   type Area,
   type BillTotals,
   type DiscountInput,
@@ -42,11 +44,13 @@ import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { ORDER_TONES, TICKET_TONES } from '@/lib/tones';
 import { describeLine, type CartLine } from '../waiter/cart';
+import { SubOrderBar, subOrderItems } from '../waiter/sub-order';
 import { CustomerFields } from './customer-fields';
 import { DiscountDialog } from './discount-dialog';
 import { newDraft, type Draft } from './draft';
 import { PaymentDialog } from './payment-dialog';
 import { PrintDialog } from './print-dialog';
+import { TablePayDialog } from './table-pay-dialog';
 import { ProductArt } from './product-art';
 import type { PrintKind } from './printable-bill';
 
@@ -110,6 +114,9 @@ export function CurrentBill({
   const [clearing, setClearing] = useState(false);
   const scrollArea = useRef<HTMLDivElement>(null);
   const [pickingTable, setPickingTable] = useState(false);
+  /** The shared table whose sub-orders are listed to choose from */
+  const [choosingOn, setChoosingOn] = useState<string | null>(null);
+  const [payingTable, setPayingTable] = useState<string | null>(null);
   const previousCart = useRef(draft.cart);
 
   useEffect(() => {
@@ -152,7 +159,9 @@ export function CurrentBill({
   const due = order ? Math.max(0, order.totals.total - order.paidTotal) : 0;
   const paymentState = !order ? null : due === 0 && order.paidTotal > 0 ? 'PAID' : order.paidTotal > 0 ? 'PARTLY' : 'PENDING';
   const payable = order && !['REJECTED', 'CANCELLED'].includes(order.status) && (order.type !== 'DINE_IN' || ['OPEN', 'BILL_REQUESTED'].includes(order.status));
-  const placeLabel = order?.type === 'DINE_IN' ? (table?.table.name ?? '') : t(`orderType.${draft.type}`);
+  const placeLabel = order?.type === 'DINE_IN' ? orderPlaceName(table?.table.name ?? '', order) : t(`orderType.${draft.type}`);
+  const choosing = tables.find((e) => e.table.id === choosingOn);
+  const paying = tables.find((e) => e.table.id === payingTable);
   const selected = order ? order.type : draft.type;
   const canPay = session.permissions.includes('payment.record');
   const canDiscount = session.permissions.includes('order.discount');
@@ -196,6 +205,8 @@ export function CurrentBill({
         result = await getApi().sendRound({
           tableId: draft.tableId as string,
           guests: order?.guests ?? draft.guests,
+          orderId: order?.id ?? null,
+          newSubOrder: draft.newSubOrder,
           items,
           idempotencyKey: draft.sendKey,
           customerName: draft.customer.name,
@@ -222,6 +233,7 @@ export function CurrentBill({
         cart: [],
         orderId: result.id,
         heldId: null,
+        newSubOrder: false,
         sendKey: crypto.randomUUID(),
         // The panel restarts when the order is new or a held bill is used up: open the payment after it.
         payNow: payNow && (result.id !== d.orderId || d.heldId !== null),
@@ -267,11 +279,21 @@ export function CurrentBill({
    * yet are put on hold for that table first, so nothing is lost.
    */
   const pickTable = (entry: TableBoardEntry) => {
+    // Several customers at this table: first ask whose order it is.
+    if (entry.orders.length > 1) {
+      setPickingTable(false);
+      return setChoosingOn(entry.table.id);
+    }
     if (draft.type === 'DINE_IN' && entry.table.id === draft.tableId) return setPickingTable(false);
+    openSubOrder(entry, entry.order?.id ?? null, false);
+  };
+
+  const openSubOrder = (entry: TableBoardEntry, orderId: string | null, isNew: boolean) => {
     setError(null);
-    if (!locked) {
+    setChoosingOn(null);
+    if (!locked || entry.table.id === draft.tableId) {
       // A new bill just takes the table; a table with a running bill gets these items as its next round.
-      setDraft((d) => ({ ...d, type: 'DINE_IN', tableId: entry.table.id, orderId: entry.order?.id ?? null, discount: entry.order ? null : d.discount }));
+      setDraft((d) => ({ ...d, type: 'DINE_IN', tableId: entry.table.id, orderId, newSubOrder: isNew, discount: orderId ? null : d.discount }));
       return setPickingTable(false);
     }
     void run(async () => {
@@ -279,7 +301,7 @@ export function CurrentBill({
         await holdCurrent();
         toast.show({ tone: 'info', title: t('pos.held'), body: t('pos.heldForTable', { table: table?.table.name ?? '' }) });
       }
-      setDraft(() => ({ ...newDraft('DINE_IN'), tableId: entry.table.id, orderId: entry.order?.id ?? null }));
+      setDraft(() => ({ ...newDraft('DINE_IN'), tableId: entry.table.id, orderId, newSubOrder: isNew }));
       setPickingTable(false);
     });
   };
@@ -322,7 +344,9 @@ export function CurrentBill({
             <span className="truncate text-sm font-extrabold text-slate-900">
               {order
                 ? `${placeLabel} · ${t('waiter.orderNumber', { n: order.dailyNumber })}`
-                : `${draft.type === 'DINE_IN' && table ? `${table.table.name} · ` : ''}${draft.heldId ? t('pos.heldBill') : t('pos.newBill')}`}
+                : draft.newSubOrder && table
+                  ? `${subOrderLabel(table.table.name, table.nextSubOrderNo)} · ${t('pos.newSubOrderTitle')}`
+                  : `${draft.type === 'DINE_IN' && table ? `${table.table.name} · ` : ''}${draft.heldId ? t('pos.heldBill') : t('pos.newBill')}`}
             </span>
             {order && <Badge tone={ORDER_TONES[order.status]}>{t(`orderStatus.${order.status}`)}</Badge>}
             {paymentState && (
@@ -381,6 +405,14 @@ export function CurrentBill({
       {/* Table, customer, items, totals, actions */}
       <Card className="flex flex-col lg:min-h-0 lg:flex-1">
         <div ref={scrollArea} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 short:space-y-2 short:p-2.5">
+          {draft.type === 'DINE_IN' && table && table.orders.length > 0 && (
+            <SubOrderBar
+              tableName={table.table.name}
+              orders={table.orders}
+              selected={draft.newSubOrder ? 'NEW' : draft.orderId}
+              onSelect={(choice) => openSubOrder(table, choice === 'NEW' ? null : choice, choice === 'NEW')}
+            />
+          )}
           {/* A new Table bill needs no customer: the table is chosen with the Table button. */}
           {!order && draft.type !== 'DINE_IN' && (
             <section className="space-y-2">
@@ -677,7 +709,7 @@ export function CurrentBill({
                           )}
                         >
                           <span className="text-lg font-black text-slate-900">{entry.table.name}</span>
-                          <span className="text-[11px] font-semibold text-slate-600">{entry.order ? formatPaisa(entry.order.totals.total) : status}</span>
+                          <span className="text-[11px] font-semibold text-slate-600">{entry.order ? formatPaisa(entry.orders.reduce((sum, o) => sum + o.totals.total, 0)) : status}</span>
                         </button>
                       );
                     })}
@@ -687,6 +719,76 @@ export function CurrentBill({
             })}
           </div>
         </Dialog>
+      )}
+
+      {choosing && (
+        <Dialog
+          open
+          onClose={() => setChoosingOn(null)}
+          title={t('pos.subOrdersTitle', { table: choosing.table.name })}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setChoosingOn(null)}>
+                {t('nav.close')}
+              </Button>
+              <Button variant="outline" disabled={busy || !session.permissions.includes('bill.accept')} onClick={() => void callWaiter(choosing.table.id)}>
+                <BellRing className="size-5" aria-hidden />
+                {t('pos.callWaiter')}
+              </Button>
+            </>
+          }
+        >
+          <p className="mb-3 text-sm text-slate-600">{t('pos.subOrdersHint')}</p>
+          <ul className="space-y-2" data-sub-order-list>
+            {choosing.orders.map((o) => {
+              const label = orderPlaceName(choosing.table.name, o);
+              return (
+                <li key={o.id}>
+                  <button
+                    type="button"
+                    data-sub-order-row={label}
+                    onClick={() => openSubOrder(choosing, o.id, false)}
+                    className="flex min-h-14 w-full items-center gap-3 rounded-xl border-2 border-slate-200 bg-white p-3 text-left hover:border-brand"
+                  >
+                    <span className="shrink-0 text-lg font-black text-slate-900">{label}</span>
+                    <span className="min-w-0 flex-1 font-semibold text-slate-700">{subOrderItems(o)}</span>
+                    <span className="shrink-0 font-bold tabular-nums">{formatPaisa(o.totals.total - o.paidTotal)}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <Button variant="outline" onClick={() => openSubOrder(choosing, null, true)}>
+              {t('pos.newSubOrder')}
+            </Button>
+            {canPay && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPayingTable(choosing.table.id);
+                  setChoosingOn(null);
+                }}
+              >
+                {t('pos.wholeTable', { amount: formatPaisa(choosing.orders.reduce((sum, o) => sum + o.totals.total - o.paidTotal, 0)) })}
+              </Button>
+            )}
+          </div>
+        </Dialog>
+      )}
+
+      {paying && (
+        <TablePayDialog
+          tableId={paying.table.id}
+          tableName={paying.table.name}
+          orders={paying.orders}
+          onClose={() => setPayingTable(null)}
+          onDone={() => {
+            setPayingTable(null);
+            toast.show({ tone: 'success', title: t('pos.wholeTablePaid', { table: paying.table.name }) });
+            onNewBill();
+          }}
+        />
       )}
 
       {clearing && (

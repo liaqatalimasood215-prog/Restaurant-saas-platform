@@ -11,6 +11,11 @@ import {
   automaticOrderSteps,
   businessDate,
   calculateBill,
+  checkTablePayment,
+  MAX_OPEN_SUB_ORDERS,
+  nextSubOrderNo,
+  openStatusOfTable,
+  orderPlaceName,
   canDisableRider,
   canManageStaffAccount,
   canRiderGoOffline,
@@ -33,6 +38,8 @@ import {
   customerAppPath,
   formatPaisa,
   summarizeDay,
+  checkPaymentCorrection,
+  checkRefund,
   checkBranchSettings,
   checkStation,
   MAX_TAX_PERCENT,
@@ -61,6 +68,9 @@ import {
   type PinProblem,
   type OnlineAppView,
   type WebsitePreviewData,
+  type CustomerLinkOrder,
+  type CustomerLinkPlaced,
+  type CustomerLinkStatus,
   type DaySummaryView,
   type OrderPricing,
   type SettingsView,
@@ -133,11 +143,14 @@ import {
   type AreaInput,
   type MenuItemInput,
   type BulkTablesInput,
+  type CorrectPaymentInput,
   type CounterOrderInput,
   type DemoControls,
   type HeldBillInput,
   type OrderFilter,
   type RecordPaymentInput,
+  type RecordTablePaymentInput,
+  type RefundInput,
   type SendRoundInput,
   type Session,
   type StaffInput,
@@ -451,6 +464,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return data.tables.find((t) => t.id === tableId)?.name ?? '';
   }
 
+  /** "T1", or "T1-2" on a table shared by several customers. */
+  private orderPlace(data: DemoData, order: Order): string {
+    return orderPlaceName(this.tableName(data, order.tableId), order);
+  }
+
   private findOrder(data: DemoData, orderId: string): Order {
     const order = data.orders.find((o) => o.id === orderId);
     if (!order) throw new ApiError('NOT_FOUND', 'Order not found.');
@@ -489,11 +507,14 @@ export class DemoAdapter implements ApiClient, DemoControls {
           .filter((t) => t.areaId === area.id && t.archivedAt === null && worksOnTable(user, t.id))
           .sort((a, b) => a.sort - b.sort)
           .map((table) => {
-            const order = this.openTableOrder(data, table.id);
+            const orders = this.openTableOrders(data, table.id);
+            const order = orders[0] ?? null;
             return {
               table,
-              status: tableStatusFor(order?.status, table),
+              status: tableStatusFor(openStatusOfTable(orders), table),
               order,
+              orders,
+              nextSubOrderNo: this.nextSubOrderOn(data, table.id),
               waiterName: this.staffName(data, order?.waiterId ?? null),
             };
           }),
@@ -517,7 +538,20 @@ export class DemoAdapter implements ApiClient, DemoControls {
   }
 
   private openTableOrder(data: DemoData, tableId: string): Order | null {
-    return data.orders.find((o) => o.tableId === tableId && OPEN_DINE_IN.includes(o.status)) ?? null;
+    return this.openTableOrders(data, tableId)[0] ?? null;
+  }
+
+  /** Everyone since the table was last empty counts, paid or not: no two customers of one sitting share a number. */
+  private nextSubOrderOn(data: DemoData, tableId: string): number {
+    const open = this.openTableOrders(data, tableId);
+    const oldest = open.reduce((first, o) => (o.createdAt < first ? o.createdAt : first), open[0]?.createdAt ?? '');
+    return nextSubOrderNo(open.length === 0 ? [] : data.orders.filter((o) => o.tableId === tableId && o.createdAt >= oldest));
+  }
+
+  private openTableOrders(data: DemoData, tableId: string): Order[] {
+    return data.orders
+      .filter((o) => o.tableId === tableId && OPEN_DINE_IN.includes(o.status))
+      .sort((a, b) => (a.subOrderNo ?? 1) - (b.subOrderNo ?? 1));
   }
 
   /** A running bill or a held (unsent) bill keeps a table in use. */
@@ -552,7 +586,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           .sort((a, b) => a.sort - b.sort)
           .map((table) => ({
             table,
-            status: tableStatusFor(this.openTableOrder(data, table.id)?.status, table),
+            status: tableStatusFor(openStatusOfTable(this.openTableOrders(data, table.id)), table),
             hasOpenBill: this.hasOpenBill(data, table.id),
             used: this.tableIsUsed(data, table.id),
           })),
@@ -798,8 +832,13 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const table = this.usableTable(data, input.tableId);
 
         const now = nowIso();
-        let order = data.orders.find((o) => o.tableId === table.id && OPEN_DINE_IN.includes(o.status));
+        const open = this.openTableOrders(data, table.id);
+        let order = input.newSubOrder ? undefined : input.orderId ? open.find((o) => o.id === input.orderId) : open[0];
+        if (input.orderId && !order) throw new ApiError('CONFLICT', 'This sub-order is already closed. Choose another one or start a new one.');
         if (!order) {
+          if (open.length >= MAX_OPEN_SUB_ORDERS) throw new ApiError('VALIDATION', `${table.name} already has ${MAX_OPEN_SUB_ORDERS} open sub-orders.`);
+          const subOrderNo = this.nextSubOrderOn(data, table.id);
+          for (const other of open) other.tableShared = true;
           // New guests sit down: the table is no longer waiting for cleaning.
           table.cleaning = false;
           const { date, dailyNumber } = nextDailyNumber(data);
@@ -814,6 +853,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
             dailyNumber,
             invoiceNumber: null,
             tableId: table.id,
+            subOrderNo,
+            tableShared: open.length > 0,
             waiterId: user.id,
             guests: input.guests,
             customerName: null,
@@ -1049,6 +1090,38 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (repeated) return this.findOrder(data, repeated);
 
         const order = this.findOrder(data, input.orderId);
+        this.takePayment(data, user, order, input);
+        data.idempotency[input.idempotencyKey] = order.id;
+        return order;
+      }),
+    );
+  }
+
+  recordTablePayment(input: RecordTablePaymentInput): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'payment.record');
+        if (data.idempotency[input.idempotencyKey]) return;
+        const owing = this.openTableOrders(data, input.tableId).filter((o) => amountDue(o.totals.total, o.paidTotal) > 0);
+        const dues = owing.map((o) => amountDue(o.totals.total, o.paidTotal));
+        const check = checkTablePayment(dues, input.method === 'CASH' ? input.cashReceived : null);
+        if (!check.ok) throw new ApiError('VALIDATION', check.reason === 'NOTHING_DUE' ? 'Nothing is due on this table.' : 'Cash received is less than the payment and tip.');
+        if (input.method === 'CASH' && input.cashReceived === null) throw new ApiError('VALIDATION', 'Enter the cash received.');
+        owing.forEach((order, i) =>
+          this.takePayment(data, user, order, {
+            method: input.method,
+            amount: dues[i] as number,
+            tipAmount: 0,
+            cashReceived: check.payments[i]?.cashReceived ?? null,
+            reference: input.reference,
+          }),
+        );
+        data.idempotency[input.idempotencyKey] = input.tableId;
+      }),
+    );
+  }
+
+  private takePayment(data: DemoData, user: StaffUser, order: Order, input: Pick<RecordPaymentInput, 'method' | 'amount' | 'tipAmount' | 'cashReceived' | 'reference'>): void {
         const payable = order.type === 'DINE_IN' ? OPEN_DINE_IN.includes(order.status) : !['REJECTED', 'CANCELLED', 'PLACED'].includes(order.status);
         if (!payable) throw new ApiError('CONFLICT', 'This bill is already closed.');
         const due = amountDue(order.totals.total, order.paidTotal);
@@ -1101,10 +1174,6 @@ export class DemoAdapter implements ApiClient, DemoControls {
           }
           giveInvoiceNumber(data, order);
         }
-        data.idempotency[input.idempotencyKey] = order.id;
-        return order;
-      }),
-    );
   }
 
   printReceipt(orderId: string): Promise<Order> {
@@ -1117,6 +1186,84 @@ export class DemoAdapter implements ApiClient, DemoControls {
         return order;
       }),
     );
+  }
+
+  /** A new entry only: the payment stays as it was and the order keeps its status (MASTER_PROMPT.md §8). */
+  refundPayment(input: RefundInput): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'payment.refund');
+        const repeated = data.idempotency[input.idempotencyKey];
+        if (repeated) return this.findOrder(data, repeated);
+        const order = this.findOrder(data, input.orderId);
+        const check = checkRefund({ amount: input.amount, paidTotal: order.paidTotal, refundedTotal: order.refundedTotal, reason: input.reason });
+        if (!check.ok) {
+          throw new ApiError('VALIDATION', check.reason === 'REASON_REQUIRED' ? 'Write the reason for this refund.' : check.reason === 'MORE_THAN_PAID' ? 'This is more than can be refunded.' : 'Enter a valid amount.');
+        }
+        order.payments.push(this.moneyEntry(order, user.id, { kind: 'REFUND', method: input.method, amount: input.amount, reference: input.reference, reason: input.reason }));
+        recalculate(order);
+        data.idempotency[input.idempotencyKey] = order.id;
+        return order;
+      }),
+    );
+  }
+
+  /** Reverses the wrong entry and adds the right one together: the money and the order status stay the same. */
+  correctPayment(input: CorrectPaymentInput): Promise<Order> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'payment.refund');
+        const repeated = data.idempotency[input.idempotencyKey];
+        if (repeated) return this.findOrder(data, repeated);
+        const order = this.findOrder(data, input.orderId);
+        const wrong = order.payments.find((p) => p.id === input.paymentId);
+        if (!wrong) throw new ApiError('NOT_FOUND', 'This payment was not found.');
+        const check = checkPaymentCorrection({ entry: wrong, entries: order.payments, method: input.method, riderId: order.riderId, reason: input.reason });
+        if (!check.ok) {
+          const messages = {
+            NOT_A_PAYMENT: 'Only a payment can be corrected.',
+            ALREADY_CORRECTED: 'This payment was already corrected.',
+            RIDER_CASH: "A rider's cash on delivery cannot be corrected here. Use a refund if money must go back.",
+            SAME_METHOD: 'Choose the method it should have been.',
+            REASON_REQUIRED: 'Write the reason for this correction.',
+          };
+          throw new ApiError('VALIDATION', messages[check.reason]);
+        }
+        const same = { amount: wrong.amount, tipAmount: wrong.tipAmount, reason: input.reason };
+        const reversal = this.moneyEntry(order, user.id, { ...same, kind: 'REVERSAL', method: wrong.method, relatedPaymentId: wrong.id });
+        const right = this.moneyEntry(order, user.id, {
+          ...same,
+          kind: 'PAYMENT',
+          method: input.method,
+          reference: input.reference,
+          relatedPaymentId: reversal.id,
+          cashReceived: input.method === 'CASH' ? wrong.amount + wrong.tipAmount : null,
+          changeGiven: input.method === 'CASH' ? 0 : null,
+        });
+        order.payments.push(reversal, right);
+        recalculate(order);
+        data.idempotency[input.idempotencyKey] = order.id;
+        return order;
+      }),
+    );
+  }
+
+  private moneyEntry(order: Order, userId: string, entry: Pick<PaymentEntry, 'kind' | 'method' | 'amount'> & Partial<PaymentEntry>): PaymentEntry {
+    return {
+      id: newId(),
+      restaurantId: order.restaurantId,
+      branchId: order.branchId,
+      orderId: order.id,
+      tipAmount: 0,
+      cashReceived: null,
+      changeGiven: null,
+      receivedBy: userId,
+      relatedPaymentId: null,
+      createdAt: nowIso(),
+      ...entry,
+      reference: entry.reference?.trim() || null,
+      reason: entry.reason?.trim() || null,
+    };
   }
 
   applyDiscount(orderId: string, discount: DiscountInput | null, reason: string): Promise<Order> {
@@ -1242,7 +1389,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
     add(order.discount?.givenBy);
     const names: Record<string, string> = {};
     for (const id of ids) names[id] = this.staffName(data, id) ?? '';
-    return { order, tableName: order.tableId ? this.tableName(data, order.tableId) : null, names };
+    return { order, tableName: order.tableId ? this.orderPlace(data, order) : null, names };
   }
 
   listOrders(filter: OrderFilter): Promise<OrderView[]> {
@@ -1257,7 +1404,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         .filter((o) => !filter.status || o.status === filter.status)
         .filter((o) => {
           if (!query) return true;
-          const table = o.tableId ? this.tableName(data, o.tableId).toLowerCase() : '';
+          const table = o.tableId ? this.orderPlace(data, o).toLowerCase() : '';
           const digits = query.replace(/\D/g, '');
           return (
             String(o.dailyNumber) === query ||
@@ -1608,7 +1755,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
             orderType: order.type,
             orderStatus: order.status,
             dailyNumber: order.dailyNumber,
-            tableName: order.tableId ? this.tableName(data, order.tableId) : null,
+            tableName: order.tableId ? this.orderPlace(data, order) : null,
             waiterName: this.staffName(data, order.waiterId),
             items: order.items.filter((i) => i.ticketId === ticket.id),
           });
@@ -1951,24 +2098,28 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return this.request(() => {
       const data = this.store.read();
       this.require(data, 'onlineApp.view');
-      const { branch, restaurant } = data;
-      const categories = data.categories.filter((c) => c.isActive).sort((a, b) => a.sort - b.sort);
-      // Only what customers may see: item OFF or a hidden category never leaves Restaurant OS.
-      const items = data.items.filter((i) => !i.archivedAt && i.isOnline && categories.some((c) => c.id === i.categoryId));
-      return {
-        restaurant: { name: restaurant.name, slug: restaurant.slug },
-        branch: { name: branch.name, slug: branch.slug, phone: branch.phone, address: branch.address },
-        onlineOrdersEnabled: branch.onlineOrdersEnabled,
-        deliveryFee: branch.deliveryFee,
-        minOrder: branch.minOrder,
-        defaultPrepMinutes: branch.defaultPrepMinutes,
-        pricing: pricingOf(branch),
-        categories,
-        items,
-        addonGroups: data.modifierGroups.filter((g) => items.some((i) => i.modifierGroupIds.includes(g.id))),
-        website: data.onlineWebsite,
-      };
+      return this.websitePreview(data);
     });
+  }
+
+  private websitePreview(data: DemoData): WebsitePreviewData {
+    const { branch, restaurant } = data;
+    const categories = data.categories.filter((c) => c.isActive).sort((a, b) => a.sort - b.sort);
+    // Only what customers may see: item OFF or a hidden category never leaves Restaurant OS.
+    const items = data.items.filter((i) => !i.archivedAt && i.isOnline && categories.some((c) => c.id === i.categoryId));
+    return {
+      restaurant: { name: restaurant.name, slug: restaurant.slug },
+      branch: { name: branch.name, slug: branch.slug, phone: branch.phone, address: branch.address },
+      onlineOrdersEnabled: branch.onlineOrdersEnabled,
+      deliveryFee: branch.deliveryFee,
+      minOrder: branch.minOrder,
+      defaultPrepMinutes: branch.defaultPrepMinutes,
+      pricing: pricingOf(branch),
+      categories,
+      items,
+      addonGroups: data.modifierGroups.filter((g) => items.some((i) => i.modifierGroupIds.includes(g.id))),
+      website: data.onlineWebsite,
+    };
   }
 
   saveWebsiteConfig(config: WebsiteConfig): Promise<void> {
@@ -2043,12 +2194,14 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const today = businessDate(new Date(), data.branch.timezone, data.branch.businessDayStart);
       const businessDay = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : today;
       const orders = data.orders.filter((o) => o.businessDate === businessDay);
-      const summary = summarizeDay(orders);
+      const dayOf = (iso: string) => businessDate(new Date(iso), data.branch.timezone, data.branch.businessDayStart);
+      const summary = summarizeDay(orders, undefined, { date: businessDay, dayOf, allOrders: data.orders });
       const ids = new Set<string>([
         ...summary.tipsByWaiter.map((t) => t.waiterId ?? ''),
         ...summary.discounts.map((d) => d.by),
         ...summary.voids.map((v) => v.by ?? ''),
         ...summary.refunds.map((r) => r.by),
+        ...summary.corrections.map((c) => c.by),
         ...summary.cancelled.map((c) => c.by ?? ''),
       ]);
       const names: Record<string, string> = {};
@@ -2226,7 +2379,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       for (const order of data.orders) {
         const tableId = order.tableId;
         if (order.type !== 'DINE_IN' || !OPEN_DINE_IN.includes(order.status) || !tableId) continue;
-        const tableName = this.tableName(data, tableId);
+        const tableName = this.orderPlace(data, order);
 
         if (getsFoodReady(order, tableId)) {
           for (const ticket of order.tickets) {
@@ -2605,19 +2758,6 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (type === 'DELIVERY' ? !delivery : !pickup) throw new ApiError('CONFLICT', type === 'DELIVERY' ? 'Delivery is switched off for online orders.' : 'Pickup is switched off for online orders.');
         const count = data.orders.filter((o) => o.channel === 'CUSTOMER_APP').length;
         const customer = DEMO_CUSTOMERS[count % DEMO_CUSTOMERS.length] ?? DEMO_CUSTOMERS[0]!;
-        const order = this.newCounterOrder(
-          data,
-          {
-            type,
-            channel: 'CUSTOMER_APP',
-            status: 'PLACED',
-            customerName: `${customer.name} (DEMO)`,
-            customerPhone: customer.phone,
-            customerAddress: type === 'DELIVERY' ? customer.address : null,
-            note: '',
-          },
-          null,
-        );
         const item = (name: string) => data.items.find((i) => i.name === name);
         const pizza = item('Classic Pizza');
         const medium = pizza?.variants.find((v) => v.name === 'Medium');
@@ -2627,20 +2767,84 @@ export class DemoAdapter implements ApiClient, DemoControls {
           { menuItemId: item('Cold Drink')?.id ?? '', variantId: null, modifierIds: [], note: '', quantity: 1 },
         ];
         if (count % 2 === 1) drafts.push({ menuItemId: item('Zinger Burger')?.id ?? '', variantId: null, modifierIds: [], note: 'No mayo', quantity: 2 });
-        // Like the server at checkout: only items shown online, and at least the minimum order.
-        for (const draft of drafts) {
-          const offered = data.items.find((i) => i.id === draft.menuItemId);
-          if (offered && !offered.isOnline) throw new ApiError('CONFLICT', `${offered.name} is not available online.`);
-        }
-        order.items.push(...drafts.map((draft) => this.priceDraft(data, draft, order, 1)));
-        recalculate(order);
-        if (order.totals.itemsSubtotal < data.branch.minOrder) {
-          throw new ApiError('CONFLICT', `The minimum online order is ${formatPaisa(data.branch.minOrder)}.`);
-        }
-        data.orders.push(order);
-        return order;
+        return this.placeCustomerOrder(data, { type, name: `${customer.name} (DEMO)`, phone: customer.phone, address: type === 'DELIVERY' ? customer.address : null, note: '' }, drafts);
       }),
     );
+  }
+
+  /** Like the server at checkout: only items shown online, and at least the minimum order. Prices come from this menu. */
+  private placeCustomerOrder(data: DemoData, customer: { type: 'DELIVERY' | 'TAKEAWAY'; name: string; phone: string; address: string | null; note: string }, drafts: DraftItemInput[]): Order {
+    const order = this.newCounterOrder(
+      data,
+      {
+        type: customer.type,
+        channel: 'CUSTOMER_APP',
+        status: 'PLACED',
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerAddress: customer.address,
+        note: customer.note,
+      },
+      null,
+    );
+    for (const draft of drafts) {
+      const offered = data.items.find((i) => i.id === draft.menuItemId);
+      if (offered && !offered.isOnline) throw new ApiError('CONFLICT', `${offered.name} is not available online.`);
+    }
+    order.items.push(...drafts.map((draft) => this.priceDraft(data, draft, order, 1)));
+    recalculate(order);
+    if (order.totals.itemsSubtotal < data.branch.minOrder) {
+      throw new ApiError('CONFLICT', `The minimum online order is ${formatPaisa(data.branch.minOrder)}.`);
+    }
+    data.orders.push(order);
+    return order;
+  }
+
+  /** An order from the customer website through the DEMO link (online-app.ts); from Phase 4 this is the real API. */
+  receiveCustomerOrder(input: CustomerLinkOrder): Promise<CustomerLinkPlaced> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const placed = (order: Order): CustomerLinkPlaced => ({ token: order.trackingToken ?? '', dailyNumber: order.dailyNumber, totals: order.totals, prepMinutes: order.prepMinutes ?? data.branch.defaultPrepMinutes });
+        const repeated = data.idempotency[input.idempotencyKey];
+        if (repeated) return placed(this.findOrder(data, repeated));
+        if (!data.branch.onlineOrdersEnabled) throw new ApiError('CONFLICT', 'Not taking online orders right now.');
+        const { delivery, pickup } = data.onlineWebsite.modes;
+        if (input.type === 'DELIVERY' ? !delivery : !pickup) throw new ApiError('CONFLICT', 'This way of ordering is switched off right now.');
+        const phone = normalizePhone(input.phone);
+        if (input.name.trim().length < 2 || !phone || (input.type === 'DELIVERY' && input.address.trim().length < 5) || input.lines.length === 0) throw new ApiError('VALIDATION', 'Please check your details.');
+        const order = this.placeCustomerOrder(data, { type: input.type, name: input.name.trim(), phone, address: input.type === 'DELIVERY' ? input.address.trim() : null, note: input.note.trim().slice(0, 200) }, input.lines);
+        data.idempotency[input.idempotencyKey] = order.id;
+        return placed(order);
+      }),
+    );
+  }
+
+  /** What a tracking link may see of its own order: steps and the rider's name, nothing else. */
+  customerLinkStatus(tokens: string[]): CustomerLinkStatus[] {
+    const data = this.store.read();
+    return data.orders.flatMap((order) => {
+      if (!order.trackingToken || !tokens.includes(order.trackingToken)) return [];
+      return [{
+        token: order.trackingToken,
+        status: order.status,
+        dailyNumber: order.dailyNumber,
+        prepMinutes: order.prepMinutes ?? data.branch.defaultPrepMinutes,
+        riderName: order.riderId ? this.staffName(data, order.riderId) : null,
+        history: order.history.map((h) => ({ status: h.toStatus, at: h.changedAt })),
+      }];
+    });
+  }
+
+  /** The website link's menu: only what customers may see, so it needs no login. */
+  linkReady(): boolean {
+    return this.store.isReady();
+  }
+
+  websiteLinkData(): Promise<WebsitePreviewData> {
+    return this.request(() => {
+      if (!this.store.isReady()) throw new ApiError('CONFLICT', 'Restaurant OS is not open.');
+      return this.websitePreview(this.store.read());
+    });
   }
 
   simulateRiderStep(orderId: string): Promise<Order> {

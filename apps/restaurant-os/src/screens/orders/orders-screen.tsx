@@ -1,19 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Undo2 } from 'lucide-react';
 import {
   ORDER_STATUSES,
   ORDER_TYPES,
   STATUSES_BY_TYPE,
+  correctionBlock,
   formatPaisa,
   formatQuantity,
+  refundableAmount,
   type OrderStatus,
   type OrderType,
   type OrderView,
+  type PaymentEntry,
 } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { t } from '@/i18n';
@@ -21,7 +25,11 @@ import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { clockTime } from '@/lib/format';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
+import { useSession } from '@/lib/session';
 import { ORDER_TONES, TICKET_TONES } from '@/lib/tones';
+import { RefundSlipDialog } from '../pos/print-dialog';
+import { CorrectPaymentDialog } from './correct-payment-dialog';
+import { RefundDialog } from './refund-dialog';
 
 function placeOf(view: OrderView): string {
   return view.tableName ?? view.order.customerName ?? t(`orderType.${view.order.type}`);
@@ -147,10 +155,15 @@ export function OrdersScreen({ query = '' }: { query?: string }) {
 function OrderDetail({ orderId }: { orderId: string }) {
   const { data: view, error, loading, reload } = useApiQuery(() => getApi().getOrderView(orderId), [orderId]);
   const menu = useApiQuery(() => getApi().getMenu(), []);
+  const { data: session } = useSession();
+  const [refunding, setRefunding] = useState(false);
+  const [correcting, setCorrecting] = useState<PaymentEntry | null>(null);
+  const [slip, setSlip] = useState<PaymentEntry | null>(null);
   if (loading && !view) return <LoadingState />;
   if (!view) return <ErrorState message={error?.message} onRetry={reload} />;
   const { order, names } = view;
   const name = (id: string | null) => (id ? (names[id] ?? '—') : t('orders.system'));
+  const canFix = session?.permissions.includes('payment.refund') ?? false;
 
   return (
     <Card className="self-start">
@@ -164,7 +177,14 @@ function OrderDetail({ orderId }: { orderId: string }) {
             {order.invoiceNumber !== null && ` · ${t('print.invoice', { n: order.invoiceNumber })}`}
           </p>
         </div>
-        <Badge tone={ORDER_TONES[order.status]}>{t(`orderStatus.${order.status}`)}</Badge>
+        <div className="flex flex-col items-end gap-1">
+          <Badge tone={ORDER_TONES[order.status]}>{t(`orderStatus.${order.status}`)}</Badge>
+          {order.refundedTotal > 0 && (
+            <Badge tone="red">
+              <span data-refund-badge>{t(order.refundedTotal >= order.paidTotal ? 'orders.refunded' : 'orders.partRefunded')}</span>
+            </Badge>
+          )}
+        </div>
       </CardHeader>
       <CardBody className="space-y-4 text-sm">
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-slate-700">
@@ -205,20 +225,52 @@ function OrderDetail({ orderId }: { orderId: string }) {
         </section>
 
         {order.payments.length > 0 && (
-          <section>
+          <section data-payments>
             <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-slate-500">{t('orders.payments')}</h3>
-            <ul className="space-y-1">
-              {order.payments.map((p) => (
-                <li key={p.id} className="flex justify-between gap-2">
-                  <span>
-                    {t(`pos.method${p.method}`)} · {clockTime(p.createdAt)} · {name(p.receivedBy)}
-                    {p.reference && ` · ${p.reference}`}
-                    {p.tipAmount > 0 && ` · ${t('pos.tip')} ${formatPaisa(p.tipAmount)}`}
-                  </span>
-                  <span className="font-semibold tabular-nums">{formatPaisa(p.amount)}</span>
-                </li>
-              ))}
+            <ul className="space-y-2">
+              {order.payments.map((p) => {
+                const block = correctionBlock(p, order.payments, order.riderId);
+                return (
+                  <li key={p.id} data-payment={p.kind} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                    <span className={cn('min-w-0 flex-1', block === 'ALREADY_CORRECTED' && 'text-slate-400 line-through')}>
+                      {p.kind === 'REFUND' && <Badge tone="red" className="mr-1">{t('orders.kindRefund')}</Badge>}
+                      {p.kind === 'REVERSAL' && <Badge tone="amber" className="mr-1">{t('orders.kindReversal')}</Badge>}
+                      {p.kind === 'PAYMENT' && p.relatedPaymentId !== null && <Badge tone="green" className="mr-1">{t('orders.kindReplacement')}</Badge>}
+                      {t(`pos.method${p.method}`)} · {clockTime(p.createdAt)} · {name(p.receivedBy)}
+                      {p.reference && ` · ${p.reference}`}
+                      {p.tipAmount > 0 && ` · ${t('pos.tip')} ${formatPaisa(p.tipAmount)}`}
+                      {p.reason && ` · ${p.reason}`}
+                    </span>
+                    {block === 'ALREADY_CORRECTED' && <Badge tone="grey">{t('orders.corrected')}</Badge>}
+                    <span className="font-semibold tabular-nums">{p.kind === 'PAYMENT' ? '' : '− '}{formatPaisa(p.amount)}</span>
+                    {canFix && block === null && (
+                      <Button variant="ghost" onClick={() => setCorrecting(p)}>
+                        {t('orders.correct')}
+                      </Button>
+                    )}
+                    {p.kind === 'REFUND' && (
+                      <Button variant="ghost" onClick={() => setSlip(p)}>
+                        {t('orders.printSlip')}
+                      </Button>
+                    )}
+                    {canFix && block === 'RIDER_CASH' && <span className="basis-full text-xs text-slate-500" data-rider-cash-note>{t('orders.riderCashNote')}</span>}
+                  </li>
+                );
+              })}
             </ul>
+            {order.refundedTotal > 0 && (
+              <dl className="mt-2 space-y-0.5 border-t border-slate-200 pt-2" data-money-totals>
+                <div className="flex justify-between"><dt>{t('orders.paidTotal')}</dt><dd className="font-semibold tabular-nums">{formatPaisa(order.paidTotal)}</dd></div>
+                <div className="flex justify-between text-red-700"><dt>{t('orders.refundedTotal')}</dt><dd className="font-semibold tabular-nums">− {formatPaisa(order.refundedTotal)}</dd></div>
+                <div className="flex justify-between font-black"><dt>{t('orders.netTotal')}</dt><dd className="tabular-nums">{formatPaisa(order.paidTotal - order.refundedTotal)}</dd></div>
+              </dl>
+            )}
+            {canFix && refundableAmount(order.paidTotal, order.refundedTotal) > 0 && (
+              <Button variant="outline" className="mt-2" onClick={() => setRefunding(true)}>
+                <Undo2 className="size-5" aria-hidden />
+                {t('orders.refund')}
+              </Button>
+            )}
           </section>
         )}
 
@@ -270,6 +322,30 @@ function OrderDetail({ orderId }: { orderId: string }) {
           </ol>
         </section>
       </CardBody>
+      {refunding && (
+        <RefundDialog
+          order={order}
+          onClose={() => setRefunding(false)}
+          onDone={(_updated, refund) => {
+            setRefunding(false);
+            setSlip(refund);
+            reload();
+          }}
+        />
+      )}
+      {correcting && (
+        <CorrectPaymentDialog
+          order={order}
+          payment={correcting}
+          onClose={() => setCorrecting(null)}
+          onDone={() => {
+            setCorrecting(null);
+            reload();
+          }}
+        />
+      )}
+      {/* Waits for the reloaded order: the slip shows who refunded and the new refunded total. */}
+      {slip && order.payments.some((p) => p.id === slip.id) && <RefundSlipDialog order={order} refund={slip} placeLabel={placeOf(view)} refundedBy={name(slip.receivedBy)} onClose={() => setSlip(null)} />}
     </Card>
   );
 }

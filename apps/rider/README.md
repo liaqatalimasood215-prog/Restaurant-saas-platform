@@ -42,7 +42,8 @@ Colours are only the tokens in `src/app/globals.css`. `components/status-badge.t
 
 ## Where the data comes from
 
-- **Direct link, also on a phone:** sample deliveries kept in that browser. DEMO buttons stand in for the cashier.
+- **`/aziz-pizza/main` on this computer, with a Restaurant OS tab open:** the real demo orders of Restaurant OS through a hidden page (`/demo-link`), DEMO only. The start address opens this link.
+- **Other links, or a phone:** sample deliveries kept in that browser. DEMO buttons stand in for the cashier.
 - **Riders page of Restaurant OS** (phone frame or Open Full App): the real demo orders of Restaurant OS through a DEMO
   browser link (`src/lib/api/demo/demo-adapter.ts`, `apps/restaurant-os/src/screens/riders/rider-bridge.ts`). It works only
   in one browser, while the Restaurant OS tab stays open.

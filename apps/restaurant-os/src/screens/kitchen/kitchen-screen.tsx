@@ -15,7 +15,7 @@ import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useNow } from '@/lib/hooks/use-now';
 import { useSession } from '@/lib/session';
-import { playAlert, unlockSound } from '@/lib/sound';
+import { playTone, speak, unlockSound } from '@/lib/sound';
 import { TICKET_TONES } from '@/lib/tones';
 import { TicketCard } from './ticket-card';
 
@@ -67,7 +67,10 @@ export function KitchenScreen() {
     }
     const fresh = newIds.filter((id) => !seenNew.current?.has(id));
     fresh.forEach((id) => seenNew.current?.add(id));
-    if (fresh.length > 0 && soundOn) playAlert();
+    if (fresh.length > 0 && soundOn) {
+      playTone('TICKET');
+      speak({ roman: t('alerts.speech.newTicket.roman'), urdu: t('alerts.speech.newTicket.urdu'), hindi: t('alerts.speech.newTicket.hindi') });
+    }
   }, [tickets.data, soundOn]);
 
   const chooseStation = (id: string) => {

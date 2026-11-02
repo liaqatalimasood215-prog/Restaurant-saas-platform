@@ -27,6 +27,7 @@ async function newCustomer(options = phone, { firstVisit = false } = {}) {
   // Everyone except the first-visit check has already seen Login once.
   if (!firstVisit) {
     await context.addInitScript(() => {
+      window.localStorage.setItem('lala-demo-no-link', '1');
       for (const slug of ['lala-restaurant', 'aziz-pizza', 'demo-karahi']) window.localStorage.setItem(`lala-store-welcomed:${slug}`, 'true');
     });
   }
@@ -480,6 +481,8 @@ try {
   check('offline: the cart stays and ordering waits', await placeButton(page).isDisabled());
   await page.context().setOffline(false);
   await page.locator('[data-offline-banner]').waitFor({ state: 'detached' });
+  // The button also waits for the saved details to load, so it may open a moment after the message leaves.
+  await placeButton(page).and(page.locator(':enabled')).waitFor({ timeout: 5_000 });
   check('back online: the message leaves', !(await placeButton(page).isDisabled()));
   await page.goto(LALA);
   await page.locator('[data-popular]').waitFor();

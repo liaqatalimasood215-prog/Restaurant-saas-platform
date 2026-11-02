@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { WEBSITE_PREVIEW_DATA, WEBSITE_PREVIEW_READY } from '@restaurant-saas/shared';
+import { WEBSITE_PREVIEW_DATA, WEBSITE_PREVIEW_READY, type WebsitePreviewData } from '@restaurant-saas/shared';
 import { getApi } from '@/lib/api';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { CUSTOMER_APP_ORIGIN } from './online-parts';
@@ -11,8 +11,8 @@ import { CUSTOMER_APP_ORIGIN } from './online-parts';
  * page, says it is ready; this page answers with its menu, prices and switches, and again after every change.
  * While this page is closed, the website falls back to the last menu it got, or its own sample data.
  */
-export function useWebsiteBridge(): void {
-  const preview = useApiQuery(() => getApi().getWebsitePreview(), []);
+export function useWebsiteBridge(load: () => Promise<WebsitePreviewData> = () => getApi().getWebsitePreview()): void {
+  const preview = useApiQuery(load, []);
   const pages = useRef(new Set<Window>());
   const latest = useRef(preview.data);
 

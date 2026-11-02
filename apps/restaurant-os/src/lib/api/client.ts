@@ -14,6 +14,9 @@ import type {
   OnlineAppView,
   WebsiteConfig,
   WebsitePreviewData,
+  CustomerLinkOrder,
+  CustomerLinkPlaced,
+  CustomerLinkStatus,
   KitchenStation,
   KitchenTicketView,
   MenuCategory,
@@ -81,6 +84,10 @@ export interface SendRoundInput {
   items: DraftItemInput[];
   /** One key per tap of "Send to kitchen": a double tap or retry never creates a second round. */
   idempotencyKey: string;
+  /** Add to this open sub-order; missing = the table's first open one */
+  orderId?: Uuid | null;
+  /** A new customer sat at the table: start a new sub-order (T1-2) */
+  newSubOrder?: boolean;
   /** Optional customer for a dine-in bill made at the POS */
   customerName?: string;
   customerPhone?: string;
@@ -102,6 +109,15 @@ export interface HeldBillInput {
   discount: DiscountChoice | null;
 }
 
+export interface RecordTablePaymentInput {
+  tableId: Uuid;
+  method: PaymentMethod;
+  cashReceived: number | null;
+  reference: string | null;
+  /** One key per tap: a double tap never pays twice. */
+  idempotencyKey: string;
+}
+
 export interface RecordPaymentInput {
   orderId: Uuid;
   method: PaymentMethod;
@@ -114,6 +130,27 @@ export interface RecordPaymentInput {
   /** Card slip or wallet transfer reference */
   reference: string | null;
   /** One key per tap of "Record payment": a double tap never records two payments. */
+  idempotencyKey: string;
+}
+
+export interface RefundInput {
+  orderId: Uuid;
+  /** Paisa given back; full or part of what was paid */
+  amount: number;
+  method: PaymentMethod;
+  reference: string | null;
+  reason: string;
+  /** One key per refund dialog: a double tap never gives money back twice. */
+  idempotencyKey: string;
+}
+
+export interface CorrectPaymentInput {
+  orderId: Uuid;
+  paymentId: Uuid;
+  /** The method it should have been */
+  method: PaymentMethod;
+  reference: string | null;
+  reason: string;
   idempotencyKey: string;
 }
 
@@ -292,8 +329,14 @@ export interface ApiClient {
   printPreBill(orderId: Uuid): Promise<Order>;
   /** Records one payment (split payments = several calls); the order becomes PAID when covered. */
   recordPayment(input: RecordPaymentInput): Promise<Order>;
+  /** One bill for everyone: every open sub-order of the table is paid in full, each with its own invoice. */
+  recordTablePayment(input: RecordTablePaymentInput): Promise<void>;
   /** Counts receipt prints; every print after the first is marked DUPLICATE. */
   printReceipt(orderId: Uuid): Promise<Order>;
+  /** Owner or Manager: money given back, as a new entry. The payment and the order status do not change. */
+  refundPayment(input: RefundInput): Promise<Order>;
+  /** Owner or Manager: a payment recorded with the wrong method is reversed and replaced by the right one. */
+  correctPayment(input: CorrectPaymentInput): Promise<Order>;
 
   /** Orders list (today or all), newest first, with the names the screens need. */
   listOrders(filter: OrderFilter): Promise<OrderView[]>;
@@ -423,6 +466,12 @@ export interface DemoControls {
   demoLogin(userId: Uuid): void;
   /** Stands in for the Customer App (Phase 2): a customer places a delivery or pickup order. */
   simulateCustomerOrder(type: Exclude<OrderType, 'DINE_IN'>): Promise<Order>;
+  /** DEMO link with the customer website in this browser (Phase 4: the real API). */
+  receiveCustomerOrder(input: CustomerLinkOrder): Promise<CustomerLinkPlaced>;
+  customerLinkStatus(tokens: string[]): CustomerLinkStatus[];
+  websiteLinkData(): Promise<WebsitePreviewData>;
+  /** False only on the hidden link page while no Restaurant OS tab has answered. */
+  linkReady(): boolean;
   /** Stands in for the Rider App (Phase 3): Picked up – On the way, then Delivered + cash collected. */
   simulateRiderStep(orderId: Uuid): Promise<Order>;
   /** DEMO link to the Rider App (screens/riders/rider-bridge.ts); from Phase 4 both apps use the API. */

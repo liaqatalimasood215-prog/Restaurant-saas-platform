@@ -1,4 +1,4 @@
-import { formatPaisa, formatQuantity, type Order } from '@restaurant-saas/shared';
+import { activePayments, formatPaisa, formatQuantity, type Order, type PaymentEntry } from '@restaurant-saas/shared';
 import type { Session as ApiSession } from '@/lib/api';
 import { t } from '@/i18n';
 
@@ -7,6 +7,38 @@ export type PrintKind = 'PRE_BILL' | 'RECEIPT' | 'DUPLICATE';
 function dateTime(iso: string): string {
   const d = new Date(iso);
   return `${d.toLocaleDateString('en-GB')} ${d.toLocaleTimeString('en-PK', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+}
+
+/** 80 mm refund slip (MASTER_PROMPT.md §8): what went back, how, why and who gave it. */
+export function PrintableRefundSlip({ order, refund, session, tableName, refundedBy }: { order: Order; refund: PaymentEntry; session: ApiSession; tableName: string; refundedBy: string }) {
+  const { branch } = session;
+  const row = (label: string, value: string, bold = false) => (
+    <div className={bold ? 'flex justify-between gap-2 text-base font-black' : 'flex justify-between gap-2'}>
+      <span>{label}</span>
+      <span className="text-right">{value}</span>
+    </div>
+  );
+  return (
+    <div className="mx-auto w-[72mm] bg-white p-3 font-mono text-[12px] leading-snug text-black" data-refund-slip>
+      <p className="text-center text-sm font-black">{branch.receiptHeader}</p>
+      <p className="text-center">{branch.address}</p>
+      <p className="text-center">{branch.phone}</p>
+      <p className="my-2 border-y border-dashed border-black py-1 text-center text-sm font-black">{t('print.refundSlip')}</p>
+      {order.invoiceNumber !== null && <p>{t('print.invoice', { n: order.invoiceNumber })}</p>}
+      <p>{t('print.order', { n: order.dailyNumber })}</p>
+      <p>{dateTime(refund.createdAt)}</p>
+      <p>{order.tableId ? t('print.table', { table: tableName }) : tableName}</p>
+      <div className="my-2 border-t border-dashed border-black pt-1">
+        {row(t('print.refundAmount'), formatPaisa(refund.amount), true)}
+        {row(t('print.refundMethod'), t(`pos.method${refund.method}`))}
+        {refund.reference && row(t('print.refundReference'), refund.reference)}
+        {row(t('print.refundReason'), refund.reason ?? '')}
+        {row(t('print.refundedTotal'), formatPaisa(order.refundedTotal))}
+      </div>
+      <p>{t('print.refundBy', { name: refundedBy })}</p>
+      <p className="mt-1 text-center font-black">{t('print.demo')}</p>
+    </div>
+  );
 }
 
 /**
@@ -83,8 +115,7 @@ export function PrintableBill({
 
       {kind !== 'PRE_BILL' && order.payments.length > 0 && (
         <div className="mt-2 border-t border-dashed border-black pt-1">
-          {order.payments
-            .filter((p) => p.kind === 'PAYMENT')
+          {activePayments(order.payments)
             .map((p) => (
               <div key={p.id}>
                 {line(t(`pos.method${p.method}`), p.amount)}

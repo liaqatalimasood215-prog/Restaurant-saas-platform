@@ -45,7 +45,7 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 - **Phase 3 Rider App and the Riders page built 2026-11-01 (DEMO), waiting for the owner's review** (owner: "Haan, shuru karo"): `apps/rider`, port 3002,
   `pnpm --filter @restaurant-saas/rider walkthrough`, `walkthrough:riders` in Restaurant OS. Direct link and phone = sample data; Riders page frame and
   Open Full App = Restaurant OS orders through a DEMO link in one browser. Rules: `packages/shared/src/riders.ts`. Notes: `apps/rider/README.md`.
-- **Next (only after approval):** refunds, then Phase 4 backend. Online App steps E–H are paused. Details and open questions: `PROGRESS.md` §9–§10.
+- **Refunds and Correct Payment (`walkthrough:refunds`) and the DEMO connection built 2026-11-02, waiting for his review** (`walkthrough:connected`: website → cashier → kitchen → rider → customer, table flow, voices; hidden page `/demo-link`, Aziz Pizza links, one browser, a Restaurant OS tab open; never let that page use storage). **Next (only after approval):** the Phase 1 gate and the rest of the frontend, then Phase 4 backend (owner: all frontend first). Online App steps E–H are paused. Details and open questions: `PROGRESS.md` §9–§10.
 - The Online App page previews the real customer website; the Riders page previews the real Rider App.
 - Never start a phase until the owner says "shuru karo" or approves it. Never push, deploy or
   connect a paid service without the owner's approval.
@@ -62,6 +62,9 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
   vibrates and speaks "Counter par aayein" (free browser voice).
 - Owner/Manager may give a discount (reason required) also on a new bill; the Cashier may not.
 - The POS fits one screen (tested at 1278×627, 1440×900, 1024×768); totals and Send to Kitchen / Bill Now
+- **Sub-orders (owner, 2026-11-02):** a desi restaurant in a rush: strangers share a table and come and go at different times. Each customer is an **own order** on the table (T1-1, T1-2): own bill, own invoice.
+  Waiter or POS: open the table, **New sub-order**. At the counter: Table → T1 → the list shows each customer by what they had (Call Waiter if unsure) → tap one → bill only that. Paid customers leave the list, the others stay;
+  the number keeps going while anyone is seated (T1-3), and the table is free when no sub-order is open. "Whole table on one bill" pays all open sub-orders, each keeps its invoice. A table with one customer stays plain "T1". Rules: `packages/shared/src/sub-orders.ts`; `walkthrough:sub-orders`.
   stay visible. Product pictures are emoji until real photos (Phase 7).
 
 ## Riders — owner decisions (2026-11-01)

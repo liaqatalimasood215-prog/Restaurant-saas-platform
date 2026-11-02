@@ -181,6 +181,21 @@ function DayReport({ view }: { view: DaySummaryView }) {
             rows={s.refunds.map((r, i) => ({ key: `${r.orderId}-${i}`, order: r.dailyNumber, what: t(`summary.methods.${r.method}`), amount: r.amount, reason: r.reason ?? '', by: name(r.by) }))}
             empty={t('summary.noRefunds')}
           />
+          <p className="mt-2 text-xs text-slate-500">{t('summary.refundDayHint')}</p>
+        </Panel>
+
+        <Panel icon={Undo2} title={t('summary.correctionList', { n: s.corrections.length })}>
+          <WhoWhy
+            rows={s.corrections.map((c, i) => ({
+              key: `${c.orderId}-${i}`,
+              order: c.dailyNumber,
+              what: `${t(`summary.methods.${c.from}`)} → ${c.to ? t(`summary.methods.${c.to}`) : '—'}`,
+              amount: c.amount,
+              reason: c.reason ?? '',
+              by: name(c.by),
+            }))}
+            empty={t('summary.noCorrections')}
+          />
         </Panel>
 
         <Panel icon={ListOrdered} title={t('summary.cancelled', { n: s.cancelled.length })}>

@@ -24,6 +24,8 @@ const phone = phoneAt(390);
 
 async function newRider(options = phone) {
   const context = await browser.newContext(options);
+  // These checks use sample data; walkthrough:connected checks the link with Restaurant OS.
+  await context.addInitScript(() => window.localStorage.setItem('lala-demo-no-link', '1'));
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
   page.errors = [];
@@ -67,9 +69,11 @@ const backHome = (page) => page.getByRole('link', { name: 'Back to deliveries' }
 console.log('Login: phone + PIN (DEMO)');
 const page = await newRider();
 await page.goto(BASE);
-await page.waitForURL(LALA);
+await page.waitForURL(AZIZ);
+check('the start address opens the restaurant that is in Restaurant OS', true);
+await page.goto(LALA);
 await page.locator('[data-login-account]').first().waitFor();
-check('the start address opens the LALA link and asks to log in', true);
+check('the LALA link asks to log in', true);
 check('the LALA picture is loaded', await page.locator('[data-login] img').first().evaluate((img) => img.complete && img.naturalWidth > 0));
 check('phone and PIN fields have names', (await page.getByLabel('Phone Number').count()) === 1 && (await page.getByLabel('PIN / Password').count()) === 1);
 check('no sign-up button', (await page.getByRole('button', { name: /sign.?up/i }).count()) === 0 && (await page.getByRole('link', { name: /sign.?up/i }).count()) === 0);

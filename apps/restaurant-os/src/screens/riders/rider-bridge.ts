@@ -20,7 +20,7 @@ export const riderShareUrl = (path: string) => (LAN_ADDRESS ? `http://${LAN_ADDR
 export function useRiderBridge(): void {
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== RIDER_APP_ORIGIN || !event.source) return;
+      if (event.origin !== RIDER_APP_ORIGIN || !event.source || !getDemoControls().linkReady()) return;
       const page = event.source as Window;
       const message = event.data as { type?: string; riderId?: unknown; id?: unknown; command?: Parameters<ReturnType<typeof getDemoControls>['riderLinkCommand']>[0] } | null;
       if (message?.type === RIDER_LINK_ASK) {

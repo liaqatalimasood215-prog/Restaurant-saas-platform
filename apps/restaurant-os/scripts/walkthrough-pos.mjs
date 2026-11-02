@@ -227,6 +227,8 @@ await waiter.getByRole('tab', { name: /^Order/ }).click();
 await waiter.getByRole('button', { name: 'Send to kitchen' }).click();
 await waiter.getByText(/sent to the kitchen/).first().waitFor();
 await cashier.bringToFront();
+// The other tab's table list needs a moment to hear about the waiter's order (DEMO sync).
+await cashier.waitForTimeout(3000);
 await bill(cashier).getByRole('radio', { name: /^Table/ }).click();
 await cashier.getByRole('dialog').getByRole('button', { name: /^T5 —/ }).click();
 await waitText(cashier, 'T5 · Order #4');

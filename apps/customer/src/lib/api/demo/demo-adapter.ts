@@ -1,7 +1,9 @@
 // DEMO
-import { WEBSITE_PREVIEW_DATA, WEBSITE_PREVIEW_READY, amountToMinimum, calculateBill, formatOpeningHours, isWebsitePreviewData, nextTrackingStep, normalizePhone, unitPriceFor, type DraftItemInput, type WebsitePreviewData } from '@restaurant-saas/shared';
+import { CUSTOMER_LINK_ORDER, CUSTOMER_LINK_RESULT, CUSTOMER_LINK_STATUS, CUSTOMER_LINK_TRACK, WEBSITE_PREVIEW_DATA, WEBSITE_PREVIEW_READY, amountToMinimum, calculateBill, formatOpeningHours, isFinalStatus, isWebsitePreviewData, nextTrackingStep, normalizePhone, unitPriceFor, type CustomerLinkOrder, type CustomerLinkPlaced, type CustomerLinkStatus, type DraftItemInput, type WebsitePreviewData } from '@restaurant-saas/shared';
+import { en } from '@/i18n/en';
 import { rs } from '../../format';
 import { checkOrderDetails, stepsKind } from '../../order-rules';
+import { announce } from '../../sound';
 import { ApiError, ORDER_MODES, type CustomerOrder, type CustomerProfile, type CustomerStore, type DemoControls, type PlaceOrderInput, type StoreApi } from '../client';
 import { DEMO_CLOSED_AT_START, DEMO_RIDER, DEMO_STORES } from './seed';
 
@@ -19,6 +21,15 @@ const KEY = 'lala-store-demo-v2';
 const RESTAURANT_OS_ORIGIN = 'http://localhost:3000';
 const PREVIEW_KEY = 'lala-store-preview';
 const PREVIEW_WAIT_MS = 800;
+/** The hidden frame has to load first. */
+const FRAME_WAIT_MS = 3000;
+const FRAME_ASK_EVERY_MS = 300;
+const FRAME_ASKS = 100;
+const TRACK_EVERY_MS = 1500;
+const ORDER_ANSWER_MS = 8000;
+/** Only the restaurant in Restaurant OS, on this computer: a phone has no Restaurant OS data and keeps sample data. */
+const LINKED_PATH = '/aziz-pizza/main';
+const NO_LINK_KEY = 'lala-demo-no-link';
 
 interface DemoState {
   /** "restaurant/branch" → switches */
@@ -43,13 +54,19 @@ export class DemoAdapter implements StoreApi, DemoControls {
   private preview: WebsitePreviewData | null = null;
   private previewAsked = false;
   private previewArrival: Promise<void> = Promise.resolve();
+  private host: Window | null = null;
+  private readonly pendingOrders = new Map<string, { resolve: (placed: CustomerLinkPlaced) => void; reject: (err: Error) => void }>();
 
   /** Asks Restaurant OS once; the first answer is waited for briefly, so the sample menu does not flash first. */
   private askRestaurantOs(): void {
     if (this.previewAsked) return;
     this.previewAsked = true;
-    const host = window.parent !== window ? window.parent : (window.opener as Window | null);
+    const opened = window.parent !== window ? window.parent : (window.opener as Window | null);
+    const frame = opened ? null : this.openLinkFrame();
+    const host = opened ?? frame?.contentWindow ?? null;
     if (!host) return;
+    this.host = host;
+    this.listenToLink();
     try {
       const kept: unknown = JSON.parse(window.sessionStorage.getItem(PREVIEW_KEY) ?? 'null');
       if (isWebsitePreviewData(kept)) this.preview = kept;
@@ -58,7 +75,16 @@ export class DemoAdapter implements StoreApi, DemoControls {
     }
     this.previewArrival = new Promise<void>((resolve) => {
       if (this.preview) resolve();
-      setTimeout(resolve, PREVIEW_WAIT_MS);
+      setTimeout(resolve, frame ? FRAME_WAIT_MS : PREVIEW_WAIT_MS);
+      // The frame answers only once its page has started, so keep saying ready until it does.
+      if (frame) {
+        let asks = 0;
+        const asking = window.setInterval(() => {
+          asks += 1;
+          if (this.preview || asks > FRAME_ASKS) return window.clearInterval(asking);
+          host.postMessage({ type: WEBSITE_PREVIEW_READY }, RESTAURANT_OS_ORIGIN);
+        }, FRAME_ASK_EVERY_MS);
+      }
       window.addEventListener('message', (event) => {
         if (event.origin !== RESTAURANT_OS_ORIGIN || event.data?.type !== WEBSITE_PREVIEW_DATA || !isWebsitePreviewData(event.data.data)) return;
         this.preview = event.data.data;
@@ -72,6 +98,69 @@ export class DemoAdapter implements StoreApi, DemoControls {
       });
     });
     host.postMessage({ type: WEBSITE_PREVIEW_READY }, RESTAURANT_OS_ORIGIN);
+  }
+
+  /** A direct visit on this computer reaches Restaurant OS through a hidden page of it (apps/restaurant-os/src/app/demo-link). */
+  private openLinkFrame(): HTMLIFrameElement | null {
+    if (window.location.hostname !== 'localhost' || !window.location.pathname.startsWith(LINKED_PATH)) return null;
+    try {
+      if (window.localStorage.getItem(NO_LINK_KEY)) return null;
+    } catch {
+      return null;
+    }
+    const frame = document.createElement('iframe');
+    frame.src = `${RESTAURANT_OS_ORIGIN}/demo-link`;
+    frame.hidden = true;
+    frame.title = 'DEMO link';
+    document.body.append(frame);
+    return frame;
+  }
+
+  /** Answers to orders, and the steps of orders that went to Restaurant OS. */
+  private listenToLink(): void {
+    window.addEventListener('message', (event) => {
+      if (event.origin !== RESTAURANT_OS_ORIGIN) return;
+      if (event.data?.type === CUSTOMER_LINK_RESULT) {
+        const waiting = this.pendingOrders.get(event.data.id);
+        this.pendingOrders.delete(event.data.id);
+        if (event.data.error) waiting?.reject(new ApiError('CONFLICT', String(event.data.error)));
+        else waiting?.resolve(event.data.placed as CustomerLinkPlaced);
+      } else if (event.data?.type === CUSTOMER_LINK_STATUS && Array.isArray(event.data.orders)) {
+        this.applyLinkStatus(event.data.orders as CustomerLinkStatus[]);
+      }
+    });
+    window.setInterval(() => {
+      const tokens = this.read().orders.filter((o) => o.linked && !isFinalStatus(o.status)).map((o) => o.token);
+      if (tokens.length > 0) this.host?.postMessage({ type: CUSTOMER_LINK_TRACK, tokens }, RESTAURANT_OS_ORIGIN);
+    }, TRACK_EVERY_MS);
+  }
+
+  private applyLinkStatus(updates: CustomerLinkStatus[]): void {
+    let changed = false;
+    for (const update of updates) {
+      const order = this.read().orders.find((o) => o.token === update.token);
+      if (!order || order.status === update.status) continue;
+      order.status = update.status;
+      order.prepMinutes = update.prepMinutes;
+      order.history = update.history;
+      order.rider = update.riderName ? { name: update.riderName, plate: 'DEMO' } : null;
+      changed = true;
+      // One open tab of the customer speaks, not every tab.
+      const speech = en.speech[update.status as keyof typeof en.speech];
+      if (speech && document.visibilityState === 'visible') announce(speech);
+    }
+    if (changed) this.write();
+  }
+
+  private sendToRestaurantOs(order: CustomerLinkOrder): Promise<CustomerLinkPlaced> {
+    const id = crypto.randomUUID();
+    return new Promise<CustomerLinkPlaced>((resolve, reject) => {
+      this.pendingOrders.set(id, { resolve, reject });
+      this.host?.postMessage({ type: CUSTOMER_LINK_ORDER, id, order }, RESTAURANT_OS_ORIGIN);
+      setTimeout(() => {
+        if (this.pendingOrders.delete(id)) reject(new ApiError('CONFLICT', 'Restaurant OS is not answering. Open it on this computer and try again.'));
+      }, ORDER_ANSWER_MS);
+    });
   }
 
   private read(): DemoState {
@@ -208,12 +297,18 @@ export class DemoAdapter implements StoreApi, DemoControls {
     if (amountToMinimum(totals.itemsSubtotal, store.minOrder) > 0) {
       throw new ApiError('CONFLICT', `The minimum order is ${rs(store.minOrder)}.`);
     }
+    // Restaurant OS makes the one order and prices it; this page keeps a copy for its tracking screen.
+    const linked =
+      store.fromRestaurantOs && this.host && input.mode !== 'DINE_IN'
+        ? await this.sendToRestaurantOs({ type: input.mode, name: input.name, phone: input.phone, address: input.address, note: input.note, lines: input.lines, idempotencyKey: input.idempotencyKey })
+        : null;
     const today = new Date().toISOString().slice(0, 10);
     const counterKey = `${input.restaurantSlug}/${input.branchSlug}/${today}`;
-    const dailyNumber = (state.dailyCounters[counterKey] ?? 0) + 1;
-    state.dailyCounters[counterKey] = dailyNumber;
-    const token = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    const dailyNumber = linked ? linked.dailyNumber : (state.dailyCounters[counterKey] ?? 0) + 1;
+    if (!linked) state.dailyCounters[counterKey] = dailyNumber;
+    const token = linked ? linked.token : [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, '0')).join('');
     state.orders.unshift({
+      linked: Boolean(linked),
       token,
       restaurantSlug: input.restaurantSlug,
       branchSlug: input.branchSlug,
@@ -232,8 +327,8 @@ export class DemoAdapter implements StoreApi, DemoControls {
       note: input.note.trim(),
       items: items.map((i) => ({ name: i.name, variantName: i.variantName, modifiers: i.modifiers, quantity: i.quantity, unit: i.unit, lineTotal: i.lineTotal, note: i.note })),
       lines: input.lines,
-      totals,
-      prepMinutes: store.defaultPrepMinutes,
+      totals: linked ? linked.totals : totals,
+      prepMinutes: linked ? linked.prepMinutes : store.defaultPrepMinutes,
       history: [{ status: 'PLACED', at: new Date().toISOString() }],
     });
     state.idempotency[input.idempotencyKey] = token;

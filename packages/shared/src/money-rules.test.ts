@@ -2,21 +2,25 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   NO_TAX,
+  activePayments,
   amountDue,
   calculateBill,
   can,
   cashChange,
   checkPaymentAmount,
+  checkPaymentCorrection,
   checkRefund,
   checkTransition,
   formatPaisa,
   isFullyPaid,
+  refundableAmount,
   summarizeMoney,
   tableStatusFor,
   unitPriceFor,
   type BillLine,
   type BillSettings,
   type MoneyEntry,
+  type RecordedEntry,
 } from './index';
 
 // DEMO test data (MASTER_PROMPT.md §12): tax 0%, service charge off.
@@ -185,4 +189,44 @@ test('a reversal cancels a wrongly recorded payment and its tip', () => {
 test('cash must cover payment and tip', () => {
   assert.equal(cashChange({ amount: 45000, tipAmount: 0, cashReceived: 50000 }), 5000);
   assert.throws(() => cashChange({ amount: 45000, tipAmount: 10000, cashReceived: 50000 }));
+});
+
+const entry = (id: string, kind: RecordedEntry['kind'], method: RecordedEntry['method'], receivedBy = 'cashier', relatedPaymentId: string | null = null): RecordedEntry => ({ id, kind, method, receivedBy, relatedPaymentId });
+
+test('what can be refunded leaves out what was already given back', () => {
+  assert.equal(refundableAmount(590000, 0), 590000);
+  assert.equal(refundableAmount(590000, 45000), 545000);
+  assert.equal(refundableAmount(50000, 50000), 0);
+});
+
+test('a corrected payment no longer counts on the receipt; its replacement does', () => {
+  const wrong = entry('p1', 'PAYMENT', 'CASH');
+  const reversal = entry('r1', 'REVERSAL', 'CASH', 'manager', 'p1');
+  const right = entry('p2', 'PAYMENT', 'CARD', 'manager', 'r1');
+  assert.deepEqual(activePayments([wrong, reversal, right]).map((e) => e.id), ['p2']);
+  assert.deepEqual(activePayments([wrong, entry('x', 'REFUND', 'CASH')]).map((e) => e.id), ['p1']);
+});
+
+test('a correction changes the method only and leaves the money the same', () => {
+  const money = summarizeMoney([
+    { kind: 'PAYMENT', method: 'CASH', amount: 590000, tipAmount: 10000 },
+    { kind: 'REVERSAL', method: 'CASH', amount: 590000, tipAmount: 10000 },
+    { kind: 'PAYMENT', method: 'CARD', amount: 590000, tipAmount: 10000 },
+  ]);
+  assert.deepEqual(money, { paidTotal: 590000, refundedTotal: 0, tipTotal: 10000 });
+});
+
+test('a correction needs a new method and a reason, once, and never on a rider\'s cash', () => {
+  const wrong = entry('p1', 'PAYMENT', 'CASH');
+  const base = { entry: wrong, entries: [wrong], method: 'CARD' as const, riderId: null, reason: 'Pressed the wrong button' };
+  assert.deepEqual(checkPaymentCorrection(base), { ok: true });
+  assert.deepEqual(checkPaymentCorrection({ ...base, method: 'CASH' }), { ok: false, reason: 'SAME_METHOD' });
+  assert.deepEqual(checkPaymentCorrection({ ...base, reason: '  ' }), { ok: false, reason: 'REASON_REQUIRED' });
+  const refund = entry('x', 'REFUND', 'CASH');
+  assert.deepEqual(checkPaymentCorrection({ ...base, entry: refund, entries: [wrong, refund] }), { ok: false, reason: 'NOT_A_PAYMENT' });
+  const reversal = entry('r1', 'REVERSAL', 'CASH', 'manager', 'p1');
+  assert.deepEqual(checkPaymentCorrection({ ...base, entries: [wrong, reversal] }), { ok: false, reason: 'ALREADY_CORRECTED' });
+  const riderCash = entry('p3', 'PAYMENT', 'CASH', 'rider-1');
+  assert.deepEqual(checkPaymentCorrection({ ...base, entry: riderCash, entries: [riderCash], riderId: 'rider-1' }), { ok: false, reason: 'RIDER_CASH' });
+  assert.deepEqual(checkPaymentCorrection({ ...base, riderId: 'rider-1' }), { ok: true }, "the counter's payment on a delivery order can be corrected");
 });

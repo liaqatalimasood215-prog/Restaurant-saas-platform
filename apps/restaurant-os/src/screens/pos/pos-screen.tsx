@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { BellRing, ChevronDown, ListOrdered, Pause, Plus, Search } from 'lucide-react';
-import { formatPaisa, type MenuItem, type OrderView, type TableBoardEntry } from '@restaurant-saas/shared';
+import { formatPaisa, orderPlaceName, type MenuItem, type OrderView, type TableBoardEntry } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
 import { useNotifications } from '@/components/shell/notifications';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
 import { addToCart, type CartLine } from '../waiter/cart';
 import { ItemDialog } from '../waiter/item-dialog';
+import { subOrderItems } from '../waiter/sub-order';
 import { CurrentBill } from './current-bill';
 import { newDraft, type Draft } from './draft';
 import { MenuPanel } from './menu-panel';
@@ -61,7 +62,8 @@ export function PosScreen({ tableId }: { tableId?: string }) {
   }
 
   const tables = floor.data.tables;
-  const openTables = tables.filter((e): e is OpenEntry => e.order !== null);
+  // Every customer's own bill: a shared table has one for each sub-order.
+  const openTables: OpenEntry[] = tables.flatMap((e) => e.orders.map((order) => ({ ...e, order })));
   const openTable = (entry: TableBoardEntry) => setDraftState({ ...newDraft('DINE_IN'), tableId: entry.table.id, orderId: entry.order?.id ?? null });
   // Opened from a notification link (/pos?table=…): open that table's bill once.
   if (initialTable) {
@@ -137,14 +139,15 @@ export function PosScreen({ tableId }: { tableId?: string }) {
                   <div className="flex flex-wrap gap-2">
                     {openTables.map((entry) => (
                       <button
-                        key={entry.table.id}
+                        key={entry.order.id}
                         type="button"
                         onClick={() => choose({ ...newDraft('DINE_IN'), tableId: entry.table.id, orderId: entry.order.id })}
                         className={chip(draft.orderId === entry.order.id)}
                       >
-                        <span className="text-base font-black">{entry.table.name}</span>
-                        <span className={cn('text-xs', entry.status === 'BILL_REQUESTED' ? 'text-amber-700' : 'text-slate-500')}>
-                          {t(`tableStatus.${entry.status}`)}
+                        <span className="text-base font-black">{orderPlaceName(entry.table.name, entry.order)}</span>
+                        {entry.order.tableShared && <span className="max-w-40 truncate text-xs text-slate-700">{subOrderItems(entry.order)}</span>}
+                        <span className={cn('text-xs', entry.order.status === 'BILL_REQUESTED' ? 'text-amber-700' : 'text-slate-500')}>
+                          {t(`tableStatus.${entry.order.status === 'BILL_REQUESTED' ? 'BILL_REQUESTED' : 'OCCUPIED'}`)}
                         </span>
                         <span className="tabular-nums">{formatPaisa(entry.order.totals.total)}</span>
                       </button>
@@ -239,7 +242,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
                   className="min-h-10 px-2"
                   onClick={() => {
                     const entry = tables.find((e) => e.table.id === n.tableId);
-                    if (entry) openTable(entry);
+                    if (entry) setDraftState({ ...newDraft('DINE_IN'), tableId: entry.table.id, orderId: n.orderId });
                   }}
                 >
                   {t('pos.open')}

@@ -7,6 +7,7 @@ import { ToastProvider } from '@/components/ui/toast';
 import { useSession } from '@/lib/session';
 import { registerServiceWorker } from '@/lib/pwa';
 import { LoginScreen } from '@/screens/login-screen';
+import { useCustomerLink } from '@/screens/online-app/customer-link';
 import { useRiderBridge } from '@/screens/riders/rider-bridge';
 import { BottomNav } from './bottom-nav';
 import { Header } from './header';
@@ -24,7 +25,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => registerServiceWorker(), []);
   useRiderBridge();
+  useCustomerLink();
 
+  // The hidden DEMO link frame of the customer website and the Rider App shows nothing.
+  if (pathname === '/demo-link') return <>{children}</>;
   // The activation page is opened from the Owner's link before the person can log in.
   if (pathname === '/activate') return <ToastProvider>{children}</ToastProvider>;
 

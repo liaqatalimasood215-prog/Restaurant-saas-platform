@@ -180,9 +180,10 @@ function TableCard({
   onCleaning: ((cleaning: boolean) => void) | null;
   onEdit: (() => void) | null;
 }) {
-  const { table, status, order } = entry;
-  const preparing = order?.tickets.filter((tk) => tk.status === 'NEW' || tk.status === 'PREPARING').length ?? 0;
-  const ready = order?.tickets.filter((tk) => tk.status === 'READY').length ?? 0;
+  const { table, status, order, orders } = entry;
+  const tickets = orders.flatMap((o) => o.tickets);
+  const preparing = tickets.filter((tk) => tk.status === 'NEW' || tk.status === 'PREPARING').length;
+  const ready = tickets.filter((tk) => tk.status === 'READY').length;
   const outOfService = status === 'OUT_OF_SERVICE';
 
   const body = (
@@ -193,7 +194,10 @@ function TableCard({
       </div>
       {order && (
         <>
-          <span className="text-lg font-extrabold text-slate-900">{formatPaisa(order.totals.total)}</span>
+          <span className="text-lg font-extrabold text-slate-900">
+            {formatPaisa(orders.reduce((sum, o) => sum + o.totals.total, 0))}
+            {orders.length > 1 && <span className="ml-2 text-xs font-bold text-slate-600">{t('tables.subOrders', { n: orders.length })}</span>}
+          </span>
           <span className="flex items-center gap-2 truncate text-xs text-slate-600">
             <span className="flex shrink-0 items-center gap-1 font-semibold">
               <Clock className="size-3.5" aria-hidden />

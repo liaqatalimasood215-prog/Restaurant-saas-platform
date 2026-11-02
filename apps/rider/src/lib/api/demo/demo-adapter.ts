@@ -35,6 +35,12 @@ const PICKUPS_KEY = 'lala-rider-pickups-v1';
 const RESTAURANT_OS_ORIGIN = 'http://localhost:3000';
 const ASK_EVERY_MS = 1000;
 const FIRST_ANSWER_MS = 800;
+/** The hidden frame has to load first. */
+const FRAME_FIRST_ANSWER_MS = 3000;
+const FRAME_GIVE_UP_AFTER_ASKS = 30;
+/** Only the restaurant in Restaurant OS, on this computer: a phone has no Restaurant OS data and keeps sample data. */
+const LINKED_PATH = '/aziz-pizza/main';
+const NO_LINK_KEY = 'lala-demo-no-link';
 const LOST_AFTER_MS = 4000;
 const GIVE_UP_AFTER_ASKS = 5;
 
@@ -81,6 +87,7 @@ export class DemoAdapter implements RiderApi, DemoControls {
   private listening = false;
   private readonly listeners = new Set<() => void>();
   private readonly host: Window | null;
+  private readonly inFrame: boolean;
   /** The opener or the frame's parent keeps the login per tab, so two riders can sit side by side. */
   private readonly sessionStore: () => Storage;
   private session: DemoSession | null = null;
@@ -93,8 +100,26 @@ export class DemoAdapter implements RiderApi, DemoControls {
   private readonly pending = new Map<string, { resolve: () => void; reject: (err: Error) => void }>();
 
   constructor() {
-    this.host = window.parent !== window ? window.parent : ((window.opener as Window | null) ?? null);
-    this.sessionStore = () => (this.host ? window.sessionStorage : window.localStorage);
+    const opened = window.parent !== window ? window.parent : ((window.opener as Window | null) ?? null);
+    this.sessionStore = () => (opened ? window.sessionStorage : window.localStorage);
+    this.host = opened ?? this.openLinkFrame();
+    this.inFrame = !opened && this.host !== null;
+  }
+
+  /** A direct visit on this computer reaches Restaurant OS through a hidden page of it (apps/restaurant-os/src/app/demo-link). */
+  private openLinkFrame(): Window | null {
+    if (window.location.hostname !== 'localhost' || !window.location.pathname.startsWith(LINKED_PATH)) return null;
+    try {
+      if (window.localStorage.getItem(NO_LINK_KEY)) return null;
+    } catch {
+      return null;
+    }
+    const frame = document.createElement('iframe');
+    frame.src = `${RESTAURANT_OS_ORIGIN}/demo-link`;
+    frame.hidden = true;
+    frame.title = 'DEMO link';
+    document.body.append(frame);
+    return frame.contentWindow;
   }
 
   // ── DEMO link to Restaurant OS ───────────────────────────────────────────────────────────
@@ -105,7 +130,7 @@ export class DemoAdapter implements RiderApi, DemoControls {
     let asks = 0;
     const ask = () => {
       asks += 1;
-      if (!this.link && asks > GIVE_UP_AFTER_ASKS) return window.clearInterval(timer);
+      if (!this.link && asks > (this.inFrame ? FRAME_GIVE_UP_AFTER_ASKS : GIVE_UP_AFTER_ASKS)) return window.clearInterval(timer);
       if (this.link && !this.linkLost && Date.now() - this.linkSeenAt > LOST_AFTER_MS) {
         this.linkLost = true;
         this.emit();
@@ -118,7 +143,7 @@ export class DemoAdapter implements RiderApi, DemoControls {
     };
     const timer = window.setInterval(ask, ASK_EVERY_MS);
     this.firstAnswer = new Promise<void>((resolve) => {
-      setTimeout(resolve, FIRST_ANSWER_MS);
+      setTimeout(resolve, this.inFrame ? FRAME_FIRST_ANSWER_MS : FIRST_ANSWER_MS);
       window.addEventListener('message', (event) => {
         if (event.origin !== RESTAURANT_OS_ORIGIN) return;
         if (event.data?.type === RIDER_LINK_DATA && isRiderLinkData(event.data.data)) {

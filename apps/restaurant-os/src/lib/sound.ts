@@ -73,6 +73,35 @@ export function playAlert(): void {
   }
 }
 
+export type AlertTone = 'ORDER' | 'READY' | 'BILL' | 'CALL' | 'TICKET';
+
+/** [frequency, start in seconds]: each kind of alert has its own tune, so staff know it without looking. */
+const TONES: Record<AlertTone, { type: OscillatorType; notes: [number, number][] }> = {
+  ORDER: { type: 'triangle', notes: [[660, 0], [880, 0.18], [1100, 0.36], [880, 0.6], [1100, 0.78]] },
+  READY: { type: 'sine', notes: [[784, 0], [1047, 0.2], [1319, 0.4]] },
+  BILL: { type: 'sine', notes: [[523, 0], [523, 0.3]] },
+  CALL: { type: 'square', notes: [[988, 0], [988, 0.14], [988, 0.28], [988, 0.42]] },
+  TICKET: { type: 'triangle', notes: [[698, 0], [523, 0.22]] },
+};
+
+export function playTone(kind: AlertTone): void {
+  if (!context || context.state !== 'running') return;
+  const start = context.currentTime;
+  const { type, notes } = TONES[kind];
+  for (const [frequency, offset] of notes) {
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    osc.type = type;
+    osc.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, start + offset);
+    gain.gain.exponentialRampToValueAtTime(0.35, start + offset + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.16);
+    osc.connect(gain).connect(context.destination);
+    osc.start(start + offset);
+    osc.stop(start + offset + 0.18);
+  }
+}
+
 export function vibrate(): void {
   try {
     navigator.vibrate?.([200, 100, 200]);

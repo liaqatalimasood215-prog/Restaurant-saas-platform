@@ -293,8 +293,15 @@ from Phase 4 and records every change in the audit log.
 Rules: before sending, items can be changed freely. After sending, only the Owner or Manager can
 **void** an item, with a reason (shown as VOID on the kitchen screen, removed from the bill,
 logged). Adding a round after the bill was printed reopens the bill. After payment, only the Owner
-or Manager can **refund**, with a reason. Move/merge tables and split bill by items come in
-Phase 7.
+or Manager can **refund**, with a reason. Move/merge tables come in Phase 7.
+
+**Sub-orders (owner, 2026-11-02; moved up from Phase 7's split bill):** strangers share a table and come and
+go at different times. Each customer is an own order on the table (T1-1, T1-2) with an own bill and invoice.
+The waiter or cashier opens the table and taps New sub-order. At the counter the cashier opens the table, sees
+each customer by what they had, and bills only that one; the others stay. The number keeps going while anyone
+is seated; the table is free when no sub-order is open. The whole table can also pay at once: every open
+sub-order is paid in full and keeps its own invoice. A table with one customer stays plain "T1".
+Details: `packages/shared/src/sub-orders.ts`.
 
 ### 5.2 Online delivery or pickup — Pilot
 
@@ -618,7 +625,12 @@ tip            = recorded with the payment; NOT sales; credited to the table's w
   when payments ≥ total.
 - **Refunds and reversals:** Owner/Manager only, with reason and method; recorded as new entries
   (full or partial); the original payment is never edited or deleted; today's summary shows refunds
-  separately; a refund receipt can be printed.
+  separately; a refund receipt can be printed. A tip is not refunded. Refunds and corrections count on the day
+  they were made, not the day of the order (owner, 2026-11-02).
+- **Correct Payment (owner, 2026-11-02):** a payment recorded with the wrong method is reversed and replaced by the
+  right method in one step, same amount, with a reason. The order total and status do not change. A rider's cash on
+  delivery cannot be corrected, because the rider's cash count rests on it. "The money never came" is not built: a
+  paid order does not go back to unpaid (open decision for later).
 - **Receipts (80 mm):** restaurant name, branch address and phone, tax registration numbers (if
   set), invoice number, daily order number, date/time, table/waiter/cashier or customer, items with
   sizes and add-ons, subtotal, discount, service charge, tax, delivery fee, rounding, total,
@@ -1219,3 +1231,4 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-31 | §7.2 Customer App redesigned from the owner's six-screen picture as DEMO screens; OTP, Google, online payments, map and rider contact are NOT CONNECTED screens only; open decision #19 (Dine-in from the customer's phone). |
 | 2026-10-31 | §5.5 Website tab built as DEMO (Online App step D); the previews follow its settings. |
 | 2026-11-01 | §5.6, §7.3, §16 #16: Riders page and Rider App built as DEMO (Phase 3). Only the Owner adds and changes riders; Online / Offline decides who can get a new order; a running delivery keeps the rider Online and enabled. `users.rider_online` to add to the data model in Phase 4. |
+| 2026-11-02 | §5.1: sub-orders: each customer at a shared table is an own order (T1-1, T1-2) with an own bill and invoice, plus paying the whole table at once; moved up from Phase 7. Built as DEMO. |

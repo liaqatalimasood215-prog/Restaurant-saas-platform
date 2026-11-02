@@ -7,7 +7,7 @@ import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
-import { playAlert, speak, unlockSound, vibrate } from '@/lib/sound';
+import { playTone, speak, unlockSound, vibrate, type AlertTone } from '@/lib/sound';
 
 const NotificationsContext = createContext<StaffNotification[]>([]);
 const ALARM_REPEAT_MS = 5000;
@@ -49,6 +49,39 @@ export function notificationBody(n: StaffNotification): string {
       return t('alerts.onlineOrderBody', { type: t(`orderType.${n.orderType}`), total: formatPaisa(n.total), name: n.customerName });
     case 'COUNTER_READY':
       return n.orderType === 'DELIVERY' ? t('alerts.assignRider', { name: n.customerName || t('pos.walkIn') }) : t('alerts.readyForPickup', { name: n.customerName || t('pos.walkIn') });
+  }
+}
+
+const ALERT_TONES: Record<StaffNotification['kind'], AlertTone> = {
+  ONLINE_ORDER: 'ORDER',
+  WAITER_CALLED: 'CALL',
+  BILL_REQUESTED: 'BILL',
+  BILL_ACCEPTED: 'BILL',
+  FOOD_READY: 'READY',
+  COUNTER_READY: 'READY',
+};
+const ALERT_ORDER: StaffNotification['kind'][] = ['ONLINE_ORDER', 'WAITER_CALLED', 'BILL_REQUESTED', 'FOOD_READY', 'COUNTER_READY', 'BILL_ACCEPTED'];
+
+/** What the device says aloud: Roman Urdu, and Urdu or Hindi for devices with that voice (lib/sound.ts). */
+function notificationSpeech(n: StaffNotification): { roman: string; urdu: string; hindi: string } {
+  const say = (key: 'onlineOrder' | 'waiterCalled' | 'bill' | 'billAccepted' | 'foodReady' | 'counterReady', vars?: Record<string, string | number>) => ({
+    roman: t(`alerts.speech.${key}.roman`, vars),
+    urdu: t(`alerts.speech.${key}.urdu`, vars),
+    hindi: t(`alerts.speech.${key}.hindi`, vars),
+  });
+  switch (n.kind) {
+    case 'ONLINE_ORDER':
+      return say('onlineOrder', { name: n.customerName.replace(/\s*\(DEMO\)$/, '') });
+    case 'WAITER_CALLED':
+      return say('waiterCalled');
+    case 'BILL_REQUESTED':
+      return say('bill', { table: n.tableName });
+    case 'BILL_ACCEPTED':
+      return say('billAccepted', { table: n.tableName });
+    case 'FOOD_READY':
+      return say('foodReady', { table: n.tableName });
+    case 'COUNTER_READY':
+      return say('counterReady', { n: n.dailyNumber });
   }
 }
 
@@ -108,13 +141,12 @@ function NotificationsWatcher({ onChange }: { onChange: (list: StaffNotification
       seen.current.add(n.id);
       toast.show({ tone: n.kind === 'BILL_REQUESTED' || n.kind === 'ONLINE_ORDER' || n.kind === 'WAITER_CALLED' ? 'info' : 'success', title: notificationTitle(n), body: notificationBody(n) });
     }
-    if (fresh.length > 0) {
-      playAlert();
+    // The most urgent one is played and spoken: staff may not be looking at the screen.
+    const first = [...fresh].sort((a, b) => ALERT_ORDER.indexOf(a.kind) - ALERT_ORDER.indexOf(b.kind))[0];
+    if (first) {
+      playTone(ALERT_TONES[first.kind]);
       vibrate();
-    }
-    // "Call Waiter" also speaks: the waiter may not be looking at the phone.
-    if (fresh.some((n) => n.kind === 'WAITER_CALLED')) {
-      speak({ roman: t('alerts.waiterCalledSpeech'), urdu: t('alerts.waiterCalledSpeechUrdu'), hindi: t('alerts.waiterCalledSpeechHindi') });
+      speak(notificationSpeech(first));
     }
   }, [data, onChange, toast]);
 
@@ -122,7 +154,7 @@ function NotificationsWatcher({ onChange }: { onChange: (list: StaffNotification
   const waitingOnline = data?.some((n) => n.kind === 'ONLINE_ORDER') ?? false;
   useEffect(() => {
     if (!waitingOnline) return;
-    const id = setInterval(playAlert, ALARM_REPEAT_MS);
+    const id = setInterval(() => playTone('ORDER'), ALARM_REPEAT_MS);
     return () => clearInterval(id);
   }, [waitingOnline]);
 

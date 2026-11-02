@@ -35,3 +35,22 @@ export function alertNewDelivery(): void {
     // no sound on this device
   }
 }
+
+/** Says the alert aloud with the phone's own voice: Urdu or Hindi if it has one, else the Roman Urdu text. */
+export function speakNewDelivery(n: number): void {
+  try {
+    const synth = window.speechSynthesis;
+    const voices = synth.getVoices();
+    const urdu = voices.find((v) => v.lang.toLowerCase().startsWith('ur'));
+    const hindi = voices.find((v) => v.lang.toLowerCase().startsWith('hi'));
+    const voice = urdu ?? hindi;
+    const utterance = new SpeechSynthesisUtterance(urdu ? `نیا ڈیلیوری آرڈر، نمبر ${n}` : hindi ? `नया डिलीवरी ऑर्डर, नंबर ${n}` : `Naya delivery order, number ${n}`);
+    utterance.lang = voice?.lang ?? 'en-IN';
+    if (voice) utterance.voice = voice;
+    utterance.rate = 0.9;
+    synth.cancel();
+    synth.speak(utterance);
+  } catch {
+    // no speech voice on this device
+  }
+}

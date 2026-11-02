@@ -83,6 +83,8 @@ export interface CustomerOrder extends TrackedOrder {
   payment: PaymentChoice;
   /** Set when the rider step is reached */
   rider: SampleRider | null;
+  /** DEMO: this order is in Restaurant OS of this browser; its steps come from there */
+  linked?: boolean;
 }
 
 export interface PlaceOrderInput {

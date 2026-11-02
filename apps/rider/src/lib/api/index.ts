@@ -22,7 +22,7 @@ export function getDemoControls(): DemoControls {
   return demoAdapter();
 }
 
-export const DEMO_START_PATH = '/lala-restaurant/main';
+export const DEMO_START_PATH = '/aziz-pizza/main';
 
 /** Name and colour for page titles and the install manifest (runs on the server, no browser data). */
 export function branchIdentity(restaurant: string, branch: string) {

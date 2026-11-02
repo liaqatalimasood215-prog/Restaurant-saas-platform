@@ -259,6 +259,7 @@ pnpm --filter @restaurant-saas/restaurant-os screenshots
 pnpm --filter @restaurant-saas/customer walkthrough               # customer website
 pnpm --filter @restaurant-saas/rider walkthrough                  # Rider App on sample data
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:riders   # Riders page + Rider App together
+pnpm --filter @restaurant-saas/restaurant-os walkthrough:refunds  # Refunds and Correct Payment
 ```
 
 Working notes that saved time: use the Edit tool for multi-line code changes (long shell here-docs with
@@ -267,6 +268,10 @@ walkthrough scripts clear localStorage themselves; the POS bill panel remounts w
 changes (state that must survive, such as `payNow`, lives in the draft, `screens/pos/draft.ts`).
 
 ## 9. Pending tasks and next steps (in this order)
+
+**Sub-orders built 2026-11-02 (DEMO), waiting for the owner's review.** He rejected the first version (one order per table, customer numbers on items): his customers are strangers who arrive and leave at different times, and he confirmed this flow: the waiter opens T1, New sub-order; at the counter the customer says "Table 1", the cashier sees T1-1 Chicken and T1-2 Coffee, asks the waiter with Call Waiter if unsure, taps one and bills only that. Each sub-order is an own order with an own invoice. "Whole table on one bill" stays from his earlier Option 3; there is no combined printed bill yet, each order prints its own. The demo menu has no Coffee: he can add it on the Menu page (walkthroughs count the seeded items).
+
+**DEMO connection and sounds built 2026-11-02, waiting for the owner's review.** Open a Restaurant OS tab, then `localhost:3001/aziz-pizza/main` and `localhost:3002/aziz-pizza/main` in the same browser. `walkthrough:connected` checks the whole path. The hidden `/demo-link` page must never use storage: in the browser test its storage was separate, and writing from it wiped orders. Limits: one browser only; keep a Restaurant OS tab open; sound starts after the first tap on a page, and the voice depends on the device; phones keep sample data until the backend.
 
 **Rider App frontend built 2026-11-01 (DEMO), approved by the owner the same day; owner: "only front end; all front end, last backend".** All six picture screens, Delivery History, Profile, the design tokens, badges and four-tab bar are merged into `phase-1/restaurant-os-ui` (commit `4990138`), not pushed; no GitHub remote is connected. Decisions: no Accept Order; Picked Up is display only (`riderStage`); max 3 in the UI only. Live Tracking and Earnings are DEMO / NOT CONNECTED; COD cash is apart from earnings. Next: test on a real Android phone, then the remaining frontend (below), with his approval. Backend comes last, with its own approval. To test on this copy with Restaurant OS: production builds on 3100 and 3102 with the browser's 3000 and 3002 routed to them, because the DEMO link only believes those two addresses. Open for the backend: how riders are paid, whether Picked Up becomes a status, the server rule for max 3. Activation's "Open the Rider App" link now opens the LALA sample, not the rider's Restaurant OS restaurant, until real login.
 
@@ -296,7 +301,7 @@ approval: no real backend, custom domain, image upload, Google Play or publishin
 **Plan agreed with the owner (2026-11-01):**
 
 - A. Rider App frontend approved and merged 2026-11-01. Not yet verified on his real phone. The Riders page of Restaurant OS has not had a separate design review.
-- B. Refunds and payment reversals (small, closes Phase 1), after his approval. Then the Phase 1 gate.
+- B. Refunds and Correct Payment built 2026-11-02 (DEMO), waiting for his review. Then the Phase 1 gate. Open for later: "the money never came" (a paid order does not go back to unpaid).
 - C. Phase 4 backend after his "shuru karo". Before it he prepares: real name, branch, menu and prices, tax and service charge; decides how often the internet drops
   (#13: changes the offline plan) and table ordering from a phone (#19). Explain hosting costs and get approval before any paid service.
 - The website brief he pasted was cut off at the top: items 1–8 may hold more wishes; ask him to resend if they matter.
@@ -312,7 +317,7 @@ Older list, kept for the paused items:
    PLACEHOLDER), Riders page (add/disable, assignments, cash to settle, Rider App preview + Open Full App =
    PLACEHOLDER), Today's Summary (Test A step 7: Rs. 5,900 etc.), Settings (restaurant, branch, tax, service
    charge, delivery fee, business day, receipt). Add each to `src/lib/build-plan.ts` / `section-page.tsx`.
-4. **Refunds and payment reversals** (Owner/Manager, reason, original payment never edited) — PLACEHOLDER now.
+4. Done 2026-11-02: refunds and Correct Payment (DEMO).
 5. Phase 1 gate: running preview + screenshots of every screen + screen/status list + the owner's approval
    in the decision log; then Phase 2 (Customer App UI) only when he says "shuru karo".
 6. Later (not now): backend/Prisma (Phase 4), Socket.IO (Phase 5), real photos and printers (Phase 7).

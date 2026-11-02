@@ -7,6 +7,7 @@ export * from './kitchen';
 export * from './money';
 export * from './pricing';
 export * from './payments';
+export * from './sub-orders';
 export * from './business-day';
 export * from './realtime';
 export * from './types';

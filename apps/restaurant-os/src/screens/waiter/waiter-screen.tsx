@@ -6,6 +6,8 @@ import { ArrowLeft, Search, Send, Trash2 } from 'lucide-react';
 import {
   formatPaisa,
   formatQuantity,
+  orderPlaceName,
+  subOrderLabel,
   type DraftItemInput,
   type MenuItem,
   type MenuSnapshot,
@@ -31,6 +33,7 @@ import { addToCart, describeLine, type CartLine } from './cart';
 import { ItemDialog } from './item-dialog';
 import { SentRounds } from './sent-rounds';
 import { ServiceWaiterScreen } from './service-waiter-screen';
+import { SubOrderBar } from './sub-order';
 
 /**
  * Waiter screen, phone first (MASTER_PROMPT.md §5.1, §7.1 Waiter). The Super Waiter (and counter
@@ -139,7 +142,10 @@ function OrderWorkspace({
 }) {
   const { allowed } = useSession();
   const toast = useToast();
-  const order = entry.order;
+  const [selected, setSelected] = useState<string | 'NEW' | null>(null);
+  const isNew = selected === 'NEW';
+  // If the chosen customer has paid and left, the first one still seated is shown.
+  const order = isNew ? null : (entry.orders.find((o) => o.id === selected) ?? entry.order);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [guests, setGuests] = useState<number | null>(null);
   const [guestError, setGuestError] = useState(false);
@@ -152,7 +158,7 @@ function OrderWorkspace({
   const [roundKey, setRoundKey] = useState(() => crypto.randomUUID());
   const [voidTarget, setVoidTarget] = useState<OrderItem | null>(null);
 
-  const guestsValue = guests ?? order?.guests ?? 0;
+  const guestsValue = guests ?? order?.guests ?? (isNew ? 1 : 0);
   const cartViews = cart.map((l) => describeLine(l, menu)).filter((v) => v !== null);
   const cartTotal = cartViews.reduce((sum, v) => sum + v.unitPrice * v.line.quantity, 0);
   const cartCount = cart.reduce((sum, l) => sum + l.quantity, 0);
@@ -176,6 +182,8 @@ function OrderWorkspace({
       const updated = await getApi().sendRound({
         tableId: entry.table.id,
         guests: guestsValue,
+        orderId: order?.id ?? null,
+        newSubOrder: isNew,
         items: cart.map((line) => ({
           menuItemId: line.menuItemId,
           variantId: line.variantId,
@@ -188,6 +196,7 @@ function OrderWorkspace({
       const roundNo = Math.max(...updated.tickets.map((tk) => tk.roundNo));
       setCart([]);
       setGuests(null);
+      setSelected(updated.id);
       setRoundKey(crypto.randomUUID());
       toast.show({ tone: 'success', title: t('waiter.sent', { n: roundNo }) });
     } catch (err) {
@@ -216,6 +225,17 @@ function OrderWorkspace({
 
   return (
     <>
+      {entry.orders.length > 0 && (
+        <SubOrderBar
+          tableName={entry.table.name}
+          orders={entry.orders}
+          selected={isNew ? 'NEW' : (order?.id ?? null)}
+          onSelect={(choice) => {
+            setSelected(choice);
+            setGuests(null);
+          }}
+        />
+      )}
       <div className="mb-3 grid grid-cols-2 gap-2 lg:hidden" role="tablist">
         {(['menu', 'order'] as const).map((v) => (
           <button
@@ -310,7 +330,8 @@ function OrderWorkspace({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-2xl font-black text-slate-900">
-                    {entry.table.name} <span className="text-base font-semibold text-slate-500">· {areaName}</span>
+                    {isNew ? subOrderLabel(entry.table.name, entry.nextSubOrderNo) : order ? orderPlaceName(entry.table.name, order) : entry.table.name}{' '}
+                    <span className="text-base font-semibold text-slate-500">· {areaName}</span>
                   </p>
                   {order && <p className="text-xs text-slate-500">{t('waiter.orderNumber', { n: order.dailyNumber })}</p>}
                 </div>
@@ -347,7 +368,9 @@ function OrderWorkspace({
                   onVoid={setVoidTarget}
                 />
               ) : (
-                <p className="rounded-xl bg-green-50 p-3 text-sm text-green-800">{t('waiter.freeTable')}</p>
+                <p className="rounded-xl bg-green-50 p-3 text-sm text-green-800">
+                  {isNew ? t('waiter.newSubOrderHint', { label: subOrderLabel(entry.table.name, entry.nextSubOrderNo) }) : t('waiter.freeTable')}
+                </p>
               )}
 
               <div>

@@ -135,3 +135,28 @@ test('open bills, discounts with who and why, voids, refunds and cancelled order
   assert.deepEqual(day.cancelled.map((c) => [c.type, c.reason]), [['DELIVERY', 'Customer called']]);
   assert.ok(!day.topItems.some((i) => i.name === 'Classic Pizza'), 'a cancelled order sells nothing');
 });
+
+test('a refund and a correction count on the day they were made, not the day of the order', () => {
+  const at = (date: string, entry: PaymentEntry, over: Partial<PaymentEntry> = {}): PaymentEntry => ({ ...entry, createdAt: `${date}T12:00:00.000Z`, ...over });
+  const wrong = at('2026-10-30', pay('PAYMENT', 'CASH', 100_000));
+  const reversal = at('2026-10-31', pay('REVERSAL', 'CASH', 100_000, 0, 'Pressed Cash'), { relatedPaymentId: wrong.id, receivedBy: 'manager' });
+  const right = at('2026-10-31', pay('PAYMENT', 'CARD', 100_000), { relatedPaymentId: reversal.id, receivedBy: 'manager' });
+  const refund = at('2026-10-31', pay('REFUND', 'CARD', 45_000, 0, 'Cold burger'), { receivedBy: 'manager' });
+  const old = order({ type: 'TAKEAWAY', status: 'PICKED_UP', items: [line('Beef Burger', 100_000, 1)], payments: [wrong, reversal, right, refund] });
+  const dayOf = (iso: string) => iso.slice(0, 10);
+  const allOrders = [old];
+
+  const dayBefore = summarizeDay([old], 10, { date: '2026-10-30', dayOf, allOrders });
+  assert.equal(dayBefore.sales, 100_000, 'the sale stays on the day of the order');
+  assert.equal(dayBefore.refundTotal, 0);
+  assert.equal(dayBefore.corrections.length, 0);
+  assert.equal(dayBefore.cashReceived, 100_000);
+
+  const dayAfter = summarizeDay([], 10, { date: '2026-10-31', dayOf, allOrders });
+  assert.equal(dayAfter.sales, 0, 'no sale moves to the later day');
+  assert.equal(dayAfter.refundTotal, 45_000);
+  assert.deepEqual(dayAfter.corrections.map((c) => [c.from, c.to, c.amount, c.reason, c.by]), [['CASH', 'CARD', 100_000, 'Pressed Cash', 'manager']]);
+  assert.equal(dayAfter.cashReceived, -100_000, 'the cash that never came is taken out on the day of the correction');
+  assert.equal(dayAfter.byMethod.find((m) => m.method === 'CARD')?.amount, 100_000);
+  assert.equal(dayAfter.byMethod.find((m) => m.method === 'CASH')?.amount, -100_000);
+});

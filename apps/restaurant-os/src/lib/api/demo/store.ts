@@ -1,3 +1,4 @@
+import { ApiError } from '../client';
 import { createSeed, DEMO_DATA_VERSION, type DemoData } from './seed';
 
 /**
@@ -11,6 +12,7 @@ import { createSeed, DEMO_DATA_VERSION, type DemoData } from './seed';
 const DATA_KEY = 'lala-os-demo-data';
 const SESSION_KEY = 'lala-os-demo-session';
 const CHANNEL_NAME = 'lala-os-demo-sync';
+const ASK_FOR_DATA = 'ask-for-data';
 
 function readJson<T>(storage: () => Storage, key: string): T | null {
   try {
@@ -46,21 +48,48 @@ export class DemoStore {
   private simulatedFailure = false;
   private readonly listeners = new Set<() => void>();
   private readonly channel: BroadcastChannel | null;
+  private readonly isLinkPage: boolean;
+  private ready: boolean;
 
   constructor() {
-    this.data = loadData() ?? createSeed();
+    // The hidden link page of the website and Rider App may get its own browser storage, so it never uses storage: it starts
+    // with nothing to say, asks an open Restaurant OS tab for the data, and only then answers or changes anything.
+    this.isLinkPage = window.self !== window.top && window.location.pathname === '/demo-link';
+    this.data = (this.isLinkPage ? null : loadData()) ?? createSeed();
+    this.ready = !this.isLinkPage;
     this.session = readJson<DemoSessionState>(() => window.sessionStorage, SESSION_KEY);
     this.channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(CHANNEL_NAME);
     // The message carries the data itself: another tab's localStorage can still be old when it arrives.
-    this.channel?.addEventListener('message', (event: MessageEvent<DemoData>) => {
+    this.channel?.addEventListener('message', (event: MessageEvent<DemoData | typeof ASK_FOR_DATA | { forLinkPage: DemoData }>) => {
+      if (event.data === ASK_FOR_DATA) {
+        if (this.ready) this.channel?.postMessage({ forLinkPage: this.data });
+        return;
+      }
+      if ('forLinkPage' in event.data) {
+        // Only a link page that has nothing yet takes this answer: a tab keeps its newer data.
+        if (!this.isLinkPage || this.ready || event.data.forLinkPage.version !== DEMO_DATA_VERSION) return;
+        this.data = event.data.forLinkPage;
+        this.ready = true;
+        this.emit();
+        return;
+      }
       if (event.data?.version !== DEMO_DATA_VERSION) return;
       this.data = event.data;
+      this.ready = true;
+      // A change made through the link page is saved by the tabs: that page does not use storage.
+      if (!this.isLinkPage) writeJson(() => window.localStorage, DATA_KEY, this.data);
       this.emit();
     });
+    if (this.isLinkPage) this.channel?.postMessage(ASK_FOR_DATA);
   }
 
   read(): DemoData {
     return this.data;
+  }
+
+  /** False only on the hidden link page while no Restaurant OS tab has answered. */
+  isReady(): boolean {
+    return this.ready;
   }
 
   /**
@@ -68,10 +97,11 @@ export class DemoStore {
    * kept only if the change does not throw. Then it is saved and this tab and the other tabs are told.
    */
   update<T>(change: (draft: DemoData) => T): T {
+    if (!this.ready) throw new ApiError('CONFLICT', 'Restaurant OS is not open. Open it on this computer and try again.');
     const draft = structuredClone(this.data);
     const result = change(draft);
     this.data = draft;
-    writeJson(() => window.localStorage, DATA_KEY, draft);
+    if (!this.isLinkPage) writeJson(() => window.localStorage, DATA_KEY, draft);
     this.channel?.postMessage(draft);
     this.emit();
     return result;

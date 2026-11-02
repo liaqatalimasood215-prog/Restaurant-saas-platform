@@ -91,3 +91,55 @@ export function checkRefund(input: {
   if (!input.reason?.trim()) return { ok: false, reason: 'REASON_REQUIRED' };
   return { ok: true };
 }
+
+/** What can still be refunded. A tip is not part of it: tips are not sales. */
+export function refundableAmount(paidTotal: number, refundedTotal: number): number {
+  return Math.max(0, paidTotal - refundedTotal);
+}
+
+/** The entries a correction looks at. */
+export interface RecordedEntry {
+  id: string;
+  kind: PaymentKind;
+  method: PaymentMethod;
+  receivedBy: string;
+  relatedPaymentId: string | null;
+}
+
+/** Payments that still count: one that was corrected is replaced by the new entry. */
+export function activePayments<T extends RecordedEntry>(entries: readonly T[]): T[] {
+  const reversed = new Set(entries.filter((e) => e.kind === 'REVERSAL').map((e) => e.relatedPaymentId));
+  return entries.filter((e) => e.kind === 'PAYMENT' && !reversed.has(e.id));
+}
+
+export type CorrectionBlock = 'NOT_A_PAYMENT' | 'ALREADY_CORRECTED' | 'RIDER_CASH';
+
+/** Why this entry cannot be corrected at all; null = it can. */
+export function correctionBlock(entry: RecordedEntry, entries: readonly RecordedEntry[], riderId: string | null): CorrectionBlock | null {
+  if (entry.kind !== 'PAYMENT') return 'NOT_A_PAYMENT';
+  if (!activePayments(entries).some((e) => e.id === entry.id)) return 'ALREADY_CORRECTED';
+  if (riderId !== null && entry.receivedBy === riderId) return 'RIDER_CASH';
+  return null;
+}
+
+export type CorrectionCheck = { ok: true } | { ok: false; reason: CorrectionBlock | 'SAME_METHOD' | 'REASON_REQUIRED' };
+
+/**
+ * A payment recorded with the wrong method: a REVERSAL cancels it and a new PAYMENT of the same amount replaces it (owner,
+ * 2026-11-02). The order total and status do not change. A rider's cash on delivery cannot be corrected: the rider's cash
+ * count and settlement rest on it.
+ * Roman Urdu: Ghalat method theek hota hai; purani entry rehti hai, aur rider ke COD par yeh band hai.
+ */
+export function checkPaymentCorrection(input: {
+  entry: RecordedEntry;
+  entries: readonly RecordedEntry[];
+  method: PaymentMethod;
+  riderId: string | null;
+  reason?: string | null;
+}): CorrectionCheck {
+  const block = correctionBlock(input.entry, input.entries, input.riderId);
+  if (block) return { ok: false, reason: block };
+  if (input.method === input.entry.method) return { ok: false, reason: 'SAME_METHOD' };
+  if (!input.reason?.trim()) return { ok: false, reason: 'REASON_REQUIRED' };
+  return { ok: true };
+}

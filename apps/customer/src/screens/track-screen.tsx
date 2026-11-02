@@ -145,7 +145,7 @@ export function TrackScreen({ token, isNew }: { token: string; isNew: boolean })
         {riderWorking && order.rider && <RiderCard rider={order.rider} />}
 
         {/* DEMO: stands in for Restaurant OS */}
-        {!rejected && !finished && (
+        {!rejected && !finished && !order.linked && (
           <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-3">
             <p className="mb-2 text-xs font-semibold text-amber-800">{t('track.demoHint')}</p>
             <div className="flex flex-wrap gap-2">

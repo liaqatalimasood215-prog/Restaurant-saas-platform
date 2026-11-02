@@ -21,6 +21,8 @@ export interface Draft {
   sendKey: string;
   /** "Bill Now" on a new bill: open the payment as soon as the new order is loaded */
   payNow: boolean;
+  /** A new customer sat at a running table: "Send" starts a new sub-order */
+  newSubOrder: boolean;
   /** Owner/Manager discount chosen before sending; saved with the new order */
   discount: DiscountChoice | null;
 }
@@ -37,6 +39,7 @@ export function newDraft(type: OrderType = 'TAKEAWAY'): Draft {
     heldId: null,
     sendKey: crypto.randomUUID(),
     payNow: false,
+    newSubOrder: false,
     discount: null,
   };
 }

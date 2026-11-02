@@ -14,7 +14,7 @@ Read before changing anything:
 ## Current stage
 
 **Phase 3 — Rider App and Riders page: built 2026-11-01, waiting for the owner's review (DEMO / PROTOTYPE).**
-See [apps/rider/README.md](apps/rider/README.md). Next: refunds, then the backend (Phase 4), each after the owner's approval.
+See [apps/rider/README.md](apps/rider/README.md). Next: the Phase 1 gate and the rest of the frontend, then the backend (Phase 4), each after the owner's approval.
 
 **Phase 2 — Customer website: redesigned from the owner's six-screen picture, approved by the owner on 2026-10-31
 (DEMO / PROTOTYPE).** See [apps/customer/README.md](apps/customer/README.md).
@@ -25,8 +25,8 @@ See [apps/rider/README.md](apps/rider/README.md). Next: refunds, then the backen
 the waiter → kitchen → cashier workflow (2026-10-28), POS / New Bill, Preview 4 (Orders, Online Orders),
 Tables management and the Staff design (2026-10-30).
 
-Built in Preview 5: Menu, Settings, Today's Summary, Online App, Riders. Still to build in Phase 1: refunds and
-payment reversals. Nothing is connected to a real backend yet (Phase 4).
+Built in Preview 5: Menu, Settings, Today's Summary, Online App, Riders; then refunds and Correct Payment.
+Nothing is connected to a real backend yet (Phase 4).
 
 ## Folder map
 
@@ -66,7 +66,8 @@ Nothing is REAL / VERIFIED before Phase 4 — there is no backend yet.
 | Customer orders and rider steps (Picked up – On the way, Delivered + cash collected) on Online Orders | DEMO / PROTOTYPE — DEMO buttons; rider steps also from the Rider App through the DEMO link; website orders reach Restaurant OS in Phase 4 |
 | Orders: today / all, search (number, table, customer, phone), filter by type and status, detail with items, payments, kitchen tickets and full timeline; header search | DEMO / PROTOTYPE |
 | Test D (online delivery → accept → kitchen → rider → delivered → cash settled) | DEMO / PROTOTYPE — walkthrough passes with DEMO customer/rider buttons |
-| Refunds and payment reversals | PLACEHOLDER — next step of Phase 1 |
+| Refunds and Correct Payment on the Orders page (Owner, Manager): full or part refund with reason, refund slip, wrong method replaced; counted on the day made; rider's cash cannot be corrected | DEMO / PROTOTYPE — `walkthrough:refunds` passes; records only, moves no money |
+| Sub-orders: strangers sharing a table are own orders (T1-1, T1-2), each with an own bill and invoice; the cashier finds a customer by what they had and bills only that one; the whole table can also pay one bill | DEMO / PROTOTYPE — `walkthrough:sub-orders`, 4 unit tests; no backend yet |
 | Menu: items (one price or sizes, add-ons, station, unit, In stock / Online switches, search, filters, edit, delete or archive), categories (add, rename, reorder, hide, delete when empty), add-on groups | DEMO / PROTOTYPE — Preview 5 step 1; changes reach POS, Waiter Orders and the kitchen at once, old bills keep their prices |
 | Settings: restaurant and branch, tax and service charge (with live example), rounding, delivery fee, minimum order, prep time, business day, receipt texts with preview, kitchen stations | DEMO / PROTOTYPE — Preview 5 step 2; Owner only; changes apply to new bills only (each order keeps its own bill settings) |
 | Today's Summary: sales, average bill, cash received, tips, open bills, refunds, tax + service; sales by order type, payments by method, top items, tips per waiter, discounts / voids / refunds / cancellations with who and why; earlier business days | DEMO / PROTOTYPE — Preview 5 step 3; Test A step 7 passes in the walkthrough |
@@ -137,6 +138,8 @@ schema draft does not have the new roles, units, waiter tables and bill requests
 | 2026-10-31 | QR code on the owner's phone: the customer link, Copy and QR use this computer's Wi-Fi address in development (next.config.ts); the website allows that address and no longer needs crypto.randomUUID (missing on plain HTTP) | Customer walkthrough 181 checks on the Wi-Fi address and 182 on localhost, Online App walkthrough, 98 unit tests, typecheck, lint and build pass. Address not in the production build. Not verified: the owner's real phone |
 | 2026-11-01 | Phase 3: Rider App (`apps/rider`, port 3002) and Riders page, DEMO. Owner creates riders; Online / Offline decides who gets a new order; a running delivery keeps the rider Online and enabled. Riders page frame and Open Full App use the Restaurant OS orders through a DEMO link in one browser; a phone shows sample data | 107 unit tests, nine Restaurant OS walkthroughs, customer 182 checks, rider 73 checks (72 on the Wi-Fi address), typecheck, lint and build pass. Not verified: a real phone, real sound, PWA install |
 | 2026-11-01 | Rider App frontend from the owner's six-screen picture, DEMO: tokens, badges, four-tab bar, Login, Home, Order Details, Live Tracking (DEMO MAP), My Active Deliveries, Today Summary (COD cash apart from earnings), Delivery History, Profile; no Accept, Picked Up is display only, max 3 in the UI only; backend untouched | 110 shared tests, rider `walkthrough` 274 checks, `walkthrough:riders`, `walkthrough:online` and customer `walkthrough` pass on ports 3000–3002; approved by the owner |
+| 2026-11-02 | Refunds and Correct Payment (DEMO), Orders page, Owner and Manager: new entries only, refund slip, money counted on the day it moved; backend untouched | RESULT_PLACEHOLDER |
+| 2026-11-02 | Sub-orders, owner's way of working (DEMO): each customer at a shared table is an own order with an own bill and invoice, and the table is free when none is open. The first attempt (one order per table) was replaced the same day, at the owner's correction | `walkthrough:sub-orders` and 4 new unit tests pass |
 
 ## Commands
 
@@ -160,6 +163,7 @@ pnpm --filter @restaurant-saas/restaurant-os walkthrough:menu     # categories, 
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:settings # tax / service for new bills only, branch, receipt, day, stations
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:online-app # online ON/OFF, fee, minimum, link and QR
 pnpm --filter @restaurant-saas/restaurant-os walkthrough:riders   # Riders page + Rider App: assign, on the way, delivered, cash, Online / Offline, disable
+pnpm --filter @restaurant-saas/restaurant-os walkthrough:refunds  # Refund, slip, Correct Payment, day it counts on, rider cash
 pnpm --filter @restaurant-saas/customer walkthrough                 # customer website: order, tracking, account, second brand
 pnpm --filter @restaurant-saas/rider walkthrough                    # Rider App on sample data: login, delivery, Today, Offline, second brand
 ```
