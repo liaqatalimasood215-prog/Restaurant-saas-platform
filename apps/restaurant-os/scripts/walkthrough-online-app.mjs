@@ -150,6 +150,7 @@ await orders.waitForTimeout(600);
 await placeDelivery(orders);
 await see(orders, 'Rs. 2,075');
 const settings = await openAs(USER.owner, '/settings', DESKTOP);
+await settings.locator('main [data-settings-card="delivery"]').click();
 assert.equal(await settings.getByLabel('Delivery fee', { exact: true }).inputValue(), '200');
 assert.equal(await settings.getByLabel('Usual preparation time').inputValue(), '25');
 await settings.close();
