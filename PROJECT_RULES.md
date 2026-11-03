@@ -298,7 +298,7 @@ Details: MASTER_PROMPT.md §6 (order engine) and §8 (money).
 - Screen-to-screen updates in the prototype are "DEMO sync — not real-time"; nothing may be labelled
   live before Phase 5.
 - Mobile-first for Waiter, Customer and Rider; tablet layout for Kitchen and Cashier; follow the
-  owner's design (brand red, white cards, left sidebar).
+  owner's Red & White design (brand red gradients, white cards, white left sidebar with red ends).
 - Each UI phase ends with: a running preview, screenshots of every screen, the list of screens with
   their status, and the owner's approval recorded in the decision log.
 
@@ -459,3 +459,4 @@ Full design: `docs/AI_MANAGER_PLAN.md`. Non-negotiable:
 | 2026-11-02 | Each staff alert has its own tune and a spoken line (free browser voice): new online order with the customer's name, kitchen ticket, food ready, bill, Call Waiter; the Rider App and the customer's tracking speak too. No rider Accept step: the owner's 2026-11-01 decision stays, "Pick Up Order" is the rider's first tap | Active |
 | 2026-11-02 | Owner: strangers share a table in a rush. Each customer is an own order on that table (T1-1, T1-2) with an own bill and invoice; the cashier bills the one the customer names; the table is free when none is open; the whole table can also pay at once. The one-order-per-table rule ends here; the split bill moved up from Phase 7. DEMO until the backend | Active |
 | 2026-11-03 | Settings page from the owner's picture: 12 feature cards first, the chosen card's settings beside them (phone: instead of them). Existing settings only; unfinished parts say Coming soon. Owner approved ("Approve") | Active |
+| 2026-11-03 | Red & White design (owner's picture) replaces the dark navy sidebar: white sidebar with red top and bottom, red gradients on active items and buttons, soft red POS cards and bill total, subtle shadows and animations. Styling only; features and workflows unchanged. Owner approved ("Approve") | Active |

@@ -66,7 +66,7 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Started** 2026-10-30 ("shuru karo"). Steps 1 **Menu**, 2 **Settings**, 3 **Today's Summary**, 4 **Online App** and **Riders: built**; refunds still to do |
 | Phase 3 Rider App + Riders page | **Started** 2026-11-01 ("Haan, shuru karo"); **built, waiting for the owner's review** |
 | Settings redesign (owner's picture 2026-11-03: feature cards, then the chosen setting) | **Approved** 2026-11-03 ("Approve"), DEMO frontend |
-| Red & White design (owner's picture 2026-11-03: white sidebar with red ends, red gradients, softer shadows, POS cards and bill panel) | **Built** 2026-11-03 (styling only), **waiting for the owner's review** |
+| Red & White design (owner's picture 2026-11-03: white sidebar with red ends, red gradients, softer shadows, POS cards and bill panel) | **Approved** 2026-11-03 ("Approve"), styling only |
 | Phase 2 customer website (`apps/customer`) | **Approved** 2026-10-31 ("Approve, Phase C karo"): redesigned from the owner's six-screen picture, DEMO |
 | Online App / Website rework (owner's brief, steps A–H) | Steps A–D **approved** (D on 2026-11-01); steps E–H **paused** by the owner, not cancelled |
 
