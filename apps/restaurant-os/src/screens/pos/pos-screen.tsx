@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BellRing, ChevronDown, ListOrdered, Pause, Plus, Search } from 'lucide-react';
 import { formatPaisa, orderPlaceName, type MenuItem, type OrderView, type TableBoardEntry } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
@@ -41,6 +41,13 @@ export function PosScreen({ tableId }: { tableId?: string }) {
   const [picking, setPicking] = useState<{ item: MenuItem; line: CartLine | null } | null>(null);
   const [productQuery, setProductQuery] = useState('');
   const [showBills, setShowBills] = useState(false);
+  /** The product just added, so its card shows the tick once (owner 2026-11-03). */
+  const [added, setAdded] = useState<{ itemId: string; at: number } | null>(null);
+  useEffect(() => {
+    if (!added) return;
+    const timer = window.setTimeout(() => setAdded(null), 1200);
+    return () => window.clearTimeout(timer);
+  }, [added]);
   const [initialTable, setInitialTable] = useState(tableId);
 
   const startNewBill = () => setDraftState(newDraft());
@@ -257,7 +264,13 @@ export function PosScreen({ tableId }: { tableId?: string }) {
       )}
 
       <div className="grid gap-3 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_26rem] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_28rem]">
-        <MenuPanel menu={menu.data} query={productQuery} onPick={(item) => setPicking({ item, line: null })} />
+        <MenuPanel
+          menu={menu.data}
+          query={productQuery}
+          onPick={(item) => setPicking({ item, line: null })}
+          inBill={draft.cart.reduce<Record<string, number>>((n, l) => ({ ...n, [l.menuItemId]: (n[l.menuItemId] ?? 0) + l.quantity }), {})}
+          added={added}
+        />
         <CurrentBill
           key={`${draft.orderId ?? 'new'}-${draft.heldId ?? ''}`}
           draft={draft}
@@ -286,6 +299,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
               ...d,
               cart: editing ? d.cart.map((l) => (l.key === editing.key ? { ...item, key: l.key } : l)) : addToCart(d.cart, item),
             }));
+            if (!editing) setAdded({ itemId: item.menuItemId, at: Date.now() });
             setPicking(null);
           }}
         />

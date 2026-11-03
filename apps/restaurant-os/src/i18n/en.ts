@@ -1364,6 +1364,7 @@ export const en = {
     tapProducts: 'Tap products on the left to add them.',
     editItem: 'Edit {name}',
     searchProducts: 'Search menu',
+    inBill: 'In this bill: {n}',
     categories: 'Menu categories',
     counterNoAdd: 'Items of a sent takeaway or delivery order cannot be changed here; start a new bill for more.',
     deliveryCharge: 'Delivery charge',

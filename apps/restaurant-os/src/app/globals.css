@@ -12,6 +12,24 @@
   --font-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
+/* POS: a green tick pops up on a product when it is added to the bill, and its badge bumps (owner 2026-11-03). */
+@theme {
+  --animate-added-pop: added-pop 1100ms ease-out forwards;
+  --animate-badge-bump: badge-bump 450ms ease-out;
+  @keyframes added-pop {
+    0% { opacity: 0; transform: scale(0.4); }
+    25% { opacity: 1; transform: scale(1.15); }
+    45% { transform: scale(1); }
+    80% { opacity: 1; }
+    100% { opacity: 0; transform: scale(1); }
+  }
+  @keyframes badge-bump {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.35); }
+    100% { transform: scale(1); }
+  }
+}
+
 /* Short screens (a laptop at 150 % scaling shows about 620 px): the POS uses smaller gaps. */
 @custom-variant short (@media (max-height: 760px));
 

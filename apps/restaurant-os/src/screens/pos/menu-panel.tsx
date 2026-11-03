@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { LayoutGrid, Plus } from 'lucide-react';
+import { Check, LayoutGrid, Plus } from 'lucide-react';
 import { formatPaisa, type MenuItem, type MenuSnapshot } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { t } from '@/i18n';
@@ -14,8 +14,23 @@ const ALL = 'ALL';
  * POS menu (owner's reference design 2026-10-29): category tabs on top, product cards with a large
  * picture, name, price, a short description and a + button. The product search box sits in the POS
  * title row. The number of columns follows the space the menu has (container query).
+ * A product already in the bill shows a red tick with its quantity; the one just added pops a green tick
+ * (owner 2026-11-03), so nobody adds it twice by mistake.
  */
-export function MenuPanel({ menu, query, onPick }: { menu: MenuSnapshot; query: string; onPick: (item: MenuItem) => void }) {
+export function MenuPanel({
+  menu,
+  query,
+  onPick,
+  inBill,
+  added,
+}: {
+  menu: MenuSnapshot;
+  query: string;
+  onPick: (item: MenuItem) => void;
+  /** Quantity of each product in the bill's unsent items */
+  inBill: Record<string, number>;
+  added: { itemId: string; at: number } | null;
+}) {
   const [category, setCategory] = useState(ALL);
   const q = query.trim().toLowerCase();
   const categoryName = (id: string) => menu.categories.find((c) => c.id === id)?.name ?? '';
@@ -56,14 +71,40 @@ export function MenuPanel({ menu, query, onPick }: { menu: MenuSnapshot; query: 
               : item.unit === 'piece'
                 ? formatPaisa(from)
                 : t('waiter.perUnit', { price: formatPaisa(from), unit: item.unit });
+            const count = inBill[item.id] ?? 0;
+            const justAdded = added?.itemId === item.id;
             return (
               <li key={item.id}>
                 <button
                   type="button"
                   disabled={!item.isAvailable}
                   onClick={() => onPick(item)}
-                  className="lift group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white text-left shadow-[0_4px_14px_-8px_rgb(15_23_42/0.2)] hover:border-brand/40 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-in-bill={count || undefined}
+                  className={cn(
+                    'lift group relative flex h-full w-full flex-col overflow-hidden rounded-2xl border bg-white text-left shadow-[0_4px_14px_-8px_rgb(15_23_42/0.2)] hover:border-brand/40 disabled:cursor-not-allowed disabled:opacity-50',
+                    count > 0 ? 'border-brand/50 ring-1 ring-brand/30' : 'border-slate-200/80',
+                  )}
                 >
+                  {count > 0 && (
+                    <span
+                      key={justAdded ? `badge-${added.at}` : 'badge'}
+                      aria-hidden
+                      className={cn(
+                        'bg-brand-gradient absolute right-2 top-2 z-10 flex h-7 min-w-7 items-center justify-center gap-0.5 rounded-full bg-brand px-2 text-xs font-black text-white shadow-brand',
+                        justAdded && 'animate-badge-bump',
+                      )}
+                    >
+                      <Check className="size-3.5" strokeWidth={3.5} aria-hidden />
+                      {item.unit === 'piece' ? count : `${count} ${item.unit}`}
+                    </span>
+                  )}
+                  {justAdded && (
+                    <span key={`tick-${added.at}`} className="pointer-events-none absolute inset-x-0 top-0 z-10 grid h-24 place-items-center xl:h-28 short:h-20" aria-hidden>
+                      <span className="animate-added-pop grid size-14 place-items-center rounded-full bg-green-500 text-white opacity-0 shadow-lg shadow-green-600/40 ring-4 ring-white">
+                        <Check className="size-8" strokeWidth={3.5} />
+                      </span>
+                    </span>
+                  )}
                   <ProductArt
                     name={item.name}
                     categoryName={categoryName(item.categoryId)}
@@ -87,6 +128,7 @@ export function MenuPanel({ menu, query, onPick }: { menu: MenuSnapshot; query: 
                       </span>
                     )}
                   </span>
+                  {count > 0 && <span className="sr-only"> · {t('pos.inBill', { n: count })}</span>}
                 </button>
               </li>
             );
