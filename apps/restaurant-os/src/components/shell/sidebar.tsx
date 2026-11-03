@@ -81,18 +81,18 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="bg-brand-gradient hidden shrink-0 rounded-tr-[2rem] p-2 pt-3 lg:block">
+      <div className="bg-brand-gradient hidden shrink-0 rounded-tr-2xl px-2 py-1 lg:block short:py-0.5">
         <button
           type="button"
           onClick={toggle}
           aria-expanded={wide}
           title={wide ? t('nav.collapse') : t('nav.expand')}
           className={cn(
-            'press flex min-h-10 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white hover:bg-white/15',
+            'press flex min-h-9 w-full items-center justify-center gap-2 rounded-lg text-xs font-semibold text-white hover:bg-white/15',
             wide && 'justify-start px-3',
           )}
         >
-          {wide ? <ChevronsLeft className="size-5" aria-hidden /> : <ChevronsRight className="size-5" aria-hidden />}
+          {wide ? <ChevronsLeft className="size-4" aria-hidden /> : <ChevronsRight className="size-4" aria-hidden />}
           {wide ? t('nav.collapse') : <span className="sr-only">{t('nav.expand')}</span>}
         </button>
       </div>
