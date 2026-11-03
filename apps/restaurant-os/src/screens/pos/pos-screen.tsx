@@ -94,12 +94,12 @@ export function PosScreen({ tableId }: { tableId?: string }) {
     setShowBills(false);
   };
   const chip = (active: boolean) =>
-    cn('flex min-h-10 items-center gap-2 rounded-xl border px-3 text-sm font-bold', active ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white hover:bg-slate-50');
+    cn('press flex min-h-10 items-center gap-2 rounded-xl border px-3 text-sm font-bold', active ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white hover:bg-brand-soft/50');
   const listTitle = 'mb-1.5 flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-500';
 
   const actions = (
     <div className="flex flex-wrap items-center gap-2">
-      <label className="flex min-h-11 w-36 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-2.5 xl:w-56 xl:gap-2 xl:px-3">
+      <label className="flex min-h-11 w-36 items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-2.5 shadow-sm transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15 xl:w-56 xl:gap-2 xl:px-3">
         <Search className="size-4 shrink-0 text-slate-400 xl:size-5" aria-hidden />
         <input
           type="search"
@@ -116,7 +116,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
           aria-expanded={showBills}
           onClick={() => setShowBills((v) => !v)}
           className={cn(
-            'flex min-h-11 items-center gap-2 rounded-xl border bg-white px-3 text-sm font-bold text-slate-800 hover:bg-slate-50',
+            'press flex min-h-11 items-center gap-2 rounded-xl border bg-white px-3 text-sm font-bold text-slate-800 shadow-sm hover:bg-brand-soft/50',
             showBills ? 'border-brand' : 'border-slate-200',
           )}
         >
@@ -212,7 +212,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
       <button
         type="button"
         onClick={startNewBill}
-        className="flex min-h-11 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-white shadow-sm hover:bg-brand-dark"
+        className="press bg-brand-gradient flex min-h-11 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-white shadow-brand hover:brightness-105"
       >
         <Plus className="size-5" aria-hidden />
         {t('pos.newBill')}

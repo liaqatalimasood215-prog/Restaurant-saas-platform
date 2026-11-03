@@ -332,7 +332,7 @@ export function CurrentBill({
   const handOver = order?.type === 'TAKEAWAY' && order.status === 'READY';
   const sectionTitle = 'text-sm font-bold text-slate-900';
   const typeButton =
-    'flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border text-xs font-bold transition disabled:cursor-not-allowed short:min-h-11 short:flex-row short:gap-1.5';
+    'press flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border text-xs font-bold disabled:cursor-not-allowed short:min-h-11 short:flex-row short:gap-1.5';
 
   return (
     <div data-pos-bill className="flex flex-col gap-3 lg:min-h-0 short:gap-2">
@@ -376,7 +376,7 @@ export function CurrentBill({
                   }}
                   className={cn(
                     typeButton,
-                    active ? 'border-brand bg-brand text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+                    active ? 'border-brand bg-brand bg-brand-gradient text-white shadow-brand' : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:border-brand/40 hover:bg-brand-soft/50',
                     locked && !active && option.type !== 'DINE_IN' && 'opacity-50',
                   )}
                 >
@@ -560,7 +560,7 @@ export function CurrentBill({
         </div>
 
         <div className="shrink-0 space-y-2 border-t border-slate-200 p-3 short:space-y-1.5 short:p-2.5">
-          <div className="rounded-xl bg-green-50 px-3 py-2 short:py-1.5">
+          <div className="rounded-xl bg-brand-soft/70 px-3 py-2 short:py-1.5">
             <dl className="space-y-0.5 text-sm text-slate-700">
               {order ? (
                 <>
@@ -642,7 +642,7 @@ export function CurrentBill({
               type="button"
               disabled={busy || views.length === 0}
               onClick={() => void send(false)}
-              className="flex min-h-13 items-center justify-center gap-2 rounded-xl border-2 border-brand bg-white px-2 text-base font-bold text-brand hover:bg-brand-soft disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-white short:min-h-11"
+              className="press flex min-h-13 items-center justify-center gap-2 rounded-xl border-2 border-brand bg-white px-2 text-base font-bold text-brand hover:bg-brand-soft disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-white short:min-h-11"
             >
               <ChefHat className="size-5 shrink-0" aria-hidden />
               {t('pos.sendToKitchen')}
@@ -852,7 +852,7 @@ export function CurrentBill({
 
 function Row({ label, amount, strong = false }: { label: string; amount: number; strong?: boolean }) {
   return (
-    <div className={cn('flex items-baseline justify-between gap-2', strong && 'pt-0.5 text-2xl font-black text-green-700 short:text-xl')}>
+    <div className={cn('flex items-baseline justify-between gap-2', strong && 'pt-0.5 text-2xl font-black text-brand short:text-xl')}>
       <dt className={cn(strong && 'text-slate-900')}>{label}</dt>
       <dd className="tabular-nums">
         {formatPaisa(Math.abs(amount))}
@@ -866,7 +866,7 @@ function BigAction({ icon: ActionIcon, children, ...rest }: { icon: Icon } & But
   return (
     <button
       type="button"
-      className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-brand px-2 text-base font-bold text-white shadow-sm hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-brand/40 short:min-h-11"
+      className="press bg-brand-gradient flex min-h-13 items-center justify-center gap-2 rounded-xl bg-brand px-2 text-base font-bold text-white shadow-brand hover:brightness-105 disabled:cursor-not-allowed disabled:bg-brand/40 disabled:bg-none disabled:shadow-none short:min-h-11"
       {...rest}
     >
       <ActionIcon className="size-5 shrink-0" aria-hidden />
@@ -879,7 +879,7 @@ function SmallAction({ icon: ActionIcon, children, ...rest }: { icon: Icon } & B
   return (
     <button
       type="button"
-      className="flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+      className="press flex min-h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 shadow-sm hover:border-brand/40 hover:bg-brand-soft/50 disabled:opacity-50"
       {...rest}
     >
       <ActionIcon className="size-4 shrink-0" aria-hidden />

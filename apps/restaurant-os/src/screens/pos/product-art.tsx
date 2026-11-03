@@ -28,16 +28,19 @@ export function ProductArt({
   categoryName,
   className,
   emojiClassName,
+  soft = false,
 }: {
   name: string;
   categoryName: string;
   className?: string;
   /** Font size of the emoji, e.g. text-5xl */
   emojiClassName?: string;
+  /** The same soft red background for every product (POS cards, Red & White design) */
+  soft?: boolean;
 }) {
   const { emoji, tone } = artFor(name, categoryName);
   return (
-    <span className={cn('flex items-center justify-center bg-linear-to-br', tone, className)} aria-hidden>
+    <span className={cn('flex items-center justify-center bg-linear-to-br', soft ? 'from-brand-soft via-rose-50 to-white' : tone, className)} aria-hidden>
       <span className={cn('leading-none drop-shadow-md', emojiClassName)}>{emoji}</span>
     </span>
   );

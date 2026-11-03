@@ -47,7 +47,7 @@ export function ProfileMenu() {
         aria-label={t('profile.open')}
         className="flex min-h-12 items-center gap-2 rounded-xl px-1.5 hover:bg-slate-100 sm:px-2"
       >
-        <span className="flex size-9 items-center justify-center rounded-full bg-slate-800 text-sm font-bold text-white">
+        <span className="flex size-9 items-center justify-center rounded-full bg-brand bg-brand-gradient text-sm font-bold text-white shadow-brand">
           {initials(user.name)}
         </span>
         <span className="hidden text-left leading-tight sm:block">

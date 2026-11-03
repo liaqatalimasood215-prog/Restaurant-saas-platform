@@ -35,8 +35,8 @@ export function MenuPanel({ menu, query, onPick }: { menu: MenuSnapshot; query: 
               aria-selected={active}
               onClick={() => setCategory(c.id)}
               className={cn(
-                'flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-bold shadow-sm short:min-h-10',
-                active ? 'bg-brand text-white' : 'border border-slate-200 bg-white text-slate-800 hover:bg-slate-50',
+                'press flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-bold short:min-h-10',
+                active ? 'bg-brand bg-brand-gradient text-white shadow-brand' : 'border border-slate-200 bg-white text-slate-800 shadow-sm hover:border-brand/40 hover:bg-brand-soft/50',
               )}
             >
               <Icon className={cn('size-5', active ? 'text-white' : 'text-brand')} aria-hidden />
@@ -62,26 +62,27 @@ export function MenuPanel({ menu, query, onPick }: { menu: MenuSnapshot; query: 
                   type="button"
                   disabled={!item.isAvailable}
                   onClick={() => onPick(item)}
-                  className="group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition hover:border-brand hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                  className="lift group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white text-left shadow-[0_4px_14px_-8px_rgb(15_23_42/0.2)] hover:border-brand/40 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <ProductArt
                     name={item.name}
                     categoryName={categoryName(item.categoryId)}
                     className="h-24 w-full xl:h-28 short:h-20"
-                    emojiClassName="text-5xl transition group-hover:scale-110 xl:text-6xl short:text-5xl"
+                    emojiClassName="text-5xl transition duration-300 group-hover:scale-110 xl:text-6xl short:text-5xl"
+                    soft
                   />
                   <span className="flex flex-1 items-center gap-2 p-2.5">
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-bold leading-snug text-slate-900">{item.name}</span>
                       {item.isAvailable ? (
-                        <span className="block text-sm font-extrabold text-slate-900">{price}</span>
+                        <span className="block text-sm font-extrabold text-brand">{price}</span>
                       ) : (
                         <Badge tone="red">{t('waiter.outOfStock')}</Badge>
                       )}
                       {item.description && <span className="block truncate text-xs text-slate-500">{item.description}</span>}
                     </span>
                     {item.isAvailable && (
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand text-white shadow-sm group-hover:bg-brand-dark" aria-hidden>
+                      <span className="bg-brand-gradient flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand text-white shadow-brand transition group-hover:scale-105 group-active:scale-95" aria-hidden>
                         <Plus className="size-5" strokeWidth={2.5} />
                       </span>
                     )}

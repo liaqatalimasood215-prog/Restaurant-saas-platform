@@ -25,8 +25,8 @@ export function DemoModeIndicator() {
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         className={cn(
-          'flex min-h-10 items-center gap-1.5 rounded-full px-3 text-xs font-bold ring-1 ring-inset',
-          failing ? 'bg-red-50 text-red-700 ring-red-200' : 'bg-amber-50 text-amber-800 ring-amber-200',
+          'press flex min-h-10 items-center gap-1.5 rounded-full px-3 text-xs font-bold ring-1 ring-inset',
+          failing ? 'bg-brand text-white ring-brand' : 'bg-white text-brand ring-brand/50 hover:bg-brand-soft',
         )}
       >
         <FlaskConical className="size-4" aria-hidden />

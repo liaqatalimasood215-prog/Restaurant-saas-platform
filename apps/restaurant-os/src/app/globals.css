@@ -1,17 +1,64 @@
 @import 'tailwindcss';
 
-/* Owner's design: brand red, white cards on light grey, dark navy sidebar (MASTER_PROMPT.md §11). */
+/* Owner's Red & White design (2026-11-03): brand red with soft gradients, white sidebar and cards on a light
+   background, rounded buttons, subtle shadows (MASTER_PROMPT.md §11). */
 @theme {
   --color-brand: #e31e24;
   --color-brand-dark: #c0161c;
+  --color-brand-light: #f4474c;
   --color-brand-soft: #fdecec;
   --color-navy: #0f1d33;
-  --color-surface: #f3f5f8;
+  --color-surface: #f6f6f8;
   --font-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* Short screens (a laptop at 150 % scaling shows about 620 px): the POS uses smaller gaps. */
 @custom-variant short (@media (max-height: 760px));
+
+/* The red gradient of buttons, the active menu item and the sidebar ends. */
+@utility bg-brand-gradient {
+  background-image: linear-gradient(135deg, var(--color-brand-light) 0%, var(--color-brand) 45%, var(--color-brand-dark) 100%);
+}
+
+/* A soft red glow under red buttons. */
+@utility shadow-brand {
+  box-shadow: 0 6px 16px -6px rgb(227 30 36 / 0.55);
+}
+
+/* A short press-in when tapped. */
+@utility press {
+  transition-property: transform, box-shadow, background-color, border-color, color;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* Cards that rise a little under the mouse. */
+@utility lift {
+  transition-property: transform, box-shadow, border-color;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+  @media (hover: hover) {
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px -12px rgb(15 23 42 / 0.25);
+    }
+  }
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
 
 html {
   -webkit-tap-highlight-color: transparent;

@@ -19,7 +19,7 @@ export function Header() {
   const { data: session, allowed } = useSession();
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-3 md:px-6">
+    <header className="sticky top-0 z-20 flex h-16 items-center gap-2 border-b border-slate-100 bg-white/95 px-3 shadow-[0_2px_12px_-8px_rgb(15_23_42/0.2)] backdrop-blur sm:gap-3 md:px-6">
       <div className="md:hidden">
         <Logo />
       </div>
@@ -29,7 +29,7 @@ export function Header() {
       <div className="ml-auto flex items-center gap-1 sm:gap-2">
         {session && (
           <div className="hidden items-center gap-2 rounded-xl px-2 lg:flex" title={t('header.branchLabel')}>
-            <Store className="size-5 text-slate-500" aria-hidden />
+            <Store className="size-5 text-brand" aria-hidden />
             <span className="leading-tight">
               <span className="block text-sm font-bold text-slate-900">{session.restaurant.name}</span>
               <span className="block text-xs text-slate-500">{session.branch.name}</span>
@@ -56,7 +56,7 @@ function OrderSearch() {
         if (value.trim()) router.push(`/orders?q=${encodeURIComponent(value.trim())}`);
       }}
     >
-      <label className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-400 focus-within:border-brand">
+      <label className="flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 text-slate-400 shadow-sm transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
         <Search className="size-5 shrink-0" aria-hidden />
         <input
           type="search"
@@ -86,7 +86,7 @@ function NotificationsBell() {
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-label={`${t('header.alerts')} (${list.length})`}
-        className="relative flex size-12 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100"
+        className="press relative flex size-12 items-center justify-center rounded-xl text-slate-600 hover:bg-brand-soft hover:text-brand"
       >
         <Bell className="size-6" aria-hidden />
         {list.length > 0 && (

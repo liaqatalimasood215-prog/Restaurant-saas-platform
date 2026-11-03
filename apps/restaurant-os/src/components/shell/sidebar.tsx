@@ -23,7 +23,8 @@ function readCollapsed(): boolean {
 }
 
 /**
- * Left sidebar, always visible on tablet and desktop (owner decision 2026-10-27).
+ * Left sidebar, always visible on tablet and desktop (owner decision 2026-10-27), in the owner's Red & White
+ * design (2026-11-03): white menu between a red top with the logo and a red bottom with Collapse.
  * Below 1024 px: icon rail with short labels. From 1024 px: full names, with a Collapse button
  * that turns it into the icon rail (remembered in this browser).
  */
@@ -46,9 +47,12 @@ export function Sidebar() {
   return (
     <aside
       aria-label={t('nav.mainMenu')}
-      className={cn('sticky top-0 hidden h-dvh w-24 shrink-0 flex-col bg-navy text-slate-200 md:flex', wide && 'lg:w-56')}
+      className={cn(
+        'sticky top-0 z-10 hidden h-dvh w-24 shrink-0 flex-col bg-white text-slate-800 shadow-[4px_0_24px_-16px_rgb(15_23_42/0.35)] md:flex',
+        wide && 'lg:w-56',
+      )}
     >
-      <div className={cn('flex h-16 items-center justify-center border-b border-white/10 px-3', wide && 'lg:justify-start lg:px-4')}>
+      <div className={cn('bg-brand-gradient flex h-16 shrink-0 items-center justify-center rounded-br-[2rem] px-3 shadow-brand', wide && 'lg:justify-start lg:px-4')}>
         <Logo compact dark iconOnly={collapsed} />
       </div>
 
@@ -62,8 +66,8 @@ export function Sidebar() {
         </ul>
 
         {comingSoon.length > 0 && (
-          <div className="mt-5 border-t border-white/10 pt-4">
-            <p className={cn('mb-2 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400', wide && 'lg:px-3 lg:text-left lg:text-[11px]')}>
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            <p className={cn('mb-2 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500', wide && 'lg:px-3 lg:text-left lg:text-[11px]')}>
               {t('nav.comingSoon')}
             </p>
             <ul className="space-y-0.5">
@@ -77,14 +81,14 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="hidden border-t border-white/10 p-2 lg:block">
+      <div className="bg-brand-gradient hidden shrink-0 rounded-tr-[2rem] p-2 pt-3 lg:block">
         <button
           type="button"
           onClick={toggle}
           aria-expanded={wide}
           title={wide ? t('nav.collapse') : t('nav.expand')}
           className={cn(
-            'flex min-h-10 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-slate-300 hover:bg-white/10 hover:text-white',
+            'press flex min-h-10 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white hover:bg-white/15',
             wide && 'justify-start px-3',
           )}
         >
@@ -104,13 +108,13 @@ function FeatureLink({ section, active, wide }: { section: OsSection; active: bo
       href={section.path}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-center transition-colors',
+        'press flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-center',
         wide && 'lg:min-h-11 lg:flex-row lg:justify-start lg:gap-3 lg:px-3.5 lg:py-2 lg:text-left short:lg:min-h-10',
-        active ? 'bg-brand text-white shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white',
+        active ? 'bg-brand bg-brand-gradient text-white shadow-brand' : 'text-slate-800 hover:bg-brand-soft hover:text-brand',
       )}
     >
       <SectionIcon sectionKey={section.key} className="size-5 shrink-0" />
-      <span className={cn('text-[10px] font-semibold leading-tight', wide && 'lg:flex-1 lg:text-[15px]')}>{label}</span>
+      <span className={cn('text-[10px] font-bold leading-tight', wide && 'lg:flex-1 lg:text-[15px]')}>{label}</span>
       {active && wide && <ChevronRight className="hidden size-4 shrink-0 lg:block" aria-hidden />}
     </Link>
   );
@@ -125,14 +129,14 @@ function ComingSoonLink({ section, active, wide }: { section: OsSection; active:
       aria-current={active ? 'page' : undefined}
       title={`${label} — ${t('nav.comingSoon')}`}
       className={cn(
-        'flex min-h-10 items-center justify-center gap-3 rounded-lg px-2 text-sm transition-colors',
+        'press flex min-h-10 items-center justify-center gap-3 rounded-lg px-2 text-sm',
         wide && 'lg:justify-start lg:px-3',
-        active ? 'bg-white/15 text-white' : 'text-slate-400 hover:bg-white/10 hover:text-slate-200',
+        active ? 'bg-brand-soft text-brand' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800',
       )}
     >
       <SectionIcon sectionKey={section.key} className="size-4 shrink-0" />
       <span className={cn('hidden flex-1 truncate', wide && 'lg:block')}>{label}</span>
-      <span className={cn('hidden rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-slate-300', wide && 'lg:block')}>
+      <span className={cn('hidden rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500', wide && 'lg:block')}>
         {t('nav.phaseShort', { phase: section.phase })}
       </span>
     </Link>
