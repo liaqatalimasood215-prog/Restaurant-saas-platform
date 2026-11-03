@@ -65,7 +65,7 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | Staff upgrade + redesign (Owner-only, activation links, PIN, Deactivate ends sessions, employee list, 3-step wizard, Role Permissions — owner requests 2026-10-29) | **Approved** 2026-10-30 (DEMO frontend); backend parts wait for Phase 4–6 |
 | Preview 5 (Menu, Online App, Riders, Today's Summary, Settings) | **Started** 2026-10-30 ("shuru karo"). Steps 1 **Menu**, 2 **Settings**, 3 **Today's Summary**, 4 **Online App** and **Riders: built**; refunds still to do |
 | Phase 3 Rider App + Riders page | **Started** 2026-11-01 ("Haan, shuru karo"); **built, waiting for the owner's review** |
-| Settings redesign (owner's picture 2026-11-03: feature cards, then the chosen setting) | **Built** 2026-11-03 (DEMO frontend), **waiting for the owner's review** |
+| Settings redesign (owner's picture 2026-11-03: feature cards, then the chosen setting) | **Approved** 2026-11-03 ("Approve"), DEMO frontend |
 | Phase 2 customer website (`apps/customer`) | **Approved** 2026-10-31 ("Approve, Phase C karo"): redesigned from the owner's six-screen picture, DEMO |
 | Online App / Website rework (owner's brief, steps A–H) | Steps A–D **approved** (D on 2026-11-01); steps E–H **paused** by the owner, not cancelled |
 
