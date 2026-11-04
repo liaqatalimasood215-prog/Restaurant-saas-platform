@@ -1,6 +1,7 @@
 // Recipes walkthrough (Inventory Step B, owner 2026-11-04): saved data of the previous version is kept, recipe list and
 // food cost, edit a recipe (new version, draft → verified), add a recipe with checks, sizes with "Copy from", add-ons,
 // a prepared item (sub-recipe) whose cost flows into the pizzas, the dashboard card, Owner / Manager only, phone.
+// Recipe Builder R1 (owner's picture): the builder takes the screen; Quantity + Unit (g → kg), search to add, package sizes.
 // Usage: start the app (pnpm dev), then: pnpm --filter @restaurant-saas/restaurant-os walkthrough:recipes
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -40,12 +41,13 @@ const shot = async (page, name) => {
 };
 const ok = (message) => console.log(`  ✓ ${message}`);
 const dialog = (page) => page.getByRole('dialog');
-/** A recipe is saved when its editor closes (an older "saved" message may still be on the screen). */
-const saveDone = (page) => dialog(page).waitFor({ state: 'hidden' });
+const builder = (page) => page.locator('main [data-recipe-builder]');
+/** A recipe is saved when the builder closes (an older "saved" message may still be on the screen). */
+const saveDone = (page) => builder(page).waitFor({ state: 'detached' });
 const saved = (page) => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key)), DATA_KEY);
 const item = (page, name) => page.locator(`main [data-recipe-item="${name}"]`);
-const recipeCost = (page) => dialog(page).locator('[data-recipe-cost]').innerText();
-const foodCost = (page) => dialog(page).locator('[data-food-cost]').innerText();
+const recipeCost = (page) => builder(page).locator('[data-recipe-cost]').innerText();
+const foodCost = (page) => builder(page).locator('[data-food-cost]').innerText();
 async function openRecipes(page) {
   await page.getByRole('tab', { name: 'Recipes', exact: true }).click();
   await page.locator('main [data-recipe-summary]').first().waitFor();
@@ -102,16 +104,16 @@ console.log('3. Edit a recipe: a new version, draft, then verified');
 await owner.getByRole('button', { name: 'Edit recipe: Zinger Burger' }).click();
 assert.equal(await recipeCost(owner), 'Rs. 184.12');
 assert.match(await foodCost(owner), /40\.9 %/);
-await dialog(owner).getByLabel('Quantity 1').fill('140');
-await dialog(owner).locator('[data-recipe-cost]').getByText('Rs. 176.90').waitFor();
+await builder(owner).getByLabel('Quantity 1').fill('140');
+await builder(owner).locator('[data-recipe-cost]').getByText('Rs. 176.90').waitFor();
 assert.match(await foodCost(owner), /39\.3 %/);
 await shot(owner, '02-desktop-owner-edit-zinger');
-await dialog(owner).getByRole('button', { name: 'Save draft' }).click();
+await builder(owner).getByRole('button', { name: 'Save Draft' }).click();
 await saveDone(owner);
 await item(owner, 'Zinger Burger').getByText('Draft').first().waitFor();
 await owner.getByRole('button', { name: 'Edit recipe: Zinger Burger' }).click();
-assert.equal(await dialog(owner).locator('[data-versions] li').count(), 2);
-await dialog(owner).getByRole('button', { name: 'Save & verify' }).click();
+assert.equal(await builder(owner).locator('[data-versions] li').count(), 2);
+await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
 await saveDone(owner);
 const zinger = (await saved(owner)).inventory.recipes.find((r) => r.target.menuItemId === id(703));
 assert.deepEqual(
@@ -123,32 +125,74 @@ assert.deepEqual(
 );
 ok('Zinger 150 g → 140 g chicken: Rs. 184.12 → Rs. 176.90, 40.9 % → 39.3 %; saved as v2 Draft, then verified; v1 unchanged');
 
+console.log('3b. Recipe Builder R1: Quantity + Unit, search to add, package sizes');
+await owner.getByRole('button', { name: 'Edit recipe: Chicken Karahi' }).click();
+await builder(owner).getByText('This recipe (1 kg)').waitFor();
+assert.equal(await builder(owner).locator('[data-product-name]').innerText(), 'Chicken Karahi', 'name comes from the Menu');
+assert.equal(await recipeCost(owner), 'Rs. 836.72');
+assert.deepEqual(await builder(owner).getByLabel('Unit 1').locator('option').allInnerTexts(), ['kg', 'g', 'mg', 'pack', 'bag', 'box', 'tray', 'bottle']);
+await builder(owner).getByLabel('Unit 1').selectOption('kg');
+assert.equal(await builder(owner).getByLabel('Quantity 1').inputValue(), '1', '1000 g = 1 kg');
+await builder(owner).getByLabel('Quantity 1').fill('0.75');
+await builder(owner).locator('[data-recipe-line="1"] [data-line-cost]').getByText('Rs. 487.50').waitFor();
+await builder(owner).getByLabel('Unit 4').selectOption('l');
+assert.equal(await builder(owner).getByLabel('Quantity 4').inputValue(), '0.12', '120 ml = 0.12 L');
+await builder(owner).getByLabel('Search ingredient to add…').fill('flour');
+await builder(owner).getByRole('listbox', { name: 'Search ingredient to add…' }).getByRole('option', { name: /Pizza flour/ }).click();
+await builder(owner).locator('[data-recipe-line="6"]').waitFor();
+// the cursor goes to the new Quantity
+await owner.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Quantity 6', null, { timeout: 3000 });
+await builder(owner).getByLabel('Quantity 6').fill('0.5');
+await builder(owner).getByLabel('Unit 6').selectOption('bag');
+await builder(owner).getByRole('button', { name: 'Save Draft' }).click();
+await builder(owner).getByText('Line 6: enter how much one package holds, e.g. 1 bag = 25 kg.').waitFor();
+await builder(owner).getByLabel('Size of 1 bag in line 6').fill('10');
+// 0.5 bag × 10 kg = 5 kg flour at Rs. 124 / kg = Rs. 620
+await builder(owner).locator('[data-recipe-line="6"] [data-line-cost]').getByText('Rs. 620').waitFor();
+await builder(owner).getByLabel('Unit 6').selectOption('pack');
+await builder(owner).getByLabel('Quantity 6').fill('0.02');
+// the ingredient's own pack: 0.02 × 25 kg = 0.5 kg = Rs. 62
+await builder(owner).locator('[data-recipe-line="6"] [data-line-cost]').getByText('Rs. 62').waitFor();
+await shot(owner, '02b-desktop-owner-builder-units');
+await builder(owner).getByRole('button', { name: 'Remove line 6' }).click();
+await builder(owner).getByRole('button', { name: 'Save Draft' }).click();
+await saveDone(owner);
+const karahi = (await saved(owner)).inventory.recipes.find((r) => r.target.menuItemId === id(710));
+const v2 = karahi.versions.at(-1);
+assert.equal(karahi.versions.length, 2);
+assert.deepEqual([v2.lines[0].unit, v2.lines[0].quantityMilli, v2.lines[3].unit, v2.lines[3].quantityMilli], ['kg', 750_000, 'l', 120_000]);
+assert.equal(v2.lines[1].unit, undefined, 'a line in its own unit stays as it was');
+const prices = (await saved(owner)).items.find((i) => i.id === id(710));
+assert.equal(prices.basePrice, 260_000, 'the Menu price is never changed by the builder');
+ok('Karahi: 1000 g → 1 kg → 0.75 kg (Rs. 487.50), 120 ml → 0.12 L; flour found by search; a bag needs its size (0.5 × 10 kg = Rs. 620), the own pack is 25 kg; saved as v2 with the units, Menu price Rs. 2,600 untouched');
+
 console.log('4. Add a recipe, with checks');
 await owner.getByRole('button', { name: 'Add recipe: Wings' }).click();
-await dialog(owner).getByRole('button', { name: 'Save & verify' }).click();
-await dialog(owner).getByText('Line 1: choose the ingredient.').waitFor();
-await dialog(owner).getByLabel('Ingredient 1').selectOption({ label: 'Chicken (boneless)' });
-await dialog(owner).getByLabel('Quantity 1').fill('200');
-await dialog(owner).getByLabel('Loss 1').fill('95');
-await dialog(owner).getByRole('button', { name: 'Save & verify' }).click();
-await dialog(owner).getByText('Line 1: the loss must be 0–90 %.').waitFor();
-await dialog(owner).getByLabel('Loss 1').fill('10');
-await dialog(owner).getByRole('button', { name: 'Add ingredient' }).click();
-await dialog(owner).getByLabel('Ingredient 2').selectOption({ label: 'Chicken (boneless)' });
-await dialog(owner).getByLabel('Quantity 2').fill('5');
-await dialog(owner).getByRole('button', { name: 'Save & verify' }).click();
-await dialog(owner).getByText('Line 2: this ingredient is already in the recipe.').waitFor();
-await dialog(owner).getByLabel('Ingredient 2').selectOption({ label: 'Cooking oil' });
-await dialog(owner).getByLabel('Quantity 2').fill('40');
-await dialog(owner).getByRole('button', { name: 'Add ingredient' }).click();
-await dialog(owner).getByLabel('Ingredient 3').selectOption({ label: 'Red chilli powder (500 g pack)' });
-await dialog(owner).getByLabel('Quantity 3').fill('5');
-await dialog(owner).getByRole('button', { name: 'More options for line 3' }).click();
-await dialog(owner).getByLabel('Guest may leave it out').check();
-await dialog(owner).getByText('Kitchen uses 222.222 g').waitFor();
+await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
+await builder(owner).getByText('Line 1: choose the ingredient.').waitFor();
+await builder(owner).getByLabel('Ingredient 1').selectOption({ label: 'Chicken (boneless)' });
+await builder(owner).getByLabel('Quantity 1').fill('200');
+await builder(owner).getByRole('button', { name: 'More options for line 1' }).click();
+await builder(owner).getByLabel('Loss 1').fill('95');
+await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
+await builder(owner).getByText('Line 1: the loss must be 0–90 %.').waitFor();
+await builder(owner).getByLabel('Loss 1').fill('10');
+await builder(owner).getByRole('button', { name: 'Add ingredient' }).click();
+await builder(owner).getByLabel('Ingredient 2').selectOption({ label: 'Chicken (boneless)' });
+await builder(owner).getByLabel('Quantity 2').fill('5');
+await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
+await builder(owner).getByText('Line 2: this ingredient is already in the recipe.').waitFor();
+await builder(owner).getByLabel('Ingredient 2').selectOption({ label: 'Cooking oil' });
+await builder(owner).getByLabel('Quantity 2').fill('40');
+await builder(owner).getByRole('button', { name: 'Add ingredient' }).click();
+await builder(owner).getByLabel('Ingredient 3').selectOption({ label: 'Red chilli powder (500 g pack)' });
+await builder(owner).getByLabel('Quantity 3').fill('5');
+await builder(owner).getByRole('button', { name: 'More options for line 3' }).click();
+await builder(owner).getByLabel('Guest may leave it out').check();
+await builder(owner).getByText('Kitchen uses 222.222 g').waitFor();
 // 222.222 g chicken Rs. 144.44 + 40 ml oil Rs. 23.20 + 5 g chilli Rs. 4.50 = Rs. 172.14
 assert.equal(await recipeCost(owner), 'Rs. 172.14');
-await dialog(owner).getByRole('button', { name: 'Save & verify' }).click();
+await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
 await saveDone(owner);
 await item(owner, 'Wings').getByText('Verified').first().waitFor();
 assert.match(await owner.getByRole('button', { name: /^No recipe/ }).innerText(), /^No recipe\s*1$/);
@@ -156,13 +200,13 @@ ok('empty ingredient, 95 % loss and a double ingredient refused; Wings: 200 g ch
 
 console.log('5. Sizes: Copy from Medium into Large');
 await owner.getByRole('button', { name: 'Edit recipe: Classic Pizza' }).click();
-await dialog(owner).getByRole('tab', { name: /^Large/ }).click();
-await dialog(owner).getByLabel('Copy from').selectOption({ label: 'Medium' });
-assert.equal(await dialog(owner).getByLabel('Quantity 3').inputValue(), '110', 'Medium has 110 g mozzarella');
-await dialog(owner).getByLabel('Quantity 3').fill('170');
-await dialog(owner).getByRole('tab', { name: /^Large/ }).getByText('Changed').waitFor();
+await builder(owner).getByRole('tab', { name: /^Large/ }).click();
+await builder(owner).getByLabel('Copy from').selectOption({ label: 'Medium' });
+assert.equal(await builder(owner).getByLabel('Quantity 3').inputValue(), '110', 'Medium has 110 g mozzarella');
+await builder(owner).getByLabel('Quantity 3').fill('170');
+await builder(owner).getByRole('tab', { name: /^Large/ }).getByText('Changed').waitFor();
 await shot(owner, '03-desktop-owner-pizza-sizes');
-await dialog(owner).getByRole('button', { name: 'Save draft' }).click();
+await builder(owner).getByRole('button', { name: 'Save Draft' }).click();
 await saveDone(owner);
 const pizza = (await saved(owner)).inventory.recipes.filter((r) => r.target.menuItemId === id(701));
 assert.deepEqual(
@@ -178,7 +222,7 @@ ok('Large copied from Medium (dough 250 g, sauce 80 g, cheese 110 g → 170 g), 
 console.log('6. Add-ons');
 await owner.getByRole('tab', { name: 'Add-ons' }).click();
 await owner.locator('main [data-size-line="Extra patty"]').getByRole('button').click();
-await dialog(owner).getByRole('button', { name: 'Save & verify' }).click();
+await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
 await saveDone(owner);
 await owner.locator('main [data-size-line="Extra patty"]').getByText('Draft').waitFor({ state: 'detached' });
 ok('Extra patty (120 g beef, 15 % loss) verified without a new version');
@@ -189,24 +233,24 @@ const smallBefore = await item(owner, 'Classic Pizza').locator('[data-size-line=
 await owner.getByRole('tab', { name: 'Prepared items' }).click();
 await owner.locator('main [data-prepared-item="Pizza dough"]').getByText('Rs. 95.63 / kg').waitFor();
 await owner.getByRole('button', { name: 'Edit recipe: Pizza dough' }).click();
-await dialog(owner).getByLabel('One batch makes').fill('1.7');
-await dialog(owner).locator('[data-unit-cost]').getByText('Rs. 90').waitFor();
-await dialog(owner).getByRole('button', { name: 'Save & verify' }).click();
+await builder(owner).getByLabel('One batch makes').fill('1.7');
+await builder(owner).locator('[data-unit-cost]').getByText('Rs. 90').waitFor();
+await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
 await saveDone(owner);
 await owner.locator('main [data-prepared-item="Pizza dough"]').getByText('Rs. 90 / kg').waitFor();
 await owner.getByRole('button', { name: 'Add prepared item' }).click();
-await dialog(owner).getByLabel('Name', { exact: true }).fill('Spicy mayo');
-await dialog(owner).getByLabel('Category').selectOption('SAUCES_SPICES');
-await dialog(owner).getByLabel('Ingredient 1').selectOption({ label: 'Mayonnaise (1 kg bottle)' });
-await dialog(owner).getByLabel('Quantity 1').fill('950');
-await dialog(owner).getByRole('button', { name: 'Add ingredient' }).click();
-await dialog(owner).getByLabel('Ingredient 2').selectOption({ label: 'Red chilli powder (500 g pack)' });
-await dialog(owner).getByLabel('Quantity 2').fill('50');
-await dialog(owner).getByRole('button', { name: 'Save & verify' }).click();
-await dialog(owner).getByText('Enter what one batch makes, for example 1.6.').waitFor();
-await dialog(owner).getByLabel('One batch makes').fill('1');
+await builder(owner).getByLabel('Name', { exact: true }).fill('Spicy mayo');
+await builder(owner).getByLabel('Category').selectOption('SAUCES_SPICES');
+await builder(owner).getByLabel('Ingredient 1').selectOption({ label: 'Mayonnaise (1 kg bottle)' });
+await builder(owner).getByLabel('Quantity 1').fill('950');
+await builder(owner).getByRole('button', { name: 'Add ingredient' }).click();
+await builder(owner).getByLabel('Ingredient 2').selectOption({ label: 'Red chilli powder (500 g pack)' });
+await builder(owner).getByLabel('Quantity 2').fill('50');
+await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
+await builder(owner).getByText('Enter what one batch makes, for example 1.6.').waitFor();
+await builder(owner).getByLabel('One batch makes').fill('1');
 await shot(owner, '04-desktop-owner-prepared-item');
-await dialog(owner).getByRole('button', { name: 'Save & verify' }).click();
+await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
 await saveDone(owner);
 // 950 g mayo Rs. 617.50 + 50 g chilli Rs. 45 = Rs. 662.50 for 1 kg
 await owner.locator('main [data-prepared-item="Spicy mayo"]').getByText('Rs. 662.50 / kg').waitFor();
@@ -214,8 +258,9 @@ await owner.getByRole('tab', { name: 'Menu items' }).click();
 const smallAfter = await item(owner, 'Classic Pizza').locator('[data-size-line="Small"]').innerText();
 assert.notEqual(smallAfter, smallBefore, 'the cheaper dough lowers the pizza cost');
 await owner.getByRole('button', { name: 'Edit recipe: Loaded Fries' }).click();
-assert.ok((await dialog(owner).getByLabel('Ingredient 1').locator('option', { hasText: 'Spicy mayo' }).count()) === 1, 'the new prepared item can be used in recipes');
-await dialog(owner).getByRole('button', { name: 'Cancel' }).click();
+assert.ok((await builder(owner).getByLabel('Ingredient 1').locator('option', { hasText: 'Spicy mayo' }).count()) === 1, 'the new prepared item can be used in recipes');
+await builder(owner).getByRole('button', { name: 'Recipes', exact: true }).click();
+await builder(owner).waitFor({ state: 'detached' });
 ok('dough batch 1.6 → 1.7 kg: Rs. 95.63 → Rs. 90 / kg and the pizzas got cheaper; Spicy mayo needs its batch size, then Rs. 662.50 / kg, and recipes can use it');
 
 console.log('8. Owner and Manager only');
@@ -234,7 +279,7 @@ await openRecipes(phone);
 await noSidewaysScroll(phone, 'phone recipes');
 await shot(phone, '05-phone-owner-recipes');
 await phone.getByRole('button', { name: 'Edit recipe: Zinger Burger' }).click();
-await dialog(phone).locator('[data-recipe-cost]').waitFor();
+await builder(phone).locator('[data-recipe-cost]').waitFor();
 await shot(phone, '06-phone-owner-recipe-editor');
 await phone.close();
 ok('phone 390 px: cards, editor lines stacked, no sideways scroll');

@@ -1,4 +1,4 @@
-import { MILLI, purchaseConversion, mulDivRound, type Ingredient } from './inventory';
+import { MILLI, purchaseConversion, mulDivRound, type Ingredient, type StockUnit } from './inventory';
 import type { TaxSettings } from './pricing';
 import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
 
@@ -29,6 +29,68 @@ export interface RecipeLine {
   optional: boolean;
   /** May be used instead when the main ingredient runs out (used from Step G) */
   substituteId: Uuid | null;
+  /** The unit the owner typed the quantity in (Recipe Builder R1); missing = the ingredient's own unit. Display only: quantityMilli stays in the stock unit. */
+  unit?: RecipeUnit;
+  /** Packages (pack, bottle, bag, box, tray): stock-unit thousandths in one of them, set by the owner (1 bag = 25 kg) */
+  unitSizeMilli?: number | null;
+}
+
+// ── Units on recipe lines (Recipe Builder R1, owner 2026-11-05) ───────────────────────────────
+
+/** What a quantity on a recipe line can be typed in. */
+export const RECIPE_UNITS = ['kg', 'g', 'mg', 'l', 'ml', 'piece', 'dozen', 'bottle', 'portion', 'pack', 'bag', 'box', 'tray'] as const;
+export type RecipeUnit = (typeof RECIPE_UNITS)[number];
+/** Units whose size the owner sets (1 bag = 25 kg, 1 tray = 30 eggs) */
+export const PACKAGE_UNITS: readonly RecipeUnit[] = ['pack', 'bag', 'box', 'tray', 'bottle'];
+
+/** Fixed sizes in stock-unit thousandths: 1 kg = 1,000,000 milli-grams, 1 mg = 1, 1 dozen = 12 pieces. */
+const FIXED: Partial<Record<StockUnit, Partial<Record<RecipeUnit, number>>>> = {
+  g: { kg: 1_000_000, g: 1000, mg: 1 },
+  ml: { l: 1_000_000, ml: 1000 },
+  piece: { piece: 1000, dozen: 12_000 },
+  bottle: { bottle: 1000, dozen: 12_000 },
+  portion: { portion: 1000 },
+};
+
+/** The units that fit an ingredient: weight with grams, liquids with ml, counted things with pieces; packages fit all. */
+export function recipeUnitsFor(stockUnit: StockUnit): RecipeUnit[] {
+  const fixed = Object.keys(FIXED[stockUnit] ?? {}) as RecipeUnit[];
+  return [...fixed, ...PACKAGE_UNITS.filter((u) => !fixed.includes(u))];
+}
+
+export function isPackageUnit(unit: RecipeUnit, stockUnit: StockUnit): boolean {
+  return FIXED[stockUnit]?.[unit] === undefined && PACKAGE_UNITS.includes(unit);
+}
+
+/**
+ * Stock-unit thousandths in one recipe unit, or null when it does not fit (kg of a liquid) or a package has no size yet.
+ * A package uses the size on the line, else the ingredient's own pack size when it is bought in that package.
+ */
+export function recipeUnitFactor(
+  unit: RecipeUnit,
+  ingredient: Pick<Ingredient, 'stockUnit' | 'purchaseUnit' | 'packSizeMilli'>,
+  unitSizeMilli: number | null = null,
+): number | null {
+  const fixed = FIXED[ingredient.stockUnit]?.[unit];
+  if (fixed !== undefined) return fixed;
+  if (!PACKAGE_UNITS.includes(unit)) return null;
+  const size = unitSizeMilli ?? ((ingredient.purchaseUnit as string) === unit ? ingredient.packSizeMilli : null);
+  return size !== null && Number.isInteger(size) && size > 0 ? size : null;
+}
+
+/** The unit a line shows when none was chosen: the ingredient's own (g, ml, pieces …). */
+export function defaultRecipeUnit(stockUnit: StockUnit): RecipeUnit {
+  return stockUnit;
+}
+
+/** Typed thousandths of a recipe unit → stock-unit thousandths (500 g → 500,000; 0.5 kg → 500,000; 1 dozen → 12,000). */
+export function toStockMilli(typedMilli: number, factorMilli: number): number {
+  return mulDivRound(typedMilli, factorMilli, MILLI);
+}
+
+/** Stock-unit thousandths → thousandths of the chosen unit (500,000 milli-grams in kg → 500 = 0.5 kg). */
+export function fromStockMilli(stockMilli: number, factorMilli: number): number {
+  return mulDivRound(stockMilli, MILLI, factorMilli);
 }
 
 export const RECIPE_STATUSES = ['DRAFT', 'VERIFIED'] as const;
@@ -191,7 +253,9 @@ export type RecipeProblem =
   | 'SUBSTITUTE_INVALID'
   | 'USES_ITSELF'
   | 'YIELD_INVALID'
-  | 'NOTE_TOO_LONG';
+  | 'NOTE_TOO_LONG'
+  | 'UNIT_INVALID'
+  | 'UNIT_SIZE_REQUIRED';
 
 /** Does this prepared item end up using `ingredientId`, directly or through other prepared items? */
 function reaches(book: CostBook, lines: readonly RecipeLine[], ingredientId: Uuid, seen: Set<Uuid>): boolean {
@@ -211,7 +275,7 @@ function reaches(book: CostBook, lines: readonly RecipeLine[], ingredientId: Uui
  */
 export function checkRecipe(
   input: { target: RecipeTarget; lines: readonly RecipeLine[]; yieldMilli: number | null; note: string },
-  ingredients: readonly Pick<Ingredient, 'id' | 'isActive' | 'stockUnit'>[],
+  ingredients: readonly Pick<Ingredient, 'id' | 'isActive' | 'stockUnit' | 'purchaseUnit' | 'packSizeMilli'>[],
   book: CostBook,
 ): { line: number | null; problem: RecipeProblem } | null {
   if (input.lines.length === 0) return { line: null, problem: 'NO_LINES' };
@@ -223,6 +287,11 @@ export function checkRecipe(
     if (!ingredient.isActive) return { line: index, problem: 'INGREDIENT_NOT_IN_USE' };
     if (used.has(line.ingredientId)) return { line: index, problem: 'DUPLICATE_INGREDIENT' };
     used.add(line.ingredientId);
+    // The unit first: a package without its size leaves the quantity unknown.
+    if (line.unit !== undefined) {
+      if (!recipeUnitsFor(ingredient.stockUnit).includes(line.unit)) return { line: index, problem: 'UNIT_INVALID' };
+      if (recipeUnitFactor(line.unit, ingredient, line.unitSizeMilli ?? null) === null) return { line: index, problem: 'UNIT_SIZE_REQUIRED' };
+    }
     if (!Number.isInteger(line.quantityMilli) || line.quantityMilli <= 0 || line.quantityMilli > 1_000_000 * MILLI) return { line: index, problem: 'QUANTITY_INVALID' };
     if (!Number.isInteger(line.lossBps) || line.lossBps < 0 || line.lossBps > MAX_LOSS_BPS) return { line: index, problem: 'LOSS_INVALID' };
     if (line.substituteId !== null) {

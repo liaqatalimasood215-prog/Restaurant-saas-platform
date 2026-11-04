@@ -8,6 +8,7 @@ import {
   type ExpiryState,
   type Ingredient,
   type PurchaseUnit,
+  type RecipeUnit,
   type StockStatus,
   type StockUnit,
 } from '@restaurant-saas/shared';
@@ -16,7 +17,7 @@ import { t } from '@/i18n';
 
 /** Screen helpers for Inventory: units in words, stock in the unit people read (kg, litres, bottles). */
 
-type AnyUnit = PurchaseUnit | StockUnit | DisplayUnit;
+type AnyUnit = PurchaseUnit | StockUnit | DisplayUnit | RecipeUnit;
 type Units = Pick<Ingredient, 'purchaseUnit' | 'stockUnit'>;
 
 export function unitLabel(unit: AnyUnit, milli: number): string {

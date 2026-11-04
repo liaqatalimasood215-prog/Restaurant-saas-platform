@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BookOpen, CakeSlice, ChefHat, CircleCheck, Pencil, Percent, Plus, Search, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { MILLI, currentVersion, displayUnitOf, formatBps, formatPaisa, summarizeFoodCost, type FoodCost, type MenuRecipeRow, type RecipesView } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,7 @@ import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { quantityText, toDisplayMilli, unitLabel } from '../inventory-format';
 import { stateOf, type RecipeState } from './recipe-draft';
-import { RecipeEditor, type EditorSubject } from './recipe-editor';
+import { RecipeBuilder, type EditorSubject } from './recipe-builder';
 import { LEVEL_TONE } from './recipe-lines';
 
 type Section = 'menu' | 'addons' | 'prepared';
@@ -37,6 +37,7 @@ function subjectOf(ref: EditingRef, view: RecipesView): EditorSubject | null {
       kind: 'ITEM',
       menuItemId: ref.menuItemId,
       name: first.itemName,
+      categoryName: first.categoryName,
       unit: first.unit,
       sizes: rows.map((r) => ({ variantId: r.variantId, name: r.variantName, price: r.costing.price, recipe: r.recipe })),
       startVariantId: ref.variantId,
@@ -44,7 +45,7 @@ function subjectOf(ref: EditingRef, view: RecipesView): EditorSubject | null {
   }
   if (ref.kind === 'ADDON') {
     const addon = view.addons.find((a) => a.modifierId === ref.modifierId);
-    return addon ? { kind: 'ADDON', modifierId: addon.modifierId, name: addon.name, price: addon.costing.price, recipe: addon.recipe } : null;
+    return addon ? { kind: 'ADDON', modifierId: addon.modifierId, name: addon.name, groupName: addon.groupName, price: addon.costing.price, recipe: addon.recipe } : null;
   }
   return { kind: 'PREPARED', row: ref.ingredientId ? (view.prepared.find((p) => p.ingredient.id === ref.ingredientId) ?? null) : null };
 }
@@ -82,14 +83,20 @@ function matches(group: MenuItemGroup, filter: Filter): boolean {
 
 /**
  * Recipes & Food Cost (Inventory Step B, DEMO): every menu item and size, add-on and prepared item with its recipe,
- * cost, food cost % and status. Tap a card to edit its recipe.
+ * cost, food cost % and status. Tap a card to open it in the Recipe Builder, which takes the whole screen.
  */
-export function RecipesTab({ canManage }: { canManage: boolean }) {
+export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBuilder?: (open: boolean) => void }) {
   const recipes = useApiQuery(() => getApi().getRecipes(), []);
   const [section, setSection] = useState<Section>('menu');
   const [filter, setFilter] = useState<Filter>('ALL');
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<EditingRef | null>(null);
+  // The builder takes the whole screen: the Inventory title and sections step aside while it is open.
+  useEffect(() => {
+    onBuilder?.(editing !== null);
+    if (editing) window.scrollTo({ top: 0 });
+  }, [editing, onBuilder]);
+  useEffect(() => () => onBuilder?.(false), [onBuilder]);
 
   if (recipes.loading && !recipes.data) return <LoadingState />;
   if (!recipes.data) return <ErrorState message={recipes.error?.message} onRetry={recipes.reload} />;
@@ -107,6 +114,7 @@ export function RecipesTab({ canManage }: { canManage: boolean }) {
   const shown = searched.filter((g) => matches(g, filter));
   const openItem = (group: MenuItemGroup, variantId: string | null) =>
     setEditing({ kind: 'ITEM', menuItemId: group.menuItemId, variantId });
+  if (subject) return <RecipeBuilder key={versionsKey(subject)} subject={subject} view={view} onClose={() => setEditing(null)} />;
 
   return (
     <div className="space-y-4">
@@ -292,7 +300,6 @@ export function RecipesTab({ canManage }: { canManage: boolean }) {
       <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{t('inventory.recipes.demoNote')}</p>
       <p className="text-xs text-slate-500">{t('inventory.recipes.guide')}</p>
 
-      {subject && <RecipeEditor key={versionsKey(subject)} subject={subject} view={view} onClose={() => setEditing(null)} />}
     </div>
   );
 }

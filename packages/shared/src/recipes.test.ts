@@ -6,6 +6,11 @@ import {
   foodCostLevel,
   foodCostOf,
   formatBps,
+  fromStockMilli,
+  isPackageUnit,
+  recipeUnitFactor,
+  recipeUnitsFor,
+  toStockMilli,
   grossQuantity,
   ingredientCost,
   linesCost,
@@ -105,7 +110,7 @@ test('food cost % is taken on the price without the tax inside it', () => {
 });
 
 test('a recipe needs ingredients in use, each once, real quantities, losses up to 90 %, and a matching substitute', () => {
-  const ingredients = [...INGREDIENTS.map((i) => ({ id: i.id, isActive: true, stockUnit: i.stockUnit })), { id: 'old', isActive: false, stockUnit: 'g' as const }];
+  const ingredients = [...INGREDIENTS.map((i) => ({ id: i.id, isActive: true, stockUnit: i.stockUnit, purchaseUnit: i.purchaseUnit, packSizeMilli: i.packSizeMilli })), { id: 'old', isActive: false, stockUnit: 'g' as const, purchaseUnit: 'kg' as const, packSizeMilli: null }];
   const item = { kind: 'ITEM' as const, menuItemId: 'burger', variantId: null };
   const check = (lines: RecipeLine[]) => checkRecipe({ target: item, lines, yieldMilli: null, note: '' }, ingredients, book);
   assert.equal(check([line('chicken', g(150))]), null);
@@ -120,7 +125,7 @@ test('a recipe needs ingredients in use, each once, real quantities, losses up t
 });
 
 test('a prepared item needs its batch size and may never use itself, also not through another prepared item', () => {
-  const ingredients = INGREDIENTS.map((i) => ({ id: i.id, isActive: true, stockUnit: i.stockUnit }));
+  const ingredients = INGREDIENTS.map((i) => ({ id: i.id, isActive: true, stockUnit: i.stockUnit, purchaseUnit: i.purchaseUnit, packSizeMilli: i.packSizeMilli }));
   const dough = { kind: 'PREPARED' as const, ingredientId: 'dough' };
   assert.deepEqual(checkRecipe({ target: dough, lines: [line('flour', g(1000))], yieldMilli: null, note: '' }, ingredients, book), { line: null, problem: 'YIELD_INVALID' });
   assert.deepEqual(checkRecipe({ target: dough, lines: [line('dough', g(100))], yieldMilli: g(1000), note: '' }, ingredients, book), { line: 0, problem: 'USES_ITSELF' });
@@ -128,7 +133,7 @@ test('a prepared item needs its batch size and may never use itself, also not th
   const withBase = [...INGREDIENTS, { id: 'base', kind: 'PREPARED' as const, purchaseUnit: 'kg' as const, stockUnit: 'g' as const, packSizeMilli: null, purchasePrice: 0 }];
   const loop = makeCostBook(withBase, [DOUGH, { target: { kind: 'PREPARED', ingredientId: 'base' }, versions: [version([line('dough', g(500))], g(500))] }]);
   assert.deepEqual(
-    checkRecipe({ target: dough, lines: [line('base', g(100))], yieldMilli: g(1000), note: '' }, [...ingredients, { id: 'base', isActive: true, stockUnit: 'g' }], loop),
+    checkRecipe({ target: dough, lines: [line('base', g(100))], yieldMilli: g(1000), note: '' }, [...ingredients, { id: 'base', isActive: true, stockUnit: 'g' as const, purchaseUnit: 'kg' as const, packSizeMilli: null }], loop),
     { line: 0, problem: 'USES_ITSELF' },
   );
 });
@@ -153,4 +158,40 @@ test('food cost summary: items with a recipe, verified, simple average, high', (
     { menuItemId: 'pasta', recipe: null, costing: costing(null) },
   ]);
   assert.deepEqual(summary, { itemsWithRecipe: 2, items: 3, verified: 2, recipes: 3, averageBps: 3333, high: 1 });
+});
+
+test('recipe line units: kg / g / mg, L / ml, pcs / dozen, and packages with their size', () => {
+  const chicken = { stockUnit: 'g' as const, purchaseUnit: 'kg' as const, packSizeMilli: null };
+  const oil = { stockUnit: 'ml' as const, purchaseUnit: 'l' as const, packSizeMilli: null };
+  const buns = { stockUnit: 'piece' as const, purchaseUnit: 'pack' as const, packSizeMilli: 12_000 };
+  const flour = { stockUnit: 'g' as const, purchaseUnit: 'pack' as const, packSizeMilli: 25_000_000 };
+  assert.deepEqual(recipeUnitsFor('g'), ['kg', 'g', 'mg', 'pack', 'bag', 'box', 'tray', 'bottle']);
+  assert.deepEqual(recipeUnitsFor('ml'), ['l', 'ml', 'pack', 'bag', 'box', 'tray', 'bottle']);
+  assert.deepEqual(recipeUnitsFor('piece'), ['piece', 'dozen', 'pack', 'bag', 'box', 'tray', 'bottle']);
+  // 1 kg = 1000 g, 500 g = 0.5 kg, 1 L = 1000 ml, 500 ml = 0.5 L, 1 dozen = 12 pcs
+  assert.equal(toStockMilli(1000, recipeUnitFactor('kg', chicken)!), 1_000_000);
+  assert.equal(fromStockMilli(500_000, recipeUnitFactor('kg', chicken)!), 500, '500 g = 0.5 kg');
+  assert.equal(toStockMilli(500_000, recipeUnitFactor('mg', chicken)!), 500, '500 mg = 0.5 g');
+  assert.equal(toStockMilli(1000, recipeUnitFactor('l', oil)!), 1_000_000);
+  assert.equal(fromStockMilli(500_000, recipeUnitFactor('l', oil)!), 500, '500 ml = 0.5 L');
+  assert.equal(toStockMilli(1000, recipeUnitFactor('dozen', buns)!), 12_000, '1 dozen = 12 pcs');
+  // packages: the ingredient's own pack size, or one set on the line
+  assert.equal(recipeUnitFactor('pack', buns), 12_000);
+  assert.equal(recipeUnitFactor('pack', flour), 25_000_000);
+  assert.equal(recipeUnitFactor('bag', flour), null, 'a bag needs its size');
+  assert.equal(recipeUnitFactor('bag', flour, 50_000_000), 50_000_000);
+  assert.equal(recipeUnitFactor('l', chicken), null, 'weight is never typed in litres');
+  assert.equal(isPackageUnit('bottle', 'g'), true);
+  assert.equal(isPackageUnit('bottle', 'bottle'), false);
+});
+
+test('a line with a unit must fit the ingredient and a package needs its size', () => {
+  const ingredients = INGREDIENTS.map((i) => ({ id: i.id, isActive: true, stockUnit: i.stockUnit, purchaseUnit: i.purchaseUnit, packSizeMilli: i.packSizeMilli }));
+  const item = { kind: 'ITEM' as const, menuItemId: 'karahi', variantId: null };
+  const check = (l: RecipeLine) => checkRecipe({ target: item, lines: [l], yieldMilli: null, note: '' }, ingredients, book);
+  assert.equal(check({ ...line('chicken', g(750)), unit: 'kg' }), null);
+  assert.deepEqual(check({ ...line('chicken', g(750)), unit: 'ml' }), { line: 0, problem: 'UNIT_INVALID' });
+  assert.deepEqual(check({ ...line('chicken', g(750)), unit: 'bag' }), { line: 0, problem: 'UNIT_SIZE_REQUIRED' });
+  assert.equal(check({ ...line('chicken', g(750)), unit: 'bag', unitSizeMilli: g(5000) }), null);
+  assert.equal(check(line('chicken', g(750))), null, 'old lines without a unit stay valid');
 });

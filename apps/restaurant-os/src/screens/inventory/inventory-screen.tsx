@@ -52,6 +52,8 @@ export function InventoryScreen() {
   const [historyOf, setHistoryOf] = useState<string | null>(null);
   const [editing, setEditing] = useState<IngredientRow | 'new' | null>(null);
   const [adjusting, setAdjusting] = useState<IngredientRow | 'pick' | null>(null);
+  /** The Recipe Builder takes the whole screen (owner's picture) */
+  const [building, setBuilding] = useState(false);
   const canManage = allowed('inventory.manage');
   const openStock = (tab: StockTab) => {
     setSection('stock');
@@ -78,8 +80,8 @@ export function InventoryScreen() {
 
   return (
     <>
-      {header}
-      <div role="tablist" aria-label={t('inventory.sections.label')} className="mb-4 flex overflow-x-auto rounded-2xl border border-slate-200 bg-white px-1 shadow-sm">
+      {!building && header}
+      <div role="tablist" aria-label={t('inventory.sections.label')} hidden={building} className="mb-4 flex overflow-x-auto rounded-2xl border border-slate-200 bg-white px-1 shadow-sm">
         {SECTIONS.map(({ key, icon: Icon, phase }) => (
           <button
             key={key}
@@ -155,11 +157,11 @@ export function InventoryScreen() {
         </div>
       )}
 
-      {section === 'recipes' && <RecipesTab canManage={canManage} />}
+      {section === 'recipes' && <RecipesTab canManage={canManage} onBuilder={setBuilding} />}
       {section === 'purchasing' && <PlannedPanel icon={ShoppingCart} title="inventory.planned.purchasing.title" items="inventory.planned.purchasing.items" phase={3} />}
       {section === 'reports' && <PlannedPanel icon={ChartColumn} title="inventory.planned.reports.title" items="inventory.planned.reports.items" phase={6} />}
 
-      <p className="mt-4 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">{t('inventory.demoNote')}</p>
+      {!building && <p className="mt-4 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">{t('inventory.demoNote')}</p>}
 
       {editing && <IngredientDialog row={editing === 'new' ? null : editing} view={view} onClose={() => setEditing(null)} />}
       {adjusting && <AdjustStockDialog row={adjusting === 'pick' ? null : adjusting} view={view} onClose={() => setAdjusting(null)} />}
