@@ -16,7 +16,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import { formatPaisa, type InventoryView } from '@restaurant-saas/shared';
+import { formatBps, formatPaisa, type InventoryView } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { t } from '@/i18n';
@@ -32,8 +32,8 @@ const TONES = {
   orange: 'bg-orange-50 text-orange-700',
 } as const;
 
-/** Inventory dashboard: five live cards (tap = the filtered list), five that later steps fill, and three short lists. */
-export function OverviewTab({ view, onOpen }: { view: InventoryView; onOpen: (filter: IngredientFilter) => void }) {
+/** Inventory dashboard: live cards (tap = the filtered list or Recipes), cards that later steps fill, and three short lists. */
+export function OverviewTab({ view, onOpen, onOpenRecipes }: { view: InventoryView; onOpen: (filter: IngredientFilter) => void; onOpenRecipes: () => void }) {
   const { summary } = view;
   const attention = view.ingredients.filter((r) => r.status === 'LOW' || r.status === 'OUT').sort((a, b) => a.onHandMilli - b.onHandMilli);
   const expiring = view.ingredients
@@ -60,7 +60,14 @@ export function OverviewTab({ view, onOpen }: { view: InventoryView; onOpen: (fi
         <SoonCard icon={ChefHat} label={t('inventory.cards.consumption')} step="G" />
         <SoonCard icon={Trash2} label={t('inventory.cards.wastage')} step="D" />
         <SoonCard icon={HandCoins} label={t('inventory.cards.supplierDue')} step="C" />
-        <SoonCard icon={Percent} label={t('inventory.cards.foodCost')} step="B" />
+        <StatCard
+          icon={Percent}
+          tone="slate"
+          label={t('inventory.cards.foodCost')}
+          value={view.foodCost.averageBps === null ? '—' : formatBps(view.foodCost.averageBps)}
+          hint={view.foodCost.recipes ? t('inventory.cardHints.foodCost', { n: view.foodCost.recipes }) : t('inventory.cardHints.noRecipes')}
+          onClick={onOpenRecipes}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

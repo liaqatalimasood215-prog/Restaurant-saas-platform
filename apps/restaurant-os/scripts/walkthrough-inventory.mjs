@@ -75,11 +75,11 @@ await setup.close();
 const owner = await openAs(USER.owner, '/inventory', DESKTOP);
 await card(owner, 'Ingredients').waitFor();
 const upgraded = await saved(owner);
-assert.equal(upgraded.version, 16);
+assert.equal(upgraded.version, 17, 'brought up to the newest version');
 assert.equal(upgraded.employeeCounter, 77, 'the old data was kept');
-assert.equal(upgraded.inventory.ingredients.length, 25);
+assert.equal(upgraded.inventory.ingredients.filter((i) => i.kind === 'BOUGHT').length, 25);
 assert.ok(upgraded.rolePermissions.MANAGER.includes('inventory.view') && upgraded.rolePermissions.MANAGER.includes('menu.view'));
-ok('version 15 → 16: earlier changes kept (employee counter 77, Manager permissions), 25 sample ingredients added');
+ok('version 15 → 17: earlier changes kept (employee counter 77, Manager permissions), 25 sample ingredients added');
 
 console.log('2. Dashboard');
 const cardValue = async (label) => (await card(owner, label).innerText()).split('\n').map((s) => s.trim()).filter(Boolean);

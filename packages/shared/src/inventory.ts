@@ -1,3 +1,4 @@
+import type { FoodCostSummary } from './recipes';
 import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
 
 /**
@@ -149,8 +150,13 @@ export interface Supplier extends BranchScoped {
   isActive: boolean;
 }
 
+/** BOUGHT from a supplier, or PREPARED in the kitchen from a batch recipe such as pizza dough (Step B). */
+export const INGREDIENT_KINDS = ['BOUGHT', 'PREPARED'] as const;
+export type IngredientKind = (typeof INGREDIENT_KINDS)[number];
+
 export interface Ingredient extends BranchScoped {
   id: Uuid;
+  kind: IngredientKind;
   name: string;
   /** Short unique code, e.g. CHK-001 */
   code: string;
@@ -402,6 +408,8 @@ export interface InventoryView {
   today: string;
   expiringSoonDays: number;
   summary: InventorySummary;
+  /** Step B: food cost of the menu recipes */
+  foodCost: FoodCostSummary;
   ingredients: IngredientRow[];
   /** Newest first */
   movements: StockMovementRow[];

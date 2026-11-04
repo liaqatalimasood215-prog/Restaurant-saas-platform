@@ -25,12 +25,13 @@ import {
   type WaiterCall,
 } from '@restaurant-saas/shared';
 import { createInventorySeed, type DemoInventory } from './inventory-seed';
+import { createRecipeSeed } from './recipe-seed';
 
 /**
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 16;
+export const DEMO_DATA_VERSION = 17;
 
 /** Permissions added after demo data of an older version was saved: the Managers get them as recommended. */
 const NEW_MANAGER_PERMISSIONS_16: Permission[] = ['inventory.view', 'inventory.manage'];
@@ -345,22 +346,44 @@ export function createSeed(): DemoData {
 }
 
 /**
- * Saved demo data of an older version, brought up to date WITHOUT losing anything (owner, 2026-11-04: never reset
- * his demo data without asking). Version 15 → 16 adds the sample inventory and the new Inventory permissions.
+ * Saved demo data of an older version, brought up to date step by step WITHOUT losing anything (owner, 2026-11-04:
+ * never reset his demo data without asking).
+ * - 15 → 16 adds the sample inventory and the new Inventory permissions.
+ * - 16 → 17 marks every ingredient as bought and adds the sample recipes and the prepared pizza dough; the
+ *   ingredients, stock and corrections he made stay as they are.
  * Anything older, or not demo data at all, returns null (the demo starts fresh, as before).
  */
 export function upgradeDemoData(raw: unknown): DemoData | null {
-  const data = raw as (Omit<DemoData, 'inventory'> & { inventory?: DemoInventory }) | null;
+  let data = raw as (Omit<DemoData, 'inventory'> & { inventory?: DemoInventory }) | null;
   if (!data || typeof data !== 'object' || typeof data.version !== 'number') return null;
   if (data.version === DEMO_DATA_VERSION) return data as DemoData;
-  if (data.version !== 15) return null;
-  const added = NEW_MANAGER_PERMISSIONS_16;
-  const withNew = (list: Permission[]) => [...list, ...added.filter((p) => !list.includes(p))];
-  return {
-    ...data,
-    version: 16,
-    inventory: data.inventory ?? createInventorySeed(scoped, demoId(101)),
-    rolePermissions: data.rolePermissions.MANAGER ? { ...data.rolePermissions, MANAGER: withNew(data.rolePermissions.MANAGER) } : data.rolePermissions,
-    staff: data.staff.map((s) => (s.role === 'MANAGER' && s.permissions ? { ...s, permissions: withNew(s.permissions) } : s)),
-  };
+  if (data.version < 15 || data.version > DEMO_DATA_VERSION) return null;
+  if (data.version === 15) {
+    const added = NEW_MANAGER_PERMISSIONS_16;
+    const withNew = (list: Permission[]) => [...list, ...added.filter((p) => !list.includes(p))];
+    data = {
+      ...data,
+      version: 16,
+      inventory: data.inventory ?? createInventorySeed(scoped, demoId(101)),
+      rolePermissions: data.rolePermissions.MANAGER ? { ...data.rolePermissions, MANAGER: withNew(data.rolePermissions.MANAGER) } : data.rolePermissions,
+      staff: data.staff.map((s) => (s.role === 'MANAGER' && s.permissions ? { ...s, permissions: withNew(s.permissions) } : s)),
+    };
+    // A brand-new sample inventory already has version 17's recipes.
+    if (!raw || (raw as { inventory?: unknown }).inventory === undefined) return { ...data, version: 17 } as DemoData;
+  }
+  if (data.version === 16 && data.inventory) {
+    const inventory = data.inventory;
+    const ingredients = inventory.ingredients.map((i) => ({ ...i, kind: i.kind ?? 'BOUGHT' }));
+    const { dough, recipes } = createRecipeSeed(scoped, demoId(101), ingredients);
+    data = {
+      ...data,
+      version: 17,
+      inventory: {
+        ...inventory,
+        ingredients: ingredients.some((i) => i.id === dough.id) ? ingredients : [...ingredients, dough],
+        recipes: inventory.recipes ?? recipes,
+      },
+    };
+  }
+  return data.version === DEMO_DATA_VERSION && data.inventory ? (data as DemoData) : null;
 }

@@ -49,6 +49,11 @@ import type {
   Uuid,
   AdjustReason,
   Ingredient,
+  IngredientKind,
+  Recipe,
+  RecipeLine,
+  RecipeTarget,
+  RecipesView,
   IngredientCategory,
   InventoryView,
   PurchaseUnit,
@@ -295,6 +300,18 @@ export interface IngredientInput {
   expiryDate: string | null;
   /** New ingredient only: written as its OPENING stock movement */
   openingMilli: number;
+  /** New ingredient only; missing = BOUGHT. PREPARED items are made in the kitchen from a batch recipe. */
+  kind?: IngredientKind;
+}
+
+export interface RecipeInput {
+  target: RecipeTarget;
+  lines: RecipeLine[];
+  /** Prepared items: what one batch makes (stock-unit thousandths) */
+  yieldMilli: number | null;
+  note: string;
+  /** Save as VERIFIED (checked by the Owner / Manager); otherwise a DRAFT */
+  verify: boolean;
 }
 
 export interface StockAdjustInput {
@@ -492,6 +509,13 @@ export interface ApiClient {
   setIngredientActive(ingredientId: Uuid, active: boolean): Promise<void>;
   /** A correction with a reason (Step A). Purchases, kitchen use and waste come in later steps. */
   adjustStock(input: StockAdjustInput): Promise<void>;
+  /** Recipes & Food Cost (Step B): every menu size, add-on and prepared item with its current recipe and food cost. */
+  getRecipes(): Promise<RecipesView>;
+  /**
+   * Adds a new version when the lines changed (old versions stay as they were). Saving the same lines again with
+   * verify = true only marks the current version VERIFIED.
+   */
+  saveRecipe(input: RecipeInput): Promise<Recipe>;
 
   /** Activation page (no login): who the link is for, or an error when it is used, revoked or expired. */
   getActivation(token: string): Promise<ActivationInfo>;

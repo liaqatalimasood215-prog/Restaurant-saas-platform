@@ -5,6 +5,7 @@ import {
   displayFactorMilli,
   rupeesToPaisa,
   type Ingredient,
+  type Recipe,
   type IngredientCategory,
   type PurchaseUnit,
   type StockLocation,
@@ -12,6 +13,7 @@ import {
   type StockUnit,
   type Supplier,
 } from '@restaurant-saas/shared';
+import { createRecipeSeed } from './recipe-seed';
 
 /**
  * DEMO stock of "Aziz Pizza — DEMO" (Inventory Step A, owner 2026-11-04): sample ingredients with PKR
@@ -24,6 +26,8 @@ export interface DemoInventory {
   suppliers: Supplier[];
   ingredients: Ingredient[];
   movements: StockMovement[];
+  /** Step B: menu, add-on and prepared-item recipes (every save adds a version) */
+  recipes: Recipe[];
   expiringSoonDays: number;
 }
 
@@ -117,6 +121,7 @@ export function createInventorySeed(scope: { restaurantId: string; branchId: str
     ingredients.push({
       id: ingredientId,
       ...scope,
+      kind: 'BOUGHT',
       name,
       code,
       category,
@@ -148,5 +153,6 @@ export function createInventorySeed(scope: { restaurantId: string; branchId: str
       });
     }
   });
-  return { locations, suppliers, ingredients, movements, expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS };
+  const { dough, recipes } = createRecipeSeed(scope, ownerId, ingredients, now);
+  return { locations, suppliers, ingredients: [...ingredients, dough], movements, recipes, expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS };
 }

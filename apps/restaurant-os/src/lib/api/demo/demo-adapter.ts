@@ -143,6 +143,20 @@ import {
   summarizeInventory,
   type Ingredient,
   type InventoryView,
+  checkRecipe,
+  currentVersion,
+  displayFactorMilli,
+  foodCostOf,
+  ingredientCost,
+  linesCost,
+  makeCostBook,
+  sameRecipe,
+  sameTarget,
+  summarizeFoodCost,
+  type MenuRecipeRow,
+  type Recipe,
+  type RecipeTarget,
+  type RecipesView,
 } from '@restaurant-saas/shared';
 import {
   ApiError,
@@ -168,6 +182,7 @@ import {
   type TableInput,
   type IngredientInput,
   type StockAdjustInput,
+  type RecipeInput,
 } from '../client';
 import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
@@ -2364,6 +2379,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const inv = data.inventory;
       const today = businessDate(new Date(), data.branch.timezone, '00:00');
       const rows = inv.ingredients
+        .filter((ingredient) => ingredient.kind !== 'PREPARED')
         .map((ingredient) => {
           const onHandMilli = onHandOf(ingredient.id, inv.movements);
           return {
@@ -2390,6 +2406,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         today,
         expiringSoonDays: inv.expiringSoonDays,
         summary: summarizeInventory(rows),
+        foodCost: summarizeFoodCost(this.menuRecipeRows(data)),
         ingredients: rows,
         movements,
         locations: [...inv.locations].sort((a, b) => a.sort - b.sort),
@@ -2434,7 +2451,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           Object.assign(existing, fields);
           return existing;
         }
-        const ingredient: Ingredient = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ...fields, isActive: true, createdAt: now };
+        const ingredient: Ingredient = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, kind: input.kind ?? 'BOUGHT', ...fields, isActive: true, createdAt: now };
         inv.ingredients.push(ingredient);
         if (input.openingMilli > 0) {
           inv.movements.push({
@@ -2497,6 +2514,126 @@ export class DemoAdapter implements ApiClient, DemoControls {
           createdAt: nowIso(),
         });
         data.idempotency[key] = movementId;
+      }),
+    );
+  }
+
+  // ── Recipes & Food Cost (DEMO, Step B) ─────────────────────────────────────────────────────
+
+  private costBook(data: DemoData) {
+    return makeCostBook(data.inventory.ingredients, data.inventory.recipes);
+  }
+
+  private recipeFor(data: DemoData, target: RecipeTarget): Recipe | null {
+    return data.inventory.recipes.find((r) => sameTarget(r.target, target)) ?? null;
+  }
+
+  /** One row per menu item and size (an item without sizes has one row). */
+  private menuRecipeRows(data: DemoData): MenuRecipeRow[] {
+    const book = this.costBook(data);
+    const tax = data.branch.tax;
+    const categories = [...data.categories].sort((a, b) => a.sort - b.sort);
+    const items = data.items.filter((i) => !i.archivedAt).sort((a, b) => categories.findIndex((c) => c.id === a.categoryId) - categories.findIndex((c) => c.id === b.categoryId) || a.sort - b.sort);
+    return items.flatMap((item) => {
+      const sizes = item.variants.length ? [...item.variants].sort((a, b) => a.sort - b.sort) : [null];
+      return sizes.map((variant) => {
+        const recipe = this.recipeFor(data, { kind: 'ITEM', menuItemId: item.id, variantId: variant?.id ?? null });
+        const version = recipe ? currentVersion(recipe) : null;
+        return {
+          menuItemId: item.id,
+          itemName: item.name,
+          categoryName: categories.find((c) => c.id === item.categoryId)?.name ?? '',
+          unit: item.unit,
+          variantId: variant?.id ?? null,
+          variantName: variant?.name ?? null,
+          recipe,
+          costing: foodCostOf(version ? linesCost(book, version.lines).total : null, variant?.price ?? item.basePrice, tax),
+        };
+      });
+    });
+  }
+
+  getRecipes(): Promise<RecipesView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const book = this.costBook(data);
+      const inv = data.inventory;
+      const tax = data.branch.tax;
+      const addons = data.modifierGroups.flatMap((group) =>
+        group.modifiers.map((modifier) => {
+          const recipe = this.recipeFor(data, { kind: 'ADDON', modifierId: modifier.id });
+          const version = recipe ? currentVersion(recipe) : null;
+          return { modifierId: modifier.id, name: modifier.name, groupName: group.name, recipe, costing: foodCostOf(version ? linesCost(book, version.lines).total : null, modifier.price, tax) };
+        }),
+      );
+      const prepared = inv.ingredients
+        .filter((i) => i.kind === 'PREPARED')
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((ingredient) => {
+          const recipe = this.recipeFor(data, { kind: 'PREPARED', ingredientId: ingredient.id });
+          const version = recipe ? currentVersion(recipe) : null;
+          return {
+            ingredient,
+            recipe,
+            batchCost: version ? linesCost(book, version.lines).total : null,
+            unitCost: ingredientCost(book, ingredient.id, displayFactorMilli(ingredient)),
+          };
+        });
+      const people = new Set(inv.recipes.flatMap((r) => r.versions.flatMap((v) => [v.savedBy, v.verifiedBy ?? ''])).values());
+      return {
+        menu: this.menuRecipeRows(data),
+        addons,
+        prepared,
+        ingredients: [...inv.ingredients].sort((a, b) => a.name.localeCompare(b.name)),
+        batches: [...book.prepared.entries()].map(([ingredientId, v]) => ({ ingredientId, lines: v.lines, yieldMilli: v.yieldMilli })),
+        tax: { rateBps: tax.rateBps, pricesIncludeTax: tax.pricesIncludeTax },
+        staffNames: Object.fromEntries([...people].filter(Boolean).map((uid) => [uid, this.staffName(data, uid) ?? ''])),
+      };
+    });
+  }
+
+  saveRecipe(input: RecipeInput): Promise<Recipe> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        const target = input.target;
+        const exists =
+          target.kind === 'ITEM'
+            ? data.items.some((i) => i.id === target.menuItemId && !i.archivedAt && (target.variantId === null ? i.variants.length === 0 : i.variants.some((v) => v.id === target.variantId)))
+            : target.kind === 'ADDON'
+              ? data.modifierGroups.some((g) => g.modifiers.some((m) => m.id === target.modifierId))
+              : inv.ingredients.some((i) => i.id === target.ingredientId && i.kind === 'PREPARED');
+        if (!exists) throw new ApiError('NOT_FOUND', 'This menu item, size or add-on was not found.');
+        const book = this.costBook(data);
+        const problem = checkRecipe(input, inv.ingredients, book);
+        if (problem) throw new ApiError('VALIDATION', 'Please check the recipe lines.');
+        const now = nowIso();
+        let recipe = this.recipeFor(data, target);
+        if (!recipe) {
+          recipe = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, target, versions: [] };
+          inv.recipes.push(recipe);
+        }
+        const current = currentVersion(recipe);
+        const next = { lines: input.lines, yieldMilli: target.kind === 'PREPARED' ? input.yieldMilli : null };
+        if (current && sameRecipe(current, next)) {
+          // Nothing changed: a double tap adds nothing; "Save & verify" only marks it verified.
+          if (input.verify && current.status === 'DRAFT') Object.assign(current, { status: 'VERIFIED', verifiedBy: user.id, verifiedAt: now });
+          return recipe;
+        }
+        recipe.versions.push({
+          version: (current?.version ?? 0) + 1,
+          ...next,
+          status: input.verify ? 'VERIFIED' : 'DRAFT',
+          note: input.note.trim(),
+          savedBy: user.id,
+          savedAt: now,
+          verifiedBy: input.verify ? user.id : null,
+          verifiedAt: input.verify ? now : null,
+          costAtSave: linesCost(book, input.lines).total,
+        });
+        return recipe;
       }),
     );
   }

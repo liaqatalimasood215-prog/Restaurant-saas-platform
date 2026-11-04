@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Boxes, LayoutDashboard, ListChecks, Plus, SlidersHorizontal } from 'lucide-react';
+import { BookOpen, Boxes, LayoutDashboard, ListChecks, Plus, SlidersHorizontal } from 'lucide-react';
 import type { IngredientRow } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
 import { Button } from '@/components/ui/button';
@@ -15,17 +15,18 @@ import { AdjustStockDialog } from './adjust-stock-dialog';
 import { IngredientDialog } from './ingredient-dialog';
 import { IngredientsTab, type IngredientFilter } from './ingredients-tab';
 import { OverviewTab } from './overview-tab';
+import { RecipesTab } from './recipes/recipes-tab';
 
-type Tab = 'overview' | 'ingredients';
+type Tab = 'overview' | 'ingredients' | 'recipes';
 
 const TABS: { key: Tab; icon: typeof Boxes }[] = [
   { key: 'overview', icon: LayoutDashboard },
   { key: 'ingredients', icon: ListChecks },
+  { key: 'recipes', icon: BookOpen },
 ];
 
 /** The other sections of the approved plan, built one step at a time after the owner's approval. */
 const NEXT_TABS = [
-  ['recipes', 'B'],
   ['suppliers', 'C'],
   ['purchases', 'C'],
   ['wastage', 'D'],
@@ -36,8 +37,8 @@ const NEXT_TABS = [
 ] as const;
 
 /**
- * Inventory & Suppliers (owner's Smart Inventory brief 2026-11-04, Step A, DEMO): Overview dashboard and
- * Ingredients. Stock is the sum of stock movements; a change is a correction with a reason. Owner / Manager.
+ * Inventory & Suppliers (owner's Smart Inventory brief 2026-11-04, DEMO): Overview dashboard and Ingredients
+ * (Step A), Recipes & Food Cost (Step B). Stock is the sum of stock movements; a change is a correction with a reason. Owner / Manager.
  */
 export function InventoryScreen() {
   const { allowed } = useSession();
@@ -100,17 +101,18 @@ export function InventoryScreen() {
         </div>
       </div>
 
-      {tab === 'overview' ? (
+      {tab === 'overview' && (
         <OverviewTab
           view={view}
           onOpen={(next) => {
             setFilter(next);
             setTab('ingredients');
           }}
+          onOpenRecipes={() => setTab('recipes')}
         />
-      ) : (
-        <IngredientsTab view={view} filter={filter} onFilter={setFilter} canManage={canManage} onEdit={setEditing} onAdjust={setAdjusting} />
       )}
+      {tab === 'ingredients' && <IngredientsTab view={view} filter={filter} onFilter={setFilter} canManage={canManage} onEdit={setEditing} onAdjust={setAdjusting} />}
+      {tab === 'recipes' && <RecipesTab canManage={canManage} />}
 
       <p className="mt-4 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">{t('inventory.demoNote')}</p>
 
