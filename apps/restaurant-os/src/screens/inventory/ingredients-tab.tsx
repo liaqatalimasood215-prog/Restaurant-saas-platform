@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { MapPin, Pencil, Search, SlidersHorizontal } from 'lucide-react';
+import { History, MapPin, Pencil, Search, SlidersHorizontal } from 'lucide-react';
 import { INGREDIENT_CATEGORIES, formatPaisa, type IngredientCategory, type IngredientRow, type InventoryView } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -29,6 +29,7 @@ export function IngredientsTab({
   canManage,
   onEdit,
   onAdjust,
+  onHistory,
 }: {
   view: InventoryView;
   filter: IngredientFilter;
@@ -36,6 +37,8 @@ export function IngredientsTab({
   canManage: boolean;
   onEdit: (row: IngredientRow) => void;
   onAdjust: (row: IngredientRow) => void;
+  /** Opens Stock Movements for this ingredient */
+  onHistory: (row: IngredientRow) => void;
 }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<IngredientCategory | 'ALL'>('ALL');
@@ -106,7 +109,7 @@ export function IngredientsTab({
                   <th className="px-3 py-3">{t('inventory.columns.place')}</th>
                   <th className="px-3 py-3">{t('inventory.columns.expiry')}</th>
                   <th className="px-3 py-3">{t('inventory.columns.status')}</th>
-                  {canManage && <th className="px-3 py-3" />}
+                  <th className="px-3 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -130,9 +133,13 @@ export function IngredientsTab({
                       <td className="px-3 py-3">
                         <Badge tone={STATUS_TONE[r.status]}>{t(`inventory.status.${r.status}`)}</Badge>
                       </td>
-                      {canManage && (
-                        <td className="px-3 py-2">
-                          <span className="flex justify-end gap-1">
+                      <td className="px-3 py-2">
+                        <span className="flex justify-end gap-1">
+                          <button type="button" onClick={() => onHistory(r)} className="press grid size-10 place-items-center rounded-xl text-slate-600 hover:bg-brand-soft hover:text-brand" aria-label={t('inventory.ledger.history', { name: r.ingredient.name })} title={t('inventory.stockTabs.movements')}>
+                            <History className="size-4" aria-hidden />
+                          </button>
+                          {canManage && (
+                            <>
                             {r.status !== 'NOT_IN_USE' && (
                               <button type="button" onClick={() => onAdjust(r)} className="press grid size-10 place-items-center rounded-xl text-slate-600 hover:bg-brand-soft hover:text-brand" aria-label={t('inventory.adjustFor', { name: r.ingredient.name })} title={t('inventory.actions.adjust')}>
                                 <SlidersHorizontal className="size-4" aria-hidden />
@@ -141,9 +148,10 @@ export function IngredientsTab({
                             <button type="button" onClick={() => onEdit(r)} className="press grid size-10 place-items-center rounded-xl text-slate-600 hover:bg-brand-soft hover:text-brand" aria-label={t('inventory.edit', { name: r.ingredient.name })} title={t('inventory.actions.edit')}>
                               <Pencil className="size-4" aria-hidden />
                             </button>
-                          </span>
-                        </td>
-                      )}
+                            </>
+                          )}
+                        </span>
+                      </td>
                     </tr>
                   );
                 })}
@@ -184,6 +192,10 @@ export function IngredientsTab({
                         </span>
                       )}
                       {expiry.tone && <Badge tone={expiry.tone}>{expiry.text}</Badge>}
+                      <button type="button" onClick={() => onHistory(r)} className="ml-auto flex min-h-9 items-center gap-1 rounded-lg px-2 font-bold text-brand hover:bg-brand-soft" aria-label={t('inventory.ledger.history', { name: r.ingredient.name })}>
+                        <History className="size-3.5" aria-hidden />
+                        {t('inventory.stockTabs.movements')}
+                      </button>
                     </div>
                     {canManage && (
                       <div className="mt-auto grid grid-cols-2 gap-2">

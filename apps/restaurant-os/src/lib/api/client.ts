@@ -54,6 +54,8 @@ import type {
   RecipeLine,
   RecipeTarget,
   RecipesView,
+  StockLedgerQuery,
+  StockLedgerView,
   IngredientCategory,
   InventoryView,
   PurchaseUnit,
@@ -509,6 +511,8 @@ export interface ApiClient {
   setIngredientActive(ingredientId: Uuid, active: boolean): Promise<void>;
   /** A correction with a reason (Step A). Purchases, kitchen use and waste come in later steps. */
   adjustStock(input: StockAdjustInput): Promise<void>;
+  /** Stock Movements: every stock change with its reason, who and when, and the stock it left (newest first). */
+  getStockLedger(query: StockLedgerQuery): Promise<StockLedgerView>;
   /** Recipes & Food Cost (Step B): every menu size, add-on and prepared item with its current recipe and food cost. */
   getRecipes(): Promise<RecipesView>;
   /**

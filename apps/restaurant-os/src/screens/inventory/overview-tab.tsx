@@ -33,7 +33,17 @@ const TONES = {
 } as const;
 
 /** Inventory dashboard: live cards (tap = the filtered list or Recipes), cards that later steps fill, and three short lists. */
-export function OverviewTab({ view, onOpen, onOpenRecipes }: { view: InventoryView; onOpen: (filter: IngredientFilter) => void; onOpenRecipes: () => void }) {
+export function OverviewTab({
+  view,
+  onOpen,
+  onOpenRecipes,
+  onOpenMovements,
+}: {
+  view: InventoryView;
+  onOpen: (filter: IngredientFilter) => void;
+  onOpenRecipes: () => void;
+  onOpenMovements: () => void;
+}) {
   const { summary } = view;
   const attention = view.ingredients.filter((r) => r.status === 'LOW' || r.status === 'OUT').sort((a, b) => a.onHandMilli - b.onHandMilli);
   const expiring = view.ingredients
@@ -56,10 +66,10 @@ export function OverviewTab({ view, onOpen, onOpenRecipes }: { view: InventoryVi
           alert={summary.expired > 0}
           onClick={() => onOpen('EXPIRING')}
         />
-        <SoonCard icon={ShoppingCart} label={t('inventory.cards.purchases')} step="C" />
-        <SoonCard icon={ChefHat} label={t('inventory.cards.consumption')} step="G" />
-        <SoonCard icon={Trash2} label={t('inventory.cards.wastage')} step="D" />
-        <SoonCard icon={HandCoins} label={t('inventory.cards.supplierDue')} step="C" />
+        <SoonCard icon={ShoppingCart} label={t('inventory.cards.purchases')} step="3" />
+        <SoonCard icon={ChefHat} label={t('inventory.cards.consumption')} step="2" />
+        <SoonCard icon={Trash2} label={t('inventory.cards.wastage')} step="4" />
+        <SoonCard icon={HandCoins} label={t('inventory.cards.supplierDue')} step="3" />
         <StatCard
           icon={Percent}
           tone="slate"
@@ -104,7 +114,7 @@ export function OverviewTab({ view, onOpen, onOpenRecipes }: { view: InventoryVi
           )}
         </Panel>
 
-        <Panel icon={History} title={t('inventory.movementsTitle')} count={null}>
+        <Panel icon={History} title={t('inventory.movementsTitle')} count={null} onViewAll={onOpenMovements}>
           {view.movements.length === 0 ? (
             <Empty>{t('inventory.movementsEmpty')}</Empty>
           ) : (

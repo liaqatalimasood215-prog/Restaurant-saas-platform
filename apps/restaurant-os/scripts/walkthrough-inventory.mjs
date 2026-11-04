@@ -1,6 +1,7 @@
 // Inventory walkthrough (Step A, owner 2026-11-04): old demo data is kept when the inventory arrives, dashboard cards
 // open the filtered list, add / edit ingredients (kg and packages), stock corrections with a reason (10 kg − 1.5 kg = 8.5 kg),
-// a double tap saves once, Not in use, search, Owner / Manager only, phone and tablet without sideways scroll.
+// a double tap saves once, Not in use, search, Stock Movements with filters (inventory phase 1: five sections),
+// Owner / Manager only, phone and tablet without sideways scroll.
 // Usage: start the app (pnpm dev), then: pnpm --filter @restaurant-saas/restaurant-os walkthrough:inventory
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -44,6 +45,11 @@ const dialog = (page) => page.getByRole('dialog');
 const saved = (page) => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key)), DATA_KEY);
 const row = (page, name) => page.locator(`main tr[data-ingredient-row="${name}"]`);
 const card = (page, label) => page.locator(`main [data-inventory-card="${label}"]`);
+async function openIngredients(page) {
+  await page.getByRole('tab', { name: 'Stock', exact: true }).click();
+  await page.getByRole('tab', { name: 'Ingredients' }).click();
+}
+const ledgerRows = (page) => page.locator('main tr[data-ledger-row]');
 async function noSidewaysScroll(page, label) {
   const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   assert.ok(wide <= 1, `${label}: the page scrolls sideways by ${wide}px`);
@@ -181,7 +187,7 @@ console.log('6. Overview shows the change; Not in use; search');
 await owner.getByRole('tab', { name: 'Overview' }).click();
 await owner.getByText('−1.5 kg').first().waitFor();
 await owner.getByText(/Counted again · by Aziz Ahmed/).first().waitFor();
-await owner.getByRole('tab', { name: 'Ingredients' }).click();
+await openIngredients(owner);
 await row(owner, 'Coffee sachets').getByRole('button', { name: 'Edit Coffee sachets' }).click();
 await dialog(owner).getByRole('switch', { name: 'In use' }).click();
 await dialog(owner).getByRole('button', { name: 'Save' }).click();
@@ -194,9 +200,41 @@ assert.equal(await owner.locator('main tr[data-ingredient-row]').count(), 1);
 await owner.getByLabel('Search name or code').fill('');
 await owner.getByRole('tab', { name: 'Overview' }).click();
 assert.ok((await cardValue('Ingredients')).includes('26'), 'Coffee sachets (Not in use) is not counted');
-await owner.getByRole('tab', { name: 'Ingredients' }).click();
+await openIngredients(owner);
 await shot(owner, '04-desktop-owner-ingredients');
 ok('Recent stock changes: −1.5 kg, Counted again by Aziz Ahmed; Coffee sachets Not in use (hidden, counted apart); "mozz" finds 1');
+
+console.log('6b. Stock Movements: every change with why, who, when and the stock it left');
+await row(owner, 'Chicken (boneless)').getByRole('button', { name: 'Stock history of Chicken (boneless)' }).click();
+await ledgerRows(owner).first().waitFor();
+assert.equal(await owner.getByLabel('Ingredient', { exact: true }).locator('option:checked').innerText(), 'Chicken (boneless)');
+const chickenLedger = await ledgerRows(owner).allInnerTexts();
+assert.equal(chickenLedger.length, 2);
+assert.match(chickenLedger[0], /Chicken \(boneless\)\s+−1\.5 kg\s+Counted again\s+Aziz Ahmed\s+8\.5 kg/);
+assert.match(chickenLedger[1], /\+10 kg\s+Opening stock\s+Aziz Ahmed\s+10 kg/);
+await shot(owner, '04b-desktop-owner-stock-movements');
+await owner.getByRole('button', { name: 'Clear filters' }).click();
+await owner.getByLabel('Kind of change').selectOption('ADJUSTMENT');
+await owner.getByText('1 change', { exact: true }).waitFor();
+await owner.getByLabel('Kind of change').selectOption('');
+await owner.getByRole('button', { name: 'Today' }).click();
+// 24 opening stocks (Jalapeños start at 0) + Chicken wings + Coffee sachets + the Chicken correction
+await owner.getByText('27 changes', { exact: true }).waitFor();
+assert.equal(await ledgerRows(owner).count(), 27);
+await owner.getByRole('tab', { name: 'Overview' }).click();
+await owner.getByRole('button', { name: 'View all' }).last().click();
+await ledgerRows(owner).first().waitFor();
+for (const [section, title] of [
+  ['Purchasing', 'Suppliers, purchases and expenses'],
+  ['Reports', 'Reports'],
+]) {
+  await owner.getByRole('tab', { name: new RegExp(`^${section}`) }).click();
+  await owner.locator(`main [data-planned="${title}"]`).getByText('PLACEHOLDER').waitFor();
+}
+await owner.getByRole('tab', { name: 'Stock', exact: true }).click();
+await owner.getByRole('tab', { name: /^Wastage & Expiry/ }).click();
+await owner.locator('main [data-planned="Wastage & Expiry"]').getByText('Comes in inventory phase 4, after your approval.').waitFor();
+ok('History of Chicken: −1.5 kg Counted again by Aziz Ahmed → 8.5 kg, +10 kg opening → 10 kg; kind and period filters; Purchasing, Reports, Wastage are clear PLACEHOLDERs with their phase');
 
 console.log('7. Owner and Manager only');
 const manager = await openAs(USER.manager, '/inventory', DESKTOP);
@@ -218,7 +256,7 @@ for (const [label, viewport] of [
   await card(page, 'Ingredients').waitFor();
   await noSidewaysScroll(page, `${label} overview`);
   await shot(page, `05-${label}-owner-overview`);
-  await page.getByRole('tab', { name: 'Ingredients' }).click();
+  await openIngredients(page);
   await page.locator('main [data-ingredient-card="Chicken (boneless)"]').getByText('8.5 kg').waitFor();
   await noSidewaysScroll(page, `${label} ingredients`);
   await shot(page, `06-${label}-owner-ingredients`);

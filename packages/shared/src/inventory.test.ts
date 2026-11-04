@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  balancesAfter,
   checkAdjustment,
   checkIngredient,
   displayFactorMilli,
@@ -11,6 +12,7 @@ import {
   mulDivRound,
   onHandOf,
   parseQuantity,
+  periodRange,
   purchaseConversion,
   stockStatus,
   stockValueOf,
@@ -174,4 +176,24 @@ test('dashboard numbers leave out ingredients that are not in use', () => {
     { status: 'NOT_IN_USE', expiry: 'SOON', value: 99_000 },
   ]);
   assert.deepEqual(summary, { stockValue: 665_000, ingredients: 4, low: 1, out: 1, expiringSoon: 1, expired: 1 });
+});
+
+test('stock history: each change shows the stock it left, per ingredient, oldest first', () => {
+  const after = balancesAfter([
+    { id: 'c3', ingredientId: 'chicken', quantityMilli: -1_500_000, createdAt: '2026-11-04T12:00:00.000Z' },
+    { id: 'c1', ingredientId: 'chicken', quantityMilli: 10_000_000, createdAt: '2026-11-04T06:00:00.000Z' },
+    { id: 'o1', ingredientId: 'onions', quantityMilli: 8_000_000, createdAt: '2026-11-04T06:00:00.000Z' },
+    { id: 'c2', ingredientId: 'chicken', quantityMilli: 500_000, createdAt: '2026-11-04T06:00:00.000Z' },
+  ]);
+  assert.equal(after.get('c1'), 10_000_000);
+  assert.equal(after.get('c2'), 10_500_000, 'same time: the saved order');
+  assert.equal(after.get('c3'), 9_000_000);
+  assert.equal(after.get('o1'), 8_000_000);
+});
+
+test('period filters: today, last 7 days, this month, all', () => {
+  assert.deepEqual(periodRange('TODAY', '2026-11-04'), { from: '2026-11-04', to: '2026-11-04' });
+  assert.deepEqual(periodRange('WEEK', '2026-11-04'), { from: '2026-10-29', to: '2026-11-04' });
+  assert.deepEqual(periodRange('MONTH', '2026-11-04'), { from: '2026-11-01', to: '2026-11-04' });
+  assert.deepEqual(periodRange('ALL', '2026-11-04'), { from: null, to: null });
 });

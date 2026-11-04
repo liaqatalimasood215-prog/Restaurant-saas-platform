@@ -47,7 +47,7 @@ const item = (page, name) => page.locator(`main [data-recipe-item="${name}"]`);
 const recipeCost = (page) => dialog(page).locator('[data-recipe-cost]').innerText();
 const foodCost = (page) => dialog(page).locator('[data-food-cost]').innerText();
 async function openRecipes(page) {
-  await page.getByRole('tab', { name: 'Recipes & Food Cost' }).click();
+  await page.getByRole('tab', { name: 'Recipes', exact: true }).click();
   await page.locator('main [data-recipe-summary]').first().waitFor();
 }
 async function noSidewaysScroll(page, label) {

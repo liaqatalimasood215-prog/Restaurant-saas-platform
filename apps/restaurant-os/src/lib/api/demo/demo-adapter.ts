@@ -157,6 +157,9 @@ import {
   type Recipe,
   type RecipeTarget,
   type RecipesView,
+  balancesAfter,
+  type StockLedgerQuery,
+  type StockLedgerView,
 } from '@restaurant-saas/shared';
 import {
   ApiError,
@@ -2516,6 +2519,52 @@ export class DemoAdapter implements ApiClient, DemoControls {
         data.idempotency[key] = movementId;
       }),
     );
+  }
+
+  getStockLedger(query: StockLedgerQuery): Promise<StockLedgerView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const inv = data.inventory;
+      const tz = data.branch.timezone;
+      const after = balancesAfter(inv.movements);
+      const dayOf = (iso: string) => businessDate(new Date(iso), tz, '00:00');
+      const matching = inv.movements.filter(
+        (m) =>
+          (!query.ingredientId || m.ingredientId === query.ingredientId) &&
+          (!query.type || m.type === query.type) &&
+          (!query.staffId || m.createdBy === query.staffId) &&
+          (!query.from || dayOf(m.createdAt) >= query.from) &&
+          (!query.to || dayOf(m.createdAt) <= query.to),
+      );
+      const limit = 300;
+      const rows = matching
+        .map((movement, index) => ({ movement, index }))
+        .sort((a, b) => b.movement.createdAt.localeCompare(a.movement.createdAt) || b.index - a.index)
+        .slice(0, limit)
+        .flatMap(({ movement }) => {
+          const ingredient = inv.ingredients.find((i) => i.id === movement.ingredientId);
+          return ingredient
+            ? [
+                {
+                  movement,
+                  ingredientName: ingredient.name,
+                  purchaseUnit: ingredient.purchaseUnit,
+                  stockUnit: ingredient.stockUnit,
+                  byName: this.staffName(data, movement.createdBy),
+                  balanceAfterMilli: after.get(movement.id) ?? 0,
+                },
+              ]
+            : [];
+        });
+      const staffIds = [...new Set(inv.movements.map((m) => m.createdBy))];
+      return {
+        rows,
+        total: matching.length,
+        limit,
+        staff: staffIds.map((sid) => ({ id: sid, name: this.staffName(data, sid) ?? '—' })).sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    });
   }
 
   // ── Recipes & Food Cost (DEMO, Step B) ─────────────────────────────────────────────────────

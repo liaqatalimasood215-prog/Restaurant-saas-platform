@@ -429,3 +429,54 @@ export function summarizeInventory(rows: readonly Pick<IngredientRow, 'status' |
     expired: used.filter((r) => r.expiry === 'EXPIRED').length,
   };
 }
+
+// ── Stock history (inventory phase 1) ─────────────────────────────────────────────────────────
+
+/** One stock change with the stock it left behind. */
+export interface StockLedgerRow extends StockMovementRow {
+  balanceAfterMilli: number;
+}
+
+export interface StockLedgerQuery {
+  ingredientId: Uuid | null;
+  type: MovementType | null;
+  /** YYYY-MM-DD in the branch, both days included; null = no limit */
+  from: string | null;
+  to: string | null;
+  staffId: Uuid | null;
+}
+
+export interface StockLedgerView {
+  /** Newest first, at most `limit` */
+  rows: StockLedgerRow[];
+  /** All matching changes, also those beyond the limit */
+  total: number;
+  limit: number;
+  /** Who made changes, for the filter */
+  staff: { id: Uuid; name: string }[];
+}
+
+/**
+ * The stock after each movement, per ingredient, in the order they happened (oldest first; the same time keeps the
+ * saved order). Returns movement id → stock left (stock-unit thousandths).
+ */
+export function balancesAfter(movements: readonly Pick<StockMovement, 'id' | 'ingredientId' | 'quantityMilli' | 'createdAt'>[]): Map<Uuid, number> {
+  const ordered = movements.map((m, index) => ({ m, index })).sort((a, b) => a.m.createdAt.localeCompare(b.m.createdAt) || a.index - b.index);
+  const running = new Map<Uuid, number>();
+  const after = new Map<Uuid, number>();
+  for (const { m } of ordered) {
+    const balance = (running.get(m.ingredientId) ?? 0) + m.quantityMilli;
+    running.set(m.ingredientId, balance);
+    after.set(m.id, balance);
+  }
+  return after;
+}
+
+/** Days for the quick period filters, counted back from today (YYYY-MM-DD). */
+export function periodRange(period: 'TODAY' | 'WEEK' | 'MONTH' | 'ALL', today: string): { from: string | null; to: string | null } {
+  if (period === 'ALL') return { from: null, to: null };
+  if (period === 'MONTH') return { from: `${today.slice(0, 8)}01`, to: today };
+  const from = new Date(`${today}T00:00:00Z`);
+  if (period === 'WEEK') from.setUTCDate(from.getUTCDate() - 6);
+  return { from: from.toISOString().slice(0, 10), to: today };
+}
