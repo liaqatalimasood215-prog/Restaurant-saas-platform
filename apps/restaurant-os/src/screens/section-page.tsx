@@ -8,6 +8,7 @@ import { t } from '@/i18n';
 import { PREVIEW_FOR_SECTION } from '@/lib/build-plan';
 import { useSession } from '@/lib/session';
 import { ComingSoonScreen } from './coming-soon-screen';
+import { InventoryScreen } from './inventory/inventory-screen';
 import { KitchenScreen } from './kitchen/kitchen-screen';
 import { MenuScreen } from './menu/menu-screen';
 import { OnlineAppScreen } from './online-app/online-app-screen';
@@ -36,6 +37,7 @@ function renderSection(section: OsSection, options: SectionOptions) {
   if (section.key === 'pos') return <PosScreen tableId={options.tableId} />;
   if (section.key === 'staff') return <StaffScreen />;
   if (section.key === 'menu') return <MenuScreen />;
+  if (section.key === 'inventory') return <InventoryScreen />;
   if (section.key === 'settings') return <SettingsScreen />;
   if (section.key === 'summary') return <SummaryScreen />;
   if (section.key === 'online-orders') return <OnlineOrdersScreen />;

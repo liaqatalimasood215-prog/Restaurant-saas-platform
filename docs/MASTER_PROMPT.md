@@ -520,7 +520,7 @@ Navigation (owner, 2026-10-27):
 | Menu extras | P7 | Images, bulk price update, import from Excel |
 | Customers | P7 | Customer list from orders, order history, phone search |
 | Staff and payroll | P8 | Salaries, attendance, advances, payroll runs |
-| Inventory, suppliers, expenses | P8 | `docs/AI_MANAGER_PLAN.md` §2–§3 |
+| Inventory, suppliers, expenses | P8 backend; **frontend DEMO now** (owner, 2026-11-04) | `docs/AI_MANAGER_PLAN.md` §2–§3 and the owner's Smart Inventory brief (2026-11-04). Built in DEMO steps A–H, each approved by the owner: A Overview + Ingredients, B Recipes & food cost, C Suppliers + Purchase Orders, D Wastage, counts, movements, locations, E Expenses, F Reports, G connected DEMO (stock used when the kitchen marks READY, packaging, sold out from stock), H full check. Owner / Manager only; no Inventory Staff role for now |
 | AI Manager | P10 | `docs/AI_MANAGER_PLAN.md` |
 
 ### 7.2 Customer Online App (PWA) — Pilot
@@ -1231,4 +1231,5 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-10-31 | §7.2 Customer App redesigned from the owner's six-screen picture as DEMO screens; OTP, Google, online payments, map and rider contact are NOT CONNECTED screens only; open decision #19 (Dine-in from the customer's phone). |
 | 2026-10-31 | §5.5 Website tab built as DEMO (Online App step D); the previews follow its settings. |
 | 2026-11-01 | §5.6, §7.3, §16 #16: Riders page and Rider App built as DEMO (Phase 3). Only the Owner adds and changes riders; Online / Offline decides who can get a new order; a running delivery keeps the rider Online and enabled. `users.rider_online` to add to the data model in Phase 4. |
+| 2026-11-04 | §7.1: Inventory, Suppliers and Expenses frontend (DEMO) moved up from Phase 8, in steps A–H with the owner's approval after each; backend stays Phase 4+ with his separate approval. Decisions: stock is used when the kitchen marks a ticket READY (once per ticket, undone by Undo; ready-at-once drinks when sent; never by payment or rider); no Inventory Staff role yet (Owner / Manager manage, Kitchen later records waste); automatic Sold out only for items with a verified recipe; salaries as a simple expense until Payroll (P8); the Inventory section moves out of Coming Soon for Owner / Manager. Stock is the sum of stock movements; nobody types a new stock number. |
 | 2026-11-02 | §5.1: sub-orders: each customer at a shared table is an own order (T1-1, T1-2) with an own bill and invoice, plus paying the whole table at once; moved up from Phase 7. Built as DEMO. |

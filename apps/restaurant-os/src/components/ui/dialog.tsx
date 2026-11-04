@@ -11,8 +11,8 @@ interface DialogProps {
   title: string;
   children: ReactNode;
   footer?: ReactNode;
-  /** md = forms (default), xl = wide screens such as the Add Staff wizard */
-  size?: 'md' | 'xl';
+  /** md = forms (default), lg = longer forms in two columns, xl = wide screens such as the Add Staff wizard */
+  size?: 'md' | 'lg' | 'xl';
 }
 
 /** Accessible modal built on the native <dialog> element (focus trap and Escape for free). */
@@ -38,7 +38,7 @@ export function Dialog({ open, onClose, title, children, footer, size = 'md' }: 
       className={cn(
         // Title and buttons stay in view; only the middle scrolls on short screens.
         'm-auto max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-2xl bg-white p-0 shadow-xl backdrop:bg-slate-900/50 open:flex',
-        size === 'xl' ? 'w-[min(96vw,64rem)]' : 'w-[min(92vw,30rem)]',
+        size === 'xl' ? 'w-[min(96vw,64rem)]' : size === 'lg' ? 'w-[min(94vw,44rem)]' : 'w-[min(92vw,30rem)]',
       )}
     >
       <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">

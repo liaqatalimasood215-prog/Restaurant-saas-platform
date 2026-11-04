@@ -138,6 +138,11 @@ export const PERMISSION_ROWS: readonly PermissionRow[] = [
     },
   },
   {
+    key: 'inventory',
+    label: 'Inventory & Suppliers',
+    cells: { VIEW: cell('inventory.view', 'Open Inventory & Suppliers'), CREATE: cell('inventory.manage', 'Add and edit ingredients, correct stock') },
+  },
+  {
     key: 'onlineApp',
     label: 'Online App',
     cells: { VIEW: cell('onlineApp.view', 'Open the Online App page'), APPROVE: cell('onlineApp.publish', 'Publish the website and the Android app') },

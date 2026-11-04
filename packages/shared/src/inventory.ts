@@ -1,0 +1,423 @@
+import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
+
+/**
+ * Inventory rules (owner's Smart Inventory brief 2026-11-04, Step A; docs/AI_MANAGER_PLAN.md §3).
+ * - Every ingredient is counted in its stock unit (the unit recipes use: g, ml, piece, bottle, portion).
+ * - Quantities are whole numbers of thousandths of that unit ("milli"): 1.5 kg of chicken kept in grams
+ *   is 1,500,000. Sums never drift, and 1 kg = 1,000 g stays exact.
+ * - Stock = the sum of the stock movements. Nobody types a new stock number: a change is a new movement
+ *   with a reason, so the history always explains the stock.
+ * Roman Urdu: Har cheez ka stock uski chhoti unit (gram, ml, piece) mein ginti hota hai. Stock kabhi
+ * seedha badla nahi jata — har tabdeeli ek "movement" hai jis ki wajah likhi hoti hai.
+ */
+
+// ── Units ─────────────────────────────────────────────────────────────────────────────────────
+
+/** The unit an ingredient is counted and used in (recipes come in Step B). */
+export const STOCK_UNITS = ['g', 'ml', 'piece', 'bottle', 'portion'] as const;
+export type StockUnit = (typeof STOCK_UNITS)[number];
+
+/** The unit an ingredient is bought in. */
+export const PURCHASE_UNITS = ['kg', 'g', 'l', 'ml', 'piece', 'bottle', 'portion', 'pack', 'box', 'carton'] as const;
+export type PurchaseUnit = (typeof PURCHASE_UNITS)[number];
+
+/** Weight and volume units convert by fixed numbers; the others are counted things or packages. */
+const MEASURES: Partial<Record<PurchaseUnit, { stockUnit: StockUnit; factor: number }>> = {
+  kg: { stockUnit: 'g', factor: 1000 },
+  g: { stockUnit: 'g', factor: 1 },
+  l: { stockUnit: 'ml', factor: 1000 },
+  ml: { stockUnit: 'ml', factor: 1 },
+};
+
+export const MILLI = 1000;
+/** Largest quantity typed in one field (a stock of 1,000,000 kg is a typing mistake). */
+export const MAX_QUANTITY = 1_000_000;
+/** The same limit in stock-unit thousandths (1,000,000 kg in grams) */
+const MAX_STOCK_MILLI = MAX_QUANTITY * 1000 * MILLI;
+/** Largest pack size: 1 carton = up to 100,000 bottles (or 100 kg in grams). */
+export const MAX_PACK_SIZE = 100_000;
+
+export function isMeasureUnit(unit: PurchaseUnit): boolean {
+  return MEASURES[unit] !== undefined;
+}
+
+export type ConversionCheck =
+  | { ok: true; /** stock-unit thousandths in one purchase unit */ factorMilli: number; fixed: boolean }
+  | { ok: false; problem: 'INCOMPATIBLE' | 'PACK_SIZE_REQUIRED' };
+
+/**
+ * How many stock units one purchase unit holds. kg → g and l → ml are fixed (1,000); weight or volume
+ * never turns into pieces (kg → ml or kg → piece is refused). A package (carton, box, pack) or a counted
+ * unit other than the stock unit needs its size from the Owner: 1 carton = 24 bottles, 1 bag = 25,000 g.
+ */
+export function purchaseConversion(purchaseUnit: PurchaseUnit, stockUnit: StockUnit, packSizeMilli: number | null): ConversionCheck {
+  const measure = MEASURES[purchaseUnit];
+  if (measure) {
+    return measure.stockUnit === stockUnit ? { ok: true, factorMilli: measure.factor * MILLI, fixed: true } : { ok: false, problem: 'INCOMPATIBLE' };
+  }
+  if ((purchaseUnit as string) === stockUnit) return { ok: true, factorMilli: MILLI, fixed: true };
+  if (packSizeMilli === null || !Number.isInteger(packSizeMilli) || packSizeMilli <= 0 || packSizeMilli > MAX_PACK_SIZE * MILLI) {
+    return { ok: false, problem: 'PACK_SIZE_REQUIRED' };
+  }
+  return { ok: true, factorMilli: packSizeMilli, fixed: false };
+}
+
+export type DisplayUnit = 'kg' | 'g' | 'l' | 'ml' | 'piece' | 'bottle' | 'portion';
+
+/**
+ * The unit people type and read stock in: kilograms and litres for weight and volume ("10 kg chicken",
+ * also for a 25 kg bag of flour), grams or millilitres only when that is how it is bought (saffron), and
+ * the counted unit for everything else ("60 bottles", not "2.5 cartons").
+ */
+export function displayUnitOf(item: { purchaseUnit: PurchaseUnit; stockUnit: StockUnit }): DisplayUnit {
+  if (item.purchaseUnit === 'g' || item.purchaseUnit === 'ml') return item.purchaseUnit;
+  if (item.stockUnit === 'g') return 'kg';
+  if (item.stockUnit === 'ml') return 'l';
+  return item.stockUnit;
+}
+
+/** Stock-unit thousandths in one display unit (1 kg = 1,000,000 milli-grams). */
+export function displayFactorMilli(item: { purchaseUnit: PurchaseUnit; stockUnit: StockUnit }): number {
+  const unit = displayUnitOf(item);
+  return (unit === 'kg' || unit === 'l' ? 1000 : 1) * MILLI;
+}
+
+/** a × b ÷ c rounded half away from zero, exact for big numbers (BigInt). */
+export function mulDivRound(a: number, b: number, c: number): number {
+  if (c === 0) throw new Error('Division by zero');
+  const negative = a < 0 !== b < 0 !== c < 0;
+  const top = BigInt(Math.abs(a)) * BigInt(Math.abs(b));
+  const bottom = BigInt(Math.abs(c));
+  const rounded = (top * 2n + bottom) / (bottom * 2n);
+  const value = Number(rounded);
+  return negative && value !== 0 ? -value : value;
+}
+
+/** A quantity typed by a person ("8.5", "1,500", "0.25") as thousandths, or null. At most 3 decimals. */
+export function parseQuantity(text: string, { allowZero = true } = {}): number | null {
+  const clean = text.trim().replaceAll(',', '');
+  const match = /^(\d{1,7})(?:\.(\d{1,3}))?$/.exec(clean);
+  if (!match) return null;
+  const milli = Number(match[1]) * MILLI + Number((match[2] ?? '').padEnd(3, '0'));
+  if (milli > MAX_QUANTITY * MILLI || (!allowZero && milli === 0)) return null;
+  return milli;
+}
+
+/** Thousandths as a short number for screens: 8,500 · 8.5 · 0.25 (no trailing zeros). */
+export function formatMilli(milli: number): string {
+  const sign = milli < 0 ? '-' : '';
+  const abs = Math.abs(milli);
+  const whole = Math.floor(abs / MILLI).toLocaleString('en-PK');
+  const fraction = String(abs % MILLI).padStart(3, '0').replace(/0+$/, '');
+  return `${sign}${whole}${fraction ? `.${fraction}` : ''}`;
+}
+
+/** Thousandths as a value for an input field: 8.5 (no thousands commas). */
+export function milliToInput(milli: number): string {
+  return formatMilli(milli).replaceAll(',', '');
+}
+
+// ── Ingredients ───────────────────────────────────────────────────────────────────────────────
+
+export const INGREDIENT_CATEGORIES = [
+  'MEAT',
+  'VEGETABLES',
+  'DAIRY',
+  'BAKERY',
+  'GRAINS',
+  'SAUCES_SPICES',
+  'OIL',
+  'BEVERAGES',
+  'FROZEN',
+  'PACKAGING',
+  'CLEANING',
+  'OTHER',
+] as const;
+export type IngredientCategory = (typeof INGREDIENT_CATEGORIES)[number];
+
+export interface StockLocation extends BranchScoped {
+  id: Uuid;
+  name: string;
+  sort: number;
+}
+
+/** A supplier as far as Step A needs one (the preferred supplier of an ingredient). Step C adds the rest. */
+export interface Supplier extends BranchScoped {
+  id: Uuid;
+  name: string;
+  phone: string;
+  isActive: boolean;
+}
+
+export interface Ingredient extends BranchScoped {
+  id: Uuid;
+  name: string;
+  /** Short unique code, e.g. CHK-001 */
+  code: string;
+  category: IngredientCategory;
+  purchaseUnit: PurchaseUnit;
+  stockUnit: StockUnit;
+  /** Stock-unit thousandths in one purchase unit when it is not fixed (1 carton = 24 bottles → 24,000); null for kg / l / same unit */
+  packSizeMilli: number | null;
+  /** Low stock at or below this (stock-unit thousandths) */
+  minStockMilli: number;
+  /** What is usually ordered (purchase-unit thousandths) */
+  reorderQtyMilli: number;
+  /** Price of one purchase unit */
+  purchasePrice: Paisa;
+  preferredSupplierId: Uuid | null;
+  locationId: Uuid | null;
+  batchNo: string;
+  /** Expiry of the stock on hand (YYYY-MM-DD), null = does not expire or not tracked */
+  expiryDate: string | null;
+  /** false = Not in use: hidden from lists, kept for its history */
+  isActive: boolean;
+  createdAt: IsoDateTime;
+  updatedAt: IsoDateTime;
+}
+
+export const MAX_INGREDIENT_NAME = 60;
+export const MAX_BATCH_TEXT = 30;
+/** Rs. 10,000,000 for one purchase unit is a typing mistake */
+export const MAX_PURCHASE_PRICE: Paisa = 1_000_000_000;
+
+export interface IngredientCheckInput {
+  id: Uuid | null;
+  name: string;
+  code: string;
+  category: string;
+  purchaseUnit: string;
+  stockUnit: string;
+  packSizeMilli: number | null;
+  minStockMilli: number | null;
+  reorderQtyMilli: number | null;
+  purchasePrice: Paisa | null;
+  /** Only for a new ingredient: the stock it starts with (stock-unit thousandths) */
+  openingMilli: number | null;
+  expiryDate: string | null;
+  batchNo: string;
+}
+
+export type IngredientField = 'name' | 'code' | 'category' | 'units' | 'packSize' | 'minStock' | 'reorderQty' | 'price' | 'opening' | 'expiry' | 'batch';
+export type IngredientProblem =
+  | 'NAME_REQUIRED'
+  | 'NAME_TOO_LONG'
+  | 'NAME_TAKEN'
+  | 'CODE_INVALID'
+  | 'CODE_TAKEN'
+  | 'CATEGORY_INVALID'
+  | 'UNITS_INCOMPATIBLE'
+  | 'PACK_SIZE_REQUIRED'
+  | 'QUANTITY_INVALID'
+  | 'PRICE_INVALID'
+  | 'EXPIRY_INVALID'
+  | 'BATCH_TOO_LONG';
+
+const CODE = /^[A-Z0-9]{2,6}-\d{3,4}$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function cleanIngredientName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ');
+}
+
+export function isValidDate(text: string): boolean {
+  if (!DATE.test(text)) return false;
+  const date = new Date(`${text}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
+}
+
+/** The first problem with an ingredient, or null. `others` = the restaurant's other ingredients. */
+export function checkIngredient(
+  input: IngredientCheckInput,
+  others: readonly Pick<Ingredient, 'id' | 'name' | 'code'>[],
+): { field: IngredientField; problem: IngredientProblem } | null {
+  const name = cleanIngredientName(input.name);
+  const rest = others.filter((o) => o.id !== input.id);
+  if (!name) return { field: 'name', problem: 'NAME_REQUIRED' };
+  if (name.length > MAX_INGREDIENT_NAME) return { field: 'name', problem: 'NAME_TOO_LONG' };
+  if (rest.some((o) => o.name.toLowerCase() === name.toLowerCase())) return { field: 'name', problem: 'NAME_TAKEN' };
+  const code = input.code.trim().toUpperCase();
+  if (!CODE.test(code)) return { field: 'code', problem: 'CODE_INVALID' };
+  if (rest.some((o) => o.code.toUpperCase() === code)) return { field: 'code', problem: 'CODE_TAKEN' };
+  if (!(INGREDIENT_CATEGORIES as readonly string[]).includes(input.category)) return { field: 'category', problem: 'CATEGORY_INVALID' };
+  if (!(PURCHASE_UNITS as readonly string[]).includes(input.purchaseUnit) || !(STOCK_UNITS as readonly string[]).includes(input.stockUnit)) {
+    return { field: 'units', problem: 'UNITS_INCOMPATIBLE' };
+  }
+  const conversion = purchaseConversion(input.purchaseUnit as PurchaseUnit, input.stockUnit as StockUnit, input.packSizeMilli);
+  if (!conversion.ok) {
+    return conversion.problem === 'INCOMPATIBLE' ? { field: 'units', problem: 'UNITS_INCOMPATIBLE' } : { field: 'packSize', problem: 'PACK_SIZE_REQUIRED' };
+  }
+  const quantityOk = (milli: number | null) => milli !== null && Number.isInteger(milli) && milli >= 0 && milli <= MAX_STOCK_MILLI;
+  if (!quantityOk(input.minStockMilli)) return { field: 'minStock', problem: 'QUANTITY_INVALID' };
+  if (!quantityOk(input.reorderQtyMilli)) return { field: 'reorderQty', problem: 'QUANTITY_INVALID' };
+  if (input.purchasePrice === null || !Number.isInteger(input.purchasePrice) || input.purchasePrice < 0 || input.purchasePrice > MAX_PURCHASE_PRICE) {
+    return { field: 'price', problem: 'PRICE_INVALID' };
+  }
+  if (input.id === null && !quantityOk(input.openingMilli)) return { field: 'opening', problem: 'QUANTITY_INVALID' };
+  if (input.expiryDate !== null && !isValidDate(input.expiryDate)) return { field: 'expiry', problem: 'EXPIRY_INVALID' };
+  if (input.batchNo.trim().length > MAX_BATCH_TEXT) return { field: 'batch', problem: 'BATCH_TOO_LONG' };
+  return null;
+}
+
+/**
+ * A code for a new ingredient: the first letter of the name and its next different consonants
+ * (Chicken → CHK, Mozzarella → MZR), then the next free number: CHK-001, CHK-002 …
+ */
+export function suggestIngredientCode(name: string, existingCodes: readonly string[]): string {
+  const letters = cleanIngredientName(name).toUpperCase().replace(/[^A-Z]/g, '');
+  const picked: string[] = [];
+  for (const [i, letter] of [...letters].entries()) {
+    if (picked.length === 3) break;
+    if (picked.includes(letter)) continue;
+    if (i === 0 || !'AEIOU'.includes(letter)) picked.push(letter);
+  }
+  for (const letter of letters) {
+    if (picked.length === 3) break;
+    if (!picked.includes(letter)) picked.push(letter);
+  }
+  const prefix = (picked.join('') || 'ING').padEnd(2, 'X');
+  const used = new Set(existingCodes.map((c) => c.toUpperCase()));
+  for (let n = 1; n < 10_000; n++) {
+    const code = `${prefix}-${String(n).padStart(3, '0')}`;
+    if (!used.has(code)) return code;
+  }
+  return `${prefix}-${String(Date.now() % 10_000).padStart(4, '0')}`;
+}
+
+// ── Stock ledger ──────────────────────────────────────────────────────────────────────────────
+
+/** Step A: the opening stock and corrections. Purchases, kitchen use, waste and transfers follow in later steps. */
+export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT'] as const;
+export type MovementType = (typeof MOVEMENT_TYPES)[number];
+
+export const ADJUST_REASONS = ['RECOUNT', 'ENTRY_MISTAKE', 'FOUND', 'OTHER'] as const;
+export type AdjustReason = (typeof ADJUST_REASONS)[number];
+
+export interface StockMovement extends BranchScoped {
+  id: Uuid;
+  ingredientId: Uuid;
+  type: MovementType;
+  /** Signed stock-unit thousandths: + adds, − removes */
+  quantityMilli: number;
+  reason: AdjustReason | null;
+  note: string;
+  createdBy: Uuid;
+  createdAt: IsoDateTime;
+}
+
+export const MAX_MOVEMENT_NOTE = 120;
+
+/** Stock on hand = the sum of the ingredient's movements (stock-unit thousandths). */
+export function onHandOf(ingredientId: Uuid, movements: readonly Pick<StockMovement, 'ingredientId' | 'quantityMilli'>[]): number {
+  return movements.reduce((sum, m) => (m.ingredientId === ingredientId ? sum + m.quantityMilli : sum), 0);
+}
+
+export type AdjustProblem = 'QUANTITY_INVALID' | 'REASON_REQUIRED' | 'NOTE_REQUIRED' | 'NOTE_TOO_LONG' | 'MORE_THAN_ON_HAND';
+
+/** A correction of the stock: a reason always, a note for "Other", never below zero. */
+export function checkAdjustment(input: {
+  direction: 'ADD' | 'REMOVE';
+  quantityMilli: number | null;
+  reason: string | null;
+  note: string;
+  onHandMilli: number;
+}): AdjustProblem | null {
+  if (input.quantityMilli === null || !Number.isInteger(input.quantityMilli) || input.quantityMilli <= 0 || input.quantityMilli > MAX_STOCK_MILLI) {
+    return 'QUANTITY_INVALID';
+  }
+  if (!input.reason || !(ADJUST_REASONS as readonly string[]).includes(input.reason)) return 'REASON_REQUIRED';
+  if (input.note.trim().length > MAX_MOVEMENT_NOTE) return 'NOTE_TOO_LONG';
+  if (input.reason === 'OTHER' && !input.note.trim()) return 'NOTE_REQUIRED';
+  if (input.direction === 'REMOVE' && input.quantityMilli > input.onHandMilli) return 'MORE_THAN_ON_HAND';
+  return null;
+}
+
+// ── Status, expiry and value ──────────────────────────────────────────────────────────────────
+
+export type StockStatus = 'AVAILABLE' | 'LOW' | 'OUT' | 'NOT_IN_USE';
+
+export function stockStatus(input: { onHandMilli: number; minStockMilli: number; isActive: boolean }): StockStatus {
+  if (!input.isActive) return 'NOT_IN_USE';
+  if (input.onHandMilli <= 0) return 'OUT';
+  if (input.onHandMilli <= input.minStockMilli) return 'LOW';
+  return 'AVAILABLE';
+}
+
+export const DEFAULT_EXPIRING_SOON_DAYS = 3;
+export type ExpiryState = 'NONE' | 'OK' | 'SOON' | 'EXPIRED';
+
+/** Days from `today` to `date` (both YYYY-MM-DD). */
+export function daysBetween(today: string, date: string): number {
+  return Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+}
+
+/** EXPIRED before today; SOON from today up to `soonDays` ahead. Stock that is used up never warns. */
+export function expiryState(expiryDate: string | null, today: string, onHandMilli: number, soonDays = DEFAULT_EXPIRING_SOON_DAYS): ExpiryState {
+  if (!expiryDate || onHandMilli <= 0) return 'NONE';
+  const days = daysBetween(today, expiryDate);
+  if (days < 0) return 'EXPIRED';
+  return days <= soonDays ? 'SOON' : 'OK';
+}
+
+/** Value of the stock on hand at the purchase price: 8.5 kg chicken at Rs. 650 / kg = Rs. 5,525. Negative stock counts 0. */
+export function stockValueOf(item: Pick<Ingredient, 'purchaseUnit' | 'stockUnit' | 'packSizeMilli' | 'purchasePrice'>, onHandMilli: number): Paisa {
+  const conversion = purchaseConversion(item.purchaseUnit, item.stockUnit, item.packSizeMilli);
+  if (!conversion.ok || onHandMilli <= 0) return 0;
+  return mulDivRound(onHandMilli, item.purchasePrice, conversion.factorMilli);
+}
+
+// ── What the Inventory screens get ────────────────────────────────────────────────────────────
+
+export interface IngredientRow {
+  ingredient: Ingredient;
+  onHandMilli: number;
+  status: StockStatus;
+  expiry: ExpiryState;
+  value: Paisa;
+  supplierName: string | null;
+  locationName: string | null;
+}
+
+export interface StockMovementRow {
+  movement: StockMovement;
+  ingredientName: string;
+  purchaseUnit: PurchaseUnit;
+  stockUnit: StockUnit;
+  byName: string | null;
+}
+
+export interface InventorySummary {
+  /** Value of everything in stock at purchase prices */
+  stockValue: Paisa;
+  /** Ingredients in use */
+  ingredients: number;
+  low: number;
+  out: number;
+  expiringSoon: number;
+  expired: number;
+}
+
+export interface InventoryView {
+  /** Today's date in the branch (YYYY-MM-DD), for expiry */
+  today: string;
+  expiringSoonDays: number;
+  summary: InventorySummary;
+  ingredients: IngredientRow[];
+  /** Newest first */
+  movements: StockMovementRow[];
+  locations: StockLocation[];
+  suppliers: Supplier[];
+}
+
+/** The dashboard numbers. Ingredients marked Not in use are left out. */
+export function summarizeInventory(rows: readonly Pick<IngredientRow, 'status' | 'expiry' | 'value'>[]): InventorySummary {
+  const used = rows.filter((r) => r.status !== 'NOT_IN_USE');
+  return {
+    stockValue: used.reduce((sum, r) => sum + r.value, 0),
+    ingredients: used.length,
+    low: used.filter((r) => r.status === 'LOW').length,
+    out: used.filter((r) => r.status === 'OUT').length,
+    expiringSoon: used.filter((r) => r.expiry === 'SOON').length,
+    expired: used.filter((r) => r.expiry === 'EXPIRED').length,
+  };
+}

@@ -47,6 +47,12 @@ import type {
   InviteKind,
   TicketStatus,
   Uuid,
+  AdjustReason,
+  Ingredient,
+  IngredientCategory,
+  InventoryView,
+  PurchaseUnit,
+  StockUnit,
 } from '@restaurant-saas/shared';
 
 /**
@@ -270,6 +276,38 @@ export interface SettingsInput {
   receiptFooter: string;
 }
 
+/** All quantities in stock-unit thousandths (the screen converts from what people type). */
+export interface IngredientInput {
+  id: Uuid | null;
+  name: string;
+  code: string;
+  category: IngredientCategory;
+  purchaseUnit: PurchaseUnit;
+  stockUnit: StockUnit;
+  packSizeMilli: number | null;
+  minStockMilli: number;
+  /** Purchase-unit thousandths */
+  reorderQtyMilli: number;
+  purchasePrice: number;
+  preferredSupplierId: Uuid | null;
+  locationId: Uuid | null;
+  batchNo: string;
+  expiryDate: string | null;
+  /** New ingredient only: written as its OPENING stock movement */
+  openingMilli: number;
+}
+
+export interface StockAdjustInput {
+  ingredientId: Uuid;
+  direction: 'ADD' | 'REMOVE';
+  /** Stock-unit thousandths, always positive */
+  quantityMilli: number;
+  reason: AdjustReason;
+  note: string;
+  /** A double tap or retry with the same key changes nothing */
+  idempotencyKey: string;
+}
+
 export interface StationInput {
   id: Uuid | null;
   name: string;
@@ -443,6 +481,17 @@ export interface ApiClient {
   moveStation(stationId: Uuid, position: number): Promise<void>;
   /** Only a station with no menu items, chefs or open tickets can be removed. */
   removeStation(stationId: Uuid): Promise<void>;
+
+  /**
+   * Inventory & Suppliers (DEMO, Step A; Owner / Manager). Stock is the sum of stock movements: a new
+   * ingredient's opening stock and every correction are movements; nobody types a new stock number.
+   */
+  getInventory(): Promise<InventoryView>;
+  saveIngredient(input: IngredientInput): Promise<Ingredient>;
+  /** Not in use = hidden from lists and the dashboard, kept with its history */
+  setIngredientActive(ingredientId: Uuid, active: boolean): Promise<void>;
+  /** A correction with a reason (Step A). Purchases, kitchen use and waste come in later steps. */
+  adjustStock(input: StockAdjustInput): Promise<void>;
 
   /** Activation page (no login): who the link is for, or an error when it is used, revoked or expired. */
   getActivation(token: string): Promise<ActivationInfo>;

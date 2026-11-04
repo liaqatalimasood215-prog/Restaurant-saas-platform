@@ -24,12 +24,16 @@ import {
   type WebsiteConfig,
   type WaiterCall,
 } from '@restaurant-saas/shared';
+import { createInventorySeed, type DemoInventory } from './inventory-seed';
 
 /**
  * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
  * Sample data only — never real customers, staff or prices.
  */
-export const DEMO_DATA_VERSION = 15;
+export const DEMO_DATA_VERSION = 16;
+
+/** Permissions added after demo data of an older version was saved: the Managers get them as recommended. */
+const NEW_MANAGER_PERMISSIONS_16: Permission[] = ['inventory.view', 'inventory.manage'];
 
 /** Fixed, valid UUIDs so links and tests stay stable. */
 export function demoId(n: number): string {
@@ -71,6 +75,8 @@ export interface DemoData {
   rolePermissions: Partial<Record<StaffRole, Permission[]>>;
   /** Last employee number given (EMP012 …); never reused */
   employeeCounter: number;
+  /** Inventory & Suppliers (DEMO, Step A: ingredients, stock movements, locations, suppliers) */
+  inventory: DemoInventory;
 }
 
 export interface DemoInvite {
@@ -334,5 +340,27 @@ export function createSeed(): DemoData {
     sessionVersions: {},
     rolePermissions: {},
     employeeCounter: 12,
+    inventory: createInventorySeed(scoped, demoId(101)),
+  };
+}
+
+/**
+ * Saved demo data of an older version, brought up to date WITHOUT losing anything (owner, 2026-11-04: never reset
+ * his demo data without asking). Version 15 → 16 adds the sample inventory and the new Inventory permissions.
+ * Anything older, or not demo data at all, returns null (the demo starts fresh, as before).
+ */
+export function upgradeDemoData(raw: unknown): DemoData | null {
+  const data = raw as (Omit<DemoData, 'inventory'> & { inventory?: DemoInventory }) | null;
+  if (!data || typeof data !== 'object' || typeof data.version !== 'number') return null;
+  if (data.version === DEMO_DATA_VERSION) return data as DemoData;
+  if (data.version !== 15) return null;
+  const added = NEW_MANAGER_PERMISSIONS_16;
+  const withNew = (list: Permission[]) => [...list, ...added.filter((p) => !list.includes(p))];
+  return {
+    ...data,
+    version: 16,
+    inventory: data.inventory ?? createInventorySeed(scoped, demoId(101)),
+    rolePermissions: data.rolePermissions.MANAGER ? { ...data.rolePermissions, MANAGER: withNew(data.rolePermissions.MANAGER) } : data.rolePermissions,
+    staff: data.staff.map((s) => (s.role === 'MANAGER' && s.permissions ? { ...s, permissions: withNew(s.permissions) } : s)),
   };
 }

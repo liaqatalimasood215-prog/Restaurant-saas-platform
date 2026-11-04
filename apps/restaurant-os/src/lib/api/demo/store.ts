@@ -1,5 +1,5 @@
 import { ApiError } from '../client';
-import { createSeed, DEMO_DATA_VERSION, type DemoData } from './seed';
+import { createSeed, DEMO_DATA_VERSION, upgradeDemoData, type DemoData } from './seed';
 
 /**
  * In-memory DEMO state shared by all screens.
@@ -31,9 +31,12 @@ function writeJson(storage: () => Storage, key: string, value: unknown): void {
   }
 }
 
+/** The saved demo data, brought up to date when it is one version old (never thrown away for that). */
 function loadData(): DemoData | null {
-  const data = readJson<DemoData>(() => window.localStorage, DATA_KEY);
-  return data?.version === DEMO_DATA_VERSION ? data : null;
+  const saved = readJson<unknown>(() => window.localStorage, DATA_KEY);
+  const data = upgradeDemoData(saved);
+  if (data && (saved as { version?: number }).version !== DEMO_DATA_VERSION) writeJson(() => window.localStorage, DATA_KEY, data);
+  return data;
 }
 
 interface DemoSessionState {

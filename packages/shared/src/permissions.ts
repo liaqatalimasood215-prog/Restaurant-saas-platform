@@ -16,6 +16,8 @@ export const PERMISSIONS = {
   'menu.view': ['OWNER', 'MANAGER'],
   'onlineApp.view': ['OWNER', 'MANAGER'],
   'riders.view': ['OWNER', 'MANAGER'],
+  /** Inventory & Suppliers (DEMO, owner 2026-11-04) */
+  'inventory.view': ['OWNER', 'MANAGER'],
   // ── Actions ──
   /** Open table, add items, send to kitchen (Super Waiter; never the Service Waiter) */
   'table.order': ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'],
@@ -49,6 +51,8 @@ export const PERMISSIONS = {
   'tables.manage': ['OWNER', 'MANAGER'],
   /** Menu items, sizes, add-ons, stations; Online App switches (Preview 5) */
   'menu.manage': ['OWNER', 'MANAGER'],
+  /** Add and edit ingredients, correct stock (with a reason) */
+  'inventory.manage': ['OWNER', 'MANAGER'],
   /** Publish the website and the Android app, domain and Google Play setup — the Owner only (owner, 2026-10-30) */
   'onlineApp.publish': ['OWNER'],
   /** See the staff list (read-only for the Manager) */

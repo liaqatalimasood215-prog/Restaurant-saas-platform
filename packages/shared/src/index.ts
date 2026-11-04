@@ -22,3 +22,4 @@ export * from './reports';
 export * from './online-order';
 export * from './online-app';
 export * from './riders';
+export * from './inventory';

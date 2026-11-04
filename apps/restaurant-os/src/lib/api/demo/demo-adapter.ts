@@ -133,6 +133,16 @@ import {
   type TicketStatus,
   type TicketTransitionFailure,
   type TransitionFailure,
+  checkAdjustment,
+  checkIngredient,
+  cleanIngredientName,
+  expiryState,
+  onHandOf,
+  stockStatus,
+  stockValueOf,
+  summarizeInventory,
+  type Ingredient,
+  type InventoryView,
 } from '@restaurant-saas/shared';
 import {
   ApiError,
@@ -156,6 +166,8 @@ import {
   type StaffInput,
   type StaffLink,
   type TableInput,
+  type IngredientInput,
+  type StockAdjustInput,
 } from '../client';
 import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
@@ -2339,6 +2351,152 @@ export class DemoAdapter implements ApiClient, DemoControls {
         }
         if (data.stations.length <= 1) throw new ApiError('VALIDATION', 'Keep at least one kitchen station.');
         data.stations = data.stations.filter((s) => s.id !== stationId);
+      }),
+    );
+  }
+
+  // ── Inventory & Suppliers (DEMO, Step A) ───────────────────────────────────────────────────
+
+  getInventory(): Promise<InventoryView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const inv = data.inventory;
+      const today = businessDate(new Date(), data.branch.timezone, '00:00');
+      const rows = inv.ingredients
+        .map((ingredient) => {
+          const onHandMilli = onHandOf(ingredient.id, inv.movements);
+          return {
+            ingredient,
+            onHandMilli,
+            status: stockStatus({ onHandMilli, minStockMilli: ingredient.minStockMilli, isActive: ingredient.isActive }),
+            expiry: expiryState(ingredient.expiryDate, today, onHandMilli, inv.expiringSoonDays),
+            value: stockValueOf(ingredient, onHandMilli),
+            supplierName: inv.suppliers.find((s) => s.id === ingredient.preferredSupplierId)?.name ?? null,
+            locationName: inv.locations.find((l) => l.id === ingredient.locationId)?.name ?? null,
+          };
+        })
+        .sort((a, b) => a.ingredient.name.localeCompare(b.ingredient.name));
+      const movements = [...inv.movements]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 50)
+        .flatMap((movement) => {
+          const ingredient = inv.ingredients.find((i) => i.id === movement.ingredientId);
+          return ingredient
+            ? [{ movement, ingredientName: ingredient.name, purchaseUnit: ingredient.purchaseUnit, stockUnit: ingredient.stockUnit, byName: this.staffName(data, movement.createdBy) }]
+            : [];
+        });
+      return {
+        today,
+        expiringSoonDays: inv.expiringSoonDays,
+        summary: summarizeInventory(rows),
+        ingredients: rows,
+        movements,
+        locations: [...inv.locations].sort((a, b) => a.sort - b.sort),
+        suppliers: inv.suppliers.filter((s) => s.isActive),
+      };
+    });
+  }
+
+  saveIngredient(input: IngredientInput): Promise<Ingredient> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        const existing = input.id ? inv.ingredients.find((i) => i.id === input.id) : undefined;
+        if (input.id && !existing) throw new ApiError('NOT_FOUND', 'This ingredient was not found.');
+        const problem = checkIngredient({ ...input, openingMilli: existing ? null : input.openingMilli }, inv.ingredients);
+        if (problem) throw new ApiError('VALIDATION', 'Please check the ingredient details.');
+        if (input.preferredSupplierId && !inv.suppliers.some((s) => s.id === input.preferredSupplierId)) throw new ApiError('VALIDATION', 'Choose a supplier from the list.');
+        if (input.locationId && !inv.locations.some((l) => l.id === input.locationId)) throw new ApiError('VALIDATION', 'Choose a storage place from the list.');
+        const now = nowIso();
+        const fields = {
+          name: cleanIngredientName(input.name),
+          code: input.code.trim().toUpperCase(),
+          category: input.category,
+          purchaseUnit: input.purchaseUnit,
+          stockUnit: input.stockUnit,
+          packSizeMilli: input.packSizeMilli,
+          minStockMilli: input.minStockMilli,
+          reorderQtyMilli: input.reorderQtyMilli,
+          purchasePrice: input.purchasePrice,
+          preferredSupplierId: input.preferredSupplierId,
+          locationId: input.locationId,
+          batchNo: input.batchNo.trim(),
+          expiryDate: input.expiryDate,
+          updatedAt: now,
+        };
+        if (existing) {
+          // The stock unit gives every movement its meaning: it never changes once stock was written.
+          if (existing.stockUnit !== input.stockUnit && inv.movements.some((m) => m.ingredientId === existing.id)) {
+            throw new ApiError('CONFLICT', 'The stock unit cannot change after stock was recorded.');
+          }
+          Object.assign(existing, fields);
+          return existing;
+        }
+        const ingredient: Ingredient = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ...fields, isActive: true, createdAt: now };
+        inv.ingredients.push(ingredient);
+        if (input.openingMilli > 0) {
+          inv.movements.push({
+            id: newId(),
+            restaurantId: data.restaurant.id,
+            branchId: data.branch.id,
+            ingredientId: ingredient.id,
+            type: 'OPENING',
+            quantityMilli: input.openingMilli,
+            reason: null,
+            note: '',
+            createdBy: user.id,
+            createdAt: now,
+          });
+        }
+        return ingredient;
+      }),
+    );
+  }
+
+  setIngredientActive(ingredientId: string, active: boolean): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'inventory.manage');
+        const ingredient = data.inventory.ingredients.find((i) => i.id === ingredientId);
+        if (!ingredient) throw new ApiError('NOT_FOUND', 'This ingredient was not found.');
+        ingredient.isActive = active;
+        ingredient.updatedAt = nowIso();
+      }),
+    );
+  }
+
+  adjustStock(input: StockAdjustInput): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const key = 'stock-adjust:' + input.idempotencyKey;
+        if (data.idempotency[key]) return;
+        const inv = data.inventory;
+        const ingredient = inv.ingredients.find((i) => i.id === input.ingredientId);
+        if (!ingredient) throw new ApiError('NOT_FOUND', 'This ingredient was not found.');
+        const problem = checkAdjustment({ ...input, onHandMilli: onHandOf(ingredient.id, inv.movements) });
+        if (problem) {
+          throw new ApiError(
+            'VALIDATION',
+            problem === 'MORE_THAN_ON_HAND' ? 'You cannot remove more than is in stock.' : problem === 'NOTE_REQUIRED' ? 'Write why the stock changes.' : 'Please check the quantity and the reason.',
+          );
+        }
+        const movementId = newId();
+        inv.movements.push({
+          id: movementId,
+          restaurantId: data.restaurant.id,
+          branchId: data.branch.id,
+          ingredientId: ingredient.id,
+          type: 'ADJUSTMENT',
+          quantityMilli: input.direction === 'ADD' ? input.quantityMilli : -input.quantityMilli,
+          reason: input.reason,
+          note: input.note.trim(),
+          createdBy: user.id,
+          createdAt: nowIso(),
+        });
+        data.idempotency[key] = movementId;
       }),
     );
   }

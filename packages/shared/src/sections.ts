@@ -74,6 +74,8 @@ export const OS_SECTIONS: readonly OsSection[] = [
   feature('waiter', 'Waiter Orders', FLOOR, 'waiter.view'),
   feature('kitchen', 'Kitchen / KDS', ['OWNER', 'MANAGER', 'KITCHEN'], 'kitchen.view'),
   feature('menu', 'Menu', MANAGEMENT, 'menu.view'),
+  // Owner 2026-11-04: Inventory frontend (DEMO) moved up from Phase 8, next to the Menu it will use.
+  feature('inventory', 'Inventory & Suppliers', MANAGEMENT, 'inventory.view'),
   feature('online-app', 'Online App', MANAGEMENT, 'onlineApp.view'),
   feature('riders', 'Riders', MANAGEMENT, 'riders.view'),
   feature('staff', 'Staff', MANAGEMENT, 'staff.view'),
@@ -82,7 +84,6 @@ export const OS_SECTIONS: readonly OsSection[] = [
   comingSoon('dashboard', 'Dashboard', MANAGEMENT, 7),
   comingSoon('customers', 'Customers', MANAGEMENT, 7),
   comingSoon('finance-reports', 'Finance & Reports', MANAGEMENT, 7, 'reports.money'),
-  comingSoon('inventory', 'Inventory & Suppliers', MANAGEMENT, 8),
   comingSoon('payroll', 'Payroll', ['OWNER'], 8),
   comingSoon('ai-manager', 'AI Manager', MANAGEMENT, 10),
 ];
