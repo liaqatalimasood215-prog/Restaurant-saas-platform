@@ -273,6 +273,21 @@ await cashier.getByText('No access').first().waitFor();
 await cashier.close();
 ok('the Manager edits recipes; the Cashier gets "No access"');
 
+console.log("8b. The owner's laptop (1265 × 628 at 150 %): the builder fits one screen");
+const laptop = await openAs(USER.owner, '/inventory', { width: 1265, height: 628 });
+await openRecipes(laptop);
+for (const name of ['Chicken Karahi', 'Fajita Pizza']) {
+  await laptop.getByRole('button', { name: `Edit recipe: ${name}` }).click();
+  await builder(laptop).waitFor();
+  const extra = await laptop.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+  assert.ok(extra <= 1, `${name}: the page scrolls by ${extra}px`);
+  await shot(laptop, `07-laptop-owner-builder-${name.split(' ')[1].toLowerCase()}`);
+  await builder(laptop).getByRole('button', { name: 'Recipes', exact: true }).click();
+  await builder(laptop).waitFor({ state: 'detached' });
+}
+await laptop.close();
+ok('Karahi and Fajita Pizza open without any page scroll; a long ingredient list scrolls inside its box');
+
 console.log('9. Phone');
 const phone = await openAs(USER.owner, '/inventory', PHONE);
 await openRecipes(phone);

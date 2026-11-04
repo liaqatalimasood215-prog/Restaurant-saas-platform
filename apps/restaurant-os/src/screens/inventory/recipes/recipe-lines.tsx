@@ -50,6 +50,7 @@ export const CATEGORY_ART: Record<IngredientCategory, string> = {
  * how much one holds. Loss, "guest may leave it out" and a substitute sit under the ▾ of each line.
  */
 export function RecipeLines({
+  title,
   lines,
   onChange,
   ingredients,
@@ -57,6 +58,8 @@ export function RecipeLines({
   excludeId,
   errorLine,
 }: {
+  /** Shown on the left of the search, on one line (saves height) */
+  title?: string;
   lines: LineDraft[];
   onChange: (lines: LineDraft[]) => void;
   ingredients: readonly Ingredient[];
@@ -70,7 +73,7 @@ export function RecipeLines({
   const listRef = useRef<HTMLOListElement>(null);
   const byId = new Map(ingredients.map((i) => [i.id, i]));
   const set = (key: string, change: Partial<LineDraft>) => onChange(lines.map((l) => (l.key === key ? { ...l, ...change } : l)));
-  const input = 'min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base';
+  const input = 'min-h-9 w-full rounded-lg border border-slate-300 bg-white px-2.5 text-sm';
   const usable = ingredients.filter((i) => i.isActive && i.id !== excludeId);
   const q = query.trim().toLowerCase();
   const matches = q ? usable.filter((i) => i.name.toLowerCase().includes(q) || i.code.toLowerCase().includes(q)).slice(0, 8) : [];
@@ -98,9 +101,10 @@ export function RecipeLines({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="relative">
-        <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 transition focus-within:border-brand focus-within:bg-white focus-within:ring-2 focus-within:ring-brand/15">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="relative flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2">
+        {title && <h3 className="text-base font-extrabold text-slate-900">{title}</h3>}
+        <label className="flex min-h-10 min-w-48 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 transition focus-within:border-brand focus-within:bg-white focus-within:ring-2 focus-within:ring-brand/15">
           <Search className="size-4 shrink-0 text-slate-400" aria-hidden />
           <input
             type="search"
@@ -136,7 +140,7 @@ export function RecipeLines({
         )}
       </div>
 
-      <div className="hidden grid-cols-[1.5rem_minmax(0,1fr)_4.75rem_5rem_5rem_4.5rem] gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600 md:grid">
+      <div className="hidden grid-cols-[1.25rem_minmax(0,1fr)_4rem_4.25rem_4.5rem_3.75rem] gap-2 rounded-lg bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600 md:grid">
         <span>{t('inventory.recipes.builder.number')}</span>
         <span>{t('inventory.recipes.editor.ingredient')}</span>
         <span>{t('inventory.recipes.editor.quantity')}</span>
@@ -144,7 +148,7 @@ export function RecipeLines({
         <span className="text-right">{t('inventory.recipes.editor.lineCost')}</span>
         <span />
       </div>
-      <ol ref={listRef} className="divide-y divide-slate-100">
+      <ol ref={listRef} className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
         {lines.map((line, index) => {
           const ingredient = byId.get(line.ingredientId);
           const typed = parseQuantity(line.quantity, { allowZero: false });
@@ -159,11 +163,11 @@ export function RecipeLines({
           const isPackage = ingredient ? isPackageUnit(line.unit, ingredient.stockUnit) : false;
           const more = open === line.key || line.optional || Boolean(line.substituteId);
           return (
-            <li key={line.key} data-recipe-line={index + 1} className={cn('py-2', errorLine === index && 'rounded-xl bg-red-50/60 ring-2 ring-red-200')}>
-              <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2 px-1 md:grid-cols-[1.5rem_minmax(0,1fr)_4.75rem_5rem_5rem_4.5rem] md:px-3">
+            <li key={line.key} data-recipe-line={index + 1} className={cn('py-1', errorLine === index && 'rounded-xl bg-red-50/60 ring-2 ring-red-200')}>
+              <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2 px-1 md:grid-cols-[1.25rem_minmax(0,1fr)_4rem_4.25rem_4.5rem_3.75rem] md:px-3">
                 <span className="text-sm font-bold text-slate-500">{index + 1}</span>
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="text-xl" aria-hidden>
+                  <span className="text-lg lg:hidden xl:inline" aria-hidden>
                     {ingredient ? (ingredient.kind === 'PREPARED' ? '🥣' : CATEGORY_ART[ingredient.category]) : '➕'}
                   </span>
                   <select
@@ -234,7 +238,7 @@ export function RecipeLines({
                     onClick={() => setOpen(open === line.key ? null : line.key)}
                     aria-expanded={more}
                     aria-label={t('inventory.recipes.editor.more', { n: index + 1 })}
-                    className="press grid size-10 place-items-center rounded-xl text-slate-600 hover:bg-slate-100"
+                    className="press grid size-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100"
                   >
                     <ChevronDown className={cn('size-4 transition-transform', more && 'rotate-180')} aria-hidden />
                   </button>
@@ -242,7 +246,7 @@ export function RecipeLines({
                     type="button"
                     onClick={() => onChange(lines.filter((l) => l.key !== line.key))}
                     aria-label={t('inventory.recipes.editor.removeLine', { n: index + 1 })}
-                    className="press grid size-10 place-items-center rounded-xl text-red-700 hover:bg-red-50"
+                    className="press grid size-9 place-items-center rounded-lg text-red-700 hover:bg-red-50"
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </button>
@@ -317,7 +321,7 @@ export function RecipeLines({
       <button
         type="button"
         onClick={() => onChange([...lines, emptyLine()])}
-        className="press flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-sm font-bold text-slate-700 hover:border-brand/50 hover:bg-brand-soft/40 hover:text-brand"
+        className="press flex min-h-9 w-full shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-sm font-bold text-slate-700 hover:border-brand/50 hover:bg-brand-soft/40 hover:text-brand"
       >
         <Plus className="size-4" aria-hidden />
         {t('inventory.recipes.editor.addLine')}
@@ -330,21 +334,21 @@ export const LEVEL_TONE = { GOOD: 'green', WATCH: 'amber', HIGH: 'red' } as cons
 
 /** Recipe cost, selling price, food cost %, gross profit and margin — the same numbers everywhere. */
 export function CostingRows({ costing, showNetPrice, priceNote }: { costing: FoodCost; showNetPrice: boolean; priceNote?: string }) {
-  const row = 'flex items-baseline justify-between gap-3 py-2';
+  const row = 'flex items-baseline justify-between gap-3 py-1.5';
   return (
     <dl className="divide-y divide-slate-100 text-sm" data-costing>
       <div className={row}>
-        <dt className="text-slate-600">{t('inventory.recipes.builder.totalCost')}</dt>
-        <dd className="font-extrabold tabular-nums text-slate-900" data-recipe-cost>
+        <dt className="text-slate-600 leading-tight">{t('inventory.recipes.builder.totalCost')}</dt>
+        <dd className="whitespace-nowrap font-extrabold tabular-nums text-slate-900" data-recipe-cost>
           {costing.cost === null ? '—' : formatPaisa(costing.cost)}
         </dd>
       </div>
       <div className={row}>
         <dt className="text-slate-600">
           {t('inventory.recipes.editor.sellingPrice')}
-          {priceNote && <span className="block text-xs text-slate-400">{priceNote}</span>}
+          {priceNote && <span className="block text-[11px] text-slate-400">{priceNote}</span>}
         </dt>
-        <dd className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 tabular-nums text-slate-900">{formatPaisa(costing.price)}</dd>
+        <dd className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 tabular-nums text-slate-900">{formatPaisa(costing.price)}</dd>
       </div>
       {showNetPrice && (
         <div className={row}>
@@ -356,7 +360,7 @@ export function CostingRows({ costing, showNetPrice, priceNote }: { costing: Foo
         <dt className="font-bold text-slate-900">{t('inventory.recipes.foodCost')}</dt>
         <dd className="flex items-center gap-2" data-food-cost>
           {costing.level ? (
-            <Badge tone={LEVEL_TONE[costing.level]} className="px-3 py-1 text-sm">
+            <Badge tone={LEVEL_TONE[costing.level]} className="px-2.5 py-0.5 text-sm">
               {costing.foodCostBps === null ? '—' : formatBps(costing.foodCostBps)}
             </Badge>
           ) : (

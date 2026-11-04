@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { Calculator, Check, ChevronRight, History, Layers, Save, Scale } from 'lucide-react';
+import { Calculator, Check, ChevronRight, History, Save, Scale } from 'lucide-react';
 import {
   INGREDIENT_CATEGORIES,
   MILLI,
@@ -29,7 +29,6 @@ import {
   type StockUnit,
 } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/toast';
 import { t } from '@/i18n';
@@ -154,19 +153,21 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
     onClose();
   };
 
-  const field = 'min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base';
-  const readOnly = 'flex min-h-11 w-full items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-base font-semibold text-slate-800';
+  const field = 'min-h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm';
+  const readOnly = 'flex min-h-10 w-full items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-800';
   const copyChoices = sizes.filter((s) => s.key !== active && costableLines(drafts[s.key] ?? [], byId).length > 0);
+  const panel = 'flex min-h-0 flex-col rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_18px_-10px_rgb(15_23_42/0.18)]';
 
   return (
-    <div className="space-y-4" data-recipe-builder>
+    // Laptop and desktop: one screen high like the POS (owner 2026-11-05: "one screen, no scrolling"); a long list scrolls inside its own box.
+    <div className="flex flex-col gap-3 lg:h-[calc(100dvh-6.5rem)] lg:short:h-[calc(100dvh-5.5rem)]" data-recipe-builder>
       {/* Top bar: breadcrumb, Save Draft, Verify Recipe */}
-      <div className="bg-brand-gradient sticky top-16 z-10 flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3 text-white shadow-brand">
-        <nav aria-label={t('inventory.recipes.builder.back')} className="flex min-w-0 basis-full items-center gap-2 text-lg sm:basis-auto sm:flex-1">
+      <div className="bg-brand-gradient flex shrink-0 flex-wrap items-center gap-2 rounded-2xl px-4 py-2 text-white shadow-brand">
+        <nav aria-label={t('inventory.recipes.builder.back')} className="flex min-w-0 basis-full items-center gap-2 text-base sm:basis-auto sm:flex-1">
           <button type="button" onClick={leave} className="press rounded-lg px-1 font-semibold text-white/85 hover:text-white">
             {t('inventory.recipes.builder.breadcrumb')}
           </button>
-          <ChevronRight className="size-5 shrink-0 text-white/70" aria-hidden />
+          <ChevronRight className="size-4 shrink-0 text-white/70" aria-hidden />
           <h2 className="truncate font-extrabold">
             {isNew ? t('inventory.recipes.builder.addTitle') : t('inventory.recipes.builder.editTitle')}
             <span className="font-semibold text-white/85"> · {productName}</span>
@@ -176,7 +177,7 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
           type="button"
           disabled={busy || !anyDirty}
           onClick={() => void save(false)}
-          className="press flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-brand shadow-sm disabled:opacity-60 sm:flex-none"
+          className="press flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-brand shadow-sm disabled:opacity-60 sm:flex-none"
         >
           <Save className="size-4" aria-hidden />
           {t('inventory.recipes.builder.saveDraft')}
@@ -185,37 +186,33 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
           type="button"
           disabled={busy || (!anyDirty && stateOf(recipe) === 'VERIFIED')}
           onClick={() => void save(true)}
-          className="press flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-white px-4 text-sm font-bold text-white hover:bg-white/10 disabled:opacity-60 sm:flex-none"
+          className="press flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-white px-4 text-sm font-bold text-white hover:bg-white/10 disabled:opacity-60 sm:flex-none"
         >
           <Check className="size-4" aria-hidden />
           {t('inventory.recipes.builder.verify')}
         </button>
       </div>
-      {leaving && (
-        <p role="alert" className="rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
-          {t('inventory.recipes.builder.leaveAgain')}
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-          {sizes.length > 1 ? `${sizes.find((s) => s.key === error.key)?.name}: ` : ''}
-          {error.text}
+      {(leaving || error) && (
+        <p role="alert" className={cn('shrink-0 rounded-xl px-3 py-1.5 text-sm font-semibold', error ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-900')}>
+          {error ? `${sizes.length > 1 ? `${sizes.find((s) => s.key === error.key)?.name}: ` : ''}${error.text}` : t('inventory.recipes.builder.leaveAgain')}
         </p>
       )}
 
-      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-[14rem_minmax(0,1fr)_16.5rem]">
+      <div className="grid gap-3 md:grid-cols-2 lg:min-h-0 lg:flex-1 lg:grid-cols-[12rem_minmax(0,1fr)_14rem] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[13.5rem_minmax(0,1fr)_16rem]">
         {/* Left: the product */}
-        <Card className="order-1 space-y-3 p-4">
-          {subject.kind === 'PREPARED' ? (
-            <span className="hidden h-36 items-center justify-center rounded-xl bg-linear-to-br from-brand-soft via-rose-50 to-white text-6xl md:flex" aria-hidden>
-              🥣
-            </span>
-          ) : (
-            <ProductArt name={subject.name} categoryName={subject.kind === 'ITEM' ? subject.categoryName : 'cheese'} className="hidden h-36 w-full rounded-xl md:flex" emojiClassName="text-7xl" soft />
-          )}
-          {/* Phones skip the picture: the ingredients come first there */}
-          <p className="hidden text-[11px] text-slate-400 md:block">{t('inventory.recipes.builder.photoNote')}</p>
-          <h3 className="text-lg font-extrabold text-slate-900">{t('inventory.recipes.builder.productDetails')}</h3>
+        <section className={cn(panel, 'order-1 gap-2.5 p-3 lg:overflow-y-auto')} aria-label={t('inventory.recipes.builder.productDetails')}>
+          <div className="flex items-center gap-2.5">
+            {subject.kind === 'PREPARED' ? (
+              <span className="grid size-14 shrink-0 place-items-center rounded-xl bg-linear-to-br from-brand-soft via-rose-50 to-white text-3xl" aria-hidden>
+                🥣
+              </span>
+            ) : (
+              <ProductArt name={subject.name} categoryName={subject.kind === 'ITEM' ? subject.categoryName : 'cheese'} className="size-14 shrink-0 rounded-xl" emojiClassName="text-3xl" soft />
+            )}
+            <h3 className="text-base font-extrabold leading-tight text-slate-900" title={t('inventory.recipes.builder.photoNote')}>
+              {t('inventory.recipes.builder.productDetails')}
+            </h3>
+          </div>
           {subject.kind === 'PREPARED' ? (
             <>
               <Field label={t('inventory.recipes.editor.name')}>
@@ -230,23 +227,20 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
                   ))}
                 </select>
               </Field>
-              <Field label={t('inventory.recipes.editor.countedIn')}>
-                <select value={stockUnit} disabled={Boolean(prepared)} onChange={(e) => setStockUnit(e.target.value as StockUnit)} aria-label={t('inventory.recipes.editor.countedIn')} className={cn(field, 'disabled:bg-slate-50')}>
-                  {STOCK_UNITS.map((u) => (
-                    <option key={u} value={u}>
-                      {unitLabel(u, 2 * MILLI)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label={t('inventory.recipes.editor.yield')} hint={t('inventory.recipes.editor.yieldHint')}>
-                <span className="flex">
-                  <input value={yieldText} onChange={(e) => (setYieldText(e.target.value), setError(null))} inputMode="decimal" placeholder="0" aria-label={t('inventory.recipes.editor.yield')} className={cn(field, 'rounded-r-none')} />
-                  <span className="flex shrink-0 items-center rounded-r-xl border border-l-0 border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-600" aria-hidden>
-                    {unitLabel(displayUnit, 2 * MILLI)}
-                  </span>
-                </span>
-              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label={t('inventory.recipes.editor.yield')}>
+                  <input value={yieldText} onChange={(e) => (setYieldText(e.target.value), setError(null))} inputMode="decimal" placeholder="0" aria-label={t('inventory.recipes.editor.yield')} title={t('inventory.recipes.editor.yieldHint')} className={field} />
+                </Field>
+                <Field label={t('inventory.recipes.editor.countedIn')}>
+                  <select value={stockUnit} disabled={Boolean(prepared)} onChange={(e) => setStockUnit(e.target.value as StockUnit)} aria-label={t('inventory.recipes.editor.countedIn')} className={cn(field, 'px-2 disabled:bg-slate-50')}>
+                    {STOCK_UNITS.map((u) => (
+                      <option key={u} value={u}>
+                        {unitLabel(u === 'g' ? 'kg' : u === 'ml' ? 'l' : u, 2 * MILLI)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
             </>
           ) : (
             <>
@@ -259,21 +253,15 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
                 <span className={readOnly}>{subject.kind === 'ITEM' ? subject.categoryName : subject.groupName}</span>
               </Field>
               {sizes.length > 1 ? (
-                <Field label={t('inventory.recipes.builder.recipeFor')}>
-                  <select value={active} onChange={(e) => (setActive(e.target.value), setError(null))} aria-label={t('inventory.recipes.builder.recipeFor')} className={field}>
-                    {sizes.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
+                <Field label={t('inventory.recipes.editor.sizes')}>
+                  <span className={cn(readOnly, 'truncate')}>{sizes.map((s) => s.name).join(', ')}</span>
                 </Field>
               ) : (
                 <Field label={t('inventory.recipes.builder.baseQuantity')}>
                   <span className={readOnly}>{t('inventory.recipes.builder.perSale', { unit: subject.kind === 'ITEM' ? subject.unit : 'piece' })}</span>
                 </Field>
               )}
-              <p className="text-xs text-slate-500">
+              <p className="text-[11px] leading-snug text-slate-500">
                 {t('inventory.recipes.builder.editInMenu')}{' '}
                 <Link href="/menu" className="font-bold text-brand hover:underline">
                   {t('inventory.recipes.builder.openMenu')}
@@ -281,27 +269,27 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
               </p>
             </>
           )}
-          <div className="rounded-xl bg-brand-soft/60 p-3">
+          <div className="rounded-xl bg-brand-soft/60 p-2.5" title={t('inventory.recipes.builder.autoScaleHint')}>
             <div className="flex items-center gap-2">
-              <Scale className="size-5 shrink-0 text-brand" aria-hidden />
-              <p className="min-w-0 flex-1 font-extrabold leading-tight text-brand">{t('inventory.recipes.builder.autoScale')}</p>
+              <Scale className="size-4 shrink-0 text-brand" aria-hidden />
+              <p className="min-w-0 flex-1 text-sm font-extrabold leading-tight text-brand">{t('inventory.recipes.builder.autoScale')}</p>
               <Switch checked={false} onChange={() => undefined} disabled compact label={t('inventory.recipes.builder.autoScale')} />
             </div>
-            <p className="mt-1.5 text-xs text-slate-600">
-              <Badge tone="dark" className="mr-1">
+            <p className="mt-1 text-[11px] leading-snug text-slate-600">
+              <Badge tone="dark" className="mr-1 px-1.5 py-0 text-[10px]">
                 {t('inventory.recipes.builder.r2')}
               </Badge>
               {t('inventory.recipes.builder.autoScaleHint')}
             </p>
           </div>
-        </Card>
+        </section>
 
         {/* Right: the cost summary (second on tablets) */}
-        <div className="order-3 space-y-4 md:order-2 xl:order-3">
-          <Card className="overflow-hidden">
-            <div className="flex items-center gap-2 bg-brand-soft/70 px-4 py-3">
-              <Calculator className="size-5 text-brand" aria-hidden />
-              <h3 className="font-extrabold text-brand">
+        <div className="order-3 flex min-h-0 flex-col gap-3 md:order-2 lg:order-3">
+          <section className={cn(panel, 'shrink-0 overflow-hidden')} aria-label={t('inventory.recipes.builder.summaryTitle')}>
+            <div className="flex items-center gap-2 bg-brand-soft/70 px-3 py-2">
+              <Calculator className="size-4 text-brand" aria-hidden />
+              <h3 className="truncate text-sm font-extrabold text-brand">
                 {sizes.length > 1 && activeSize?.name
                   ? t('inventory.recipes.builder.summaryFor', { size: activeSize.name })
                   : subject.kind === 'ITEM'
@@ -309,18 +297,18 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
                     : t('inventory.recipes.builder.summaryTitle')}
               </h3>
             </div>
-            <div className="px-4 py-2">
+            <div className="px-3 py-1">
               {subject.kind === 'PREPARED' ? (
                 <dl className="divide-y divide-slate-100 text-sm">
-                  <div className="flex justify-between gap-2 py-2">
+                  <div className="flex justify-between gap-2 py-1.5">
                     <dt className="text-slate-600">{t('inventory.recipes.editor.batch')}</dt>
                     <dd className="font-extrabold tabular-nums" data-recipe-cost>
                       {cost === null ? '—' : formatPaisa(cost)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-2 py-2">
+                  <div className="flex justify-between gap-2 py-1.5">
                     <dt className="text-slate-600">{t('inventory.recipes.editor.perUnitCost', { unit: unitLabel(displayUnit, MILLI) })}</dt>
-                    <dd className="text-lg font-black tabular-nums text-slate-900" data-unit-cost>
+                    <dd className="font-black tabular-nums text-slate-900" data-unit-cost>
                       {unitCost === null ? '—' : formatPaisa(unitCost)}
                     </dd>
                   </div>
@@ -328,23 +316,25 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
               ) : (
                 <CostingRows costing={costing} showNetPrice={view.tax.pricesIncludeTax && view.tax.rateBps > 0} priceNote={t('inventory.recipes.builder.priceFromMenu')} />
               )}
-              <p className="py-2 text-xs text-slate-500">{t('inventory.recipes.editor.estimateNote')}</p>
+              <p className="pb-1.5 text-[11px] leading-snug text-slate-500">{t('inventory.recipes.editor.estimateNote')}</p>
             </div>
-          </Card>
-          <Card className="p-4">
-            <h4 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-slate-900">
+          </section>
+          <section className={cn(panel, 'p-3 lg:flex-1 lg:overflow-y-auto')} aria-label={t('inventory.recipes.editor.history')}>
+            <h4 className="mb-1.5 flex items-center gap-1.5 text-sm font-bold text-slate-900">
               <History className="size-4 text-brand" aria-hidden />
               {t('inventory.recipes.editor.history')}
             </h4>
             {recipe && recipe.versions.length ? (
-              <ol className="space-y-1.5 text-xs text-slate-600" data-versions>
+              <ol className="space-y-1 text-[11px] text-slate-600" data-versions>
                 {[...recipe.versions].reverse().map((v) => (
-                  <li key={v.version} className="flex flex-wrap items-center gap-1.5">
+                  <li key={v.version} className="flex flex-wrap items-center gap-1">
                     <strong className="text-slate-900">{t('inventory.recipes.editor.version', { n: v.version })}</strong>
-                    <Badge tone={STATE_TONE[v.status]}>{t(`inventory.recipes.status.${v.status}`)}</Badge>
+                    <Badge tone={STATE_TONE[v.status]} className="px-1.5 py-0 text-[10px]">
+                      {t(`inventory.recipes.status.${v.status}`)}
+                    </Badge>
                     <span>
-                      {t('inventory.recipes.editor.by', { name: view.staffNames[v.savedBy] ?? '—' })} · {whenText(v.savedAt)}
-                      {v.costAtSave !== null && ` · ${t('inventory.recipes.editor.costThen', { price: formatPaisa(v.costAtSave) })}`}
+                      {view.staffNames[v.savedBy] ?? '—'} · {whenText(v.savedAt)}
+                      {v.costAtSave !== null && ` · ${formatPaisa(v.costAtSave)}`}
                     </span>
                   </li>
                 ))}
@@ -352,72 +342,15 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
             ) : (
               <p className="text-xs text-slate-500">{t('inventory.recipes.editor.noHistory')}</p>
             )}
-            <p className="mt-2 text-xs text-slate-500">{t('inventory.recipes.editor.verifyHint')}</p>
-          </Card>
+            <p className="mt-1.5 text-[11px] leading-snug text-slate-500">{t('inventory.recipes.editor.verifyHint')}</p>
+          </section>
         </div>
 
         {/* Middle: ingredients and sizes */}
-        <div className="order-2 space-y-4 md:order-3 md:col-span-2 xl:order-2 xl:col-span-1">
-          <Card className="p-4">
-            <div className="mb-3">
-              <h3 className="text-xl font-extrabold text-slate-900">{t('inventory.recipes.builder.ingredients')}</h3>
-              <p className="text-sm text-slate-500">{t('inventory.recipes.builder.ingredientsHint')}</p>
-            </div>
-            <RecipeLines
-              lines={lines}
-              onChange={(next) => (setDrafts((d) => ({ ...d, [active]: next })), setError(null), setLeaving(false))}
-              ingredients={view.ingredients}
-              book={book}
-              excludeId={prepared?.id}
-              errorLine={error?.key === active ? error.line : null}
-            />
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {copyChoices.length > 0 && (
-                <label className="block text-sm">
-                  <span className="mb-1 block font-bold text-slate-700">{t('inventory.recipes.editor.copyFrom')}</span>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const from = drafts[e.target.value];
-                      if (from) setDrafts((d) => ({ ...d, [active]: from.map((l) => ({ ...l, key: crypto.randomUUID() })) }));
-                    }}
-                    aria-label={t('inventory.recipes.editor.copyFrom')}
-                    className={field}
-                  >
-                    <option value="">—</option>
-                    {copyChoices.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <label className={cn('block text-sm', copyChoices.length === 0 && 'sm:col-span-2')}>
-                <span className="mb-1 block font-bold text-slate-700">{t('inventory.recipes.editor.note')}</span>
-                <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={220} placeholder={t('inventory.recipes.editor.notePlaceholder')} aria-label={t('inventory.recipes.editor.note')} className={field} />
-              </label>
-            </div>
-          </Card>
-
-          {sizes.length > 1 && (
-            <Card className="overflow-hidden" data-recipe-sizes>
-              <div className="flex items-start gap-2 px-4 py-3">
-                <Layers className="mt-0.5 size-5 shrink-0 text-brand" aria-hidden />
-                <div>
-                  <h3 className="text-lg font-extrabold text-slate-900">{t('inventory.recipes.builder.sizesTitle')}</h3>
-                  <p className="text-xs text-slate-500">{t('inventory.recipes.builder.sizesHint')}</p>
-                </div>
-              </div>
-              <div role="tablist" aria-label={t('inventory.recipes.editor.sizes')} className="divide-y divide-slate-100">
-                <div className="hidden grid-cols-[minmax(0,1fr)_6rem_6.5rem_5.5rem_6rem_5.5rem] gap-2 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-600 sm:grid">
-                  <span>{t('inventory.recipes.builder.sizeCol')}</span>
-                  <span className="text-right">{t('inventory.recipes.builder.costCol')}</span>
-                  <span className="text-right">{t('inventory.recipes.builder.priceCol')}</span>
-                  <span className="text-right">{t('inventory.recipes.builder.foodCostCol')}</span>
-                  <span className="text-right">{t('inventory.recipes.builder.profitCol')}</span>
-                  <span className="text-right">{t('inventory.recipes.builder.statusCol')}</span>
-                </div>
+        <div className="order-2 flex min-h-0 flex-col gap-3 md:order-3 md:col-span-2 lg:order-2 lg:col-span-1">
+          <section className={cn(panel, 'p-3 lg:flex-1')} aria-label={t('inventory.recipes.builder.ingredients')}>
+            {sizes.length > 1 && (
+              <div role="tablist" aria-label={t('inventory.recipes.editor.sizes')} className="mb-2 flex shrink-0 gap-1.5 overflow-x-auto pb-0.5" data-recipe-sizes title={t('inventory.recipes.builder.sizesHint')}>
                 {sizes.map((s) => {
                   const sizeCosting = foodCostOf(costOf(s.key), s.price, view.tax);
                   const state = stateOf(s.recipe);
@@ -430,31 +363,51 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
                       onClick={() => (setActive(s.key), setError(null))}
                       data-size-row={s.name}
                       className={cn(
-                        'grid w-full grid-cols-2 items-center gap-2 px-4 py-3 text-left text-sm transition-colors sm:grid-cols-[minmax(0,1fr)_6rem_6.5rem_5.5rem_6rem_5.5rem]',
-                        active === s.key ? 'bg-brand-soft/70' : 'hover:bg-slate-50',
+                        'press flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-sm font-bold',
+                        active === s.key ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
                       )}
                     >
-                      <span className={cn('font-extrabold', active === s.key ? 'text-brand' : 'text-slate-900')}>
-                        {s.name}
-                        {active === s.key && <span className="ml-1.5 text-xs font-bold">({t('inventory.recipes.builder.editing')})</span>}
-                      </span>
-                      <span className="text-right tabular-nums">{sizeCosting.cost === null ? '—' : formatPaisa(sizeCosting.cost)}</span>
-                      <span className="text-right tabular-nums">{formatPaisa(s.price)}</span>
-                      <span className="text-right">
-                        {sizeCosting.level && sizeCosting.foodCostBps !== null ? <Badge tone={LEVEL_TONE[sizeCosting.level]}>{formatBps(sizeCosting.foodCostBps)}</Badge> : '—'}
-                      </span>
-                      <span className="text-right font-bold tabular-nums text-green-700">
-                        {sizeCosting.profit === null ? '—' : sizeCosting.profit < 0 ? `−${formatPaisa(-sizeCosting.profit)}` : formatPaisa(sizeCosting.profit)}
-                      </span>
-                      <span className="text-right">
-                        {isDirty(s.key) ? <Badge tone="blue">{t('inventory.recipes.editor.changed')}</Badge> : <Badge tone={STATE_TONE[state]}>{t(`inventory.recipes.status.${state}`)}</Badge>}
-                      </span>
+                      {s.name}
+                      <span className="text-xs font-semibold text-slate-500">{formatPaisa(s.price)}</span>
+                      {sizeCosting.level && sizeCosting.foodCostBps !== null && <Badge tone={LEVEL_TONE[sizeCosting.level]}>{formatBps(sizeCosting.foodCostBps)}</Badge>}
+                      {isDirty(s.key) ? <Badge tone="blue">{t('inventory.recipes.editor.changed')}</Badge> : state !== 'VERIFIED' && <Badge tone={STATE_TONE[state]}>{t(`inventory.recipes.status.${state}`)}</Badge>}
                     </button>
                   );
                 })}
               </div>
-            </Card>
-          )}
+            )}
+            <RecipeLines
+              title={t('inventory.recipes.builder.ingredients')}
+              lines={lines}
+              onChange={(next) => (setDrafts((d) => ({ ...d, [active]: next })), setError(null), setLeaving(false))}
+              ingredients={view.ingredients}
+              book={book}
+              excludeId={prepared?.id}
+              errorLine={error?.key === active ? error.line : null}
+            />
+            <div className="mt-2 flex shrink-0 flex-wrap gap-2">
+              {copyChoices.length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const from = drafts[e.target.value];
+                    if (from) setDrafts((d) => ({ ...d, [active]: from.map((l) => ({ ...l, key: crypto.randomUUID() })) }));
+                  }}
+                  aria-label={t('inventory.recipes.editor.copyFrom')}
+                  className="min-h-10 rounded-xl border border-slate-300 bg-white px-2 text-sm"
+                >
+                  <option value="">{t('inventory.recipes.editor.copyFrom')}…</option>
+                  {copyChoices.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={220} placeholder={`${t('inventory.recipes.editor.note')}: ${t('inventory.recipes.editor.notePlaceholder')}`} aria-label={t('inventory.recipes.editor.note')} className={cn(field, 'min-w-40 flex-1')} />
+            </div>
+          </section>
+
         </div>
       </div>
     </div>
@@ -464,9 +417,9 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-bold text-slate-900">{label}</span>
+      <span className="mb-0.5 block text-xs font-bold text-slate-700">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
+      {hint && <span className="mt-0.5 block text-[11px] text-slate-500">{hint}</span>}
     </label>
   );
 }
