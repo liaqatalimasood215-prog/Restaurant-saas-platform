@@ -57,6 +57,11 @@ import type {
   RecipesView,
   ScaleUnit,
   Supplier,
+  SupplierCategory,
+  SupplierPaymentMethod,
+  SuppliersView,
+  SupplierWorkspace,
+  KhataEntry,
   StockLedgerQuery,
   StockLedgerView,
   IngredientCategory,
@@ -355,6 +360,43 @@ export interface SupplierInput {
   phone: string;
 }
 
+/** Add or edit a supplier (Suppliers S1). */
+export interface SupplierProfileInput {
+  /** Empty for a new supplier */
+  id: Uuid | null;
+  name: string;
+  phone: string;
+  category: SupplierCategory;
+  address: string;
+  notes: string;
+  /** The products he usually brings (shared ingredients) */
+  productIds: Uuid[];
+  /** New supplier only: what we already owe him from before (paisa); 0 = nothing */
+  openingBalance: number;
+}
+
+/** One delivery: stock goes up and his khata grows, in one step and only once (idempotency key). */
+export interface ReceiveStockInput {
+  supplierId: Uuid;
+  /** Quantity in the purchase unit (thousandths) and the rate per purchase unit (paisa) */
+  lines: { ingredientId: Uuid; quantityMilli: number; ratePaisa: number }[];
+  note: string;
+  idempotencyKey: string;
+}
+
+/** A payment to a supplier: lowers his khata, never changes stock. */
+export interface SupplierPaymentInput {
+  supplierId: Uuid;
+  amount: number;
+  method: SupplierPaymentMethod;
+  /** Business date it counts for (YYYY-MM-DD), not in the future */
+  date: string;
+  note: string;
+  idempotencyKey: string;
+}
+
+export type KhataPeriod = 'TODAY' | 'ALL';
+
 export interface StockAdjustInput {
   ingredientId: Uuid;
   direction: 'ADD' | 'REMOVE';
@@ -563,8 +605,16 @@ export interface ApiClient {
   saveScaledRecipe(input: ScaledRecipeInput): Promise<RecipeScale>;
   /** Auto Scale off: every size keeps the recipe it has and is edited on its own again. */
   turnOffRecipeScale(menuItemId: Uuid): Promise<void>;
-  /** A supplier added from the ingredient form (name + phone); the full Suppliers page is inventory phase 3. */
+  /** A supplier added from the ingredient form (name + phone). */
   addSupplier(input: SupplierInput): Promise<Supplier>;
+  /** Suppliers S1: every supplier with today's purchases, what we owe and the status. */
+  getSuppliers(): Promise<SuppliersView>;
+  /** One supplier's screen: totals, his products with their stock, and his khata (today or everything). */
+  getSupplierWorkspace(supplierId: Uuid, period: KhataPeriod): Promise<SupplierWorkspace>;
+  saveSupplier(input: SupplierProfileInput): Promise<Supplier>;
+  /** Receive a delivery: PURCHASE stock movements + one khata entry; the rate becomes the product's purchase price. */
+  receiveStock(input: ReceiveStockInput): Promise<KhataEntry>;
+  paySupplier(input: SupplierPaymentInput): Promise<KhataEntry>;
 
   /** Activation page (no login): who the link is for, or an error when it is used, revoked or expired. */
   getActivation(token: string): Promise<ActivationInfo>;

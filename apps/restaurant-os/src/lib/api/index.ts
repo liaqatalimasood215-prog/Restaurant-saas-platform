@@ -11,6 +11,7 @@ export type {
   MenuItemInput,
   DemoControls,
   HeldBillInput,
+  KhataPeriod,
   OrderFilter,
   RecordPaymentInput,
   SendRoundInput,

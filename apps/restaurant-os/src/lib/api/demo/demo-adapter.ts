@@ -143,6 +143,16 @@ import {
   summarizeInventory,
   type Ingredient,
   type InventoryView,
+  SUPPLIER_CATEGORIES,
+  checkReceipt,
+  checkSupplierPayment,
+  khataBalances,
+  khataSummary,
+  lineAmount,
+  receivedStockMilli,
+  type KhataEntry,
+  type SuppliersView,
+  type SupplierWorkspace,
   checkRecipe,
   checkRecipeScale,
   currentVersion,
@@ -152,6 +162,8 @@ import {
   type RecipeLine,
   type RecipeScale,
   type ScaleProblem,
+  type PaymentProblem,
+  MAX_SUPPLIER_AMOUNT,
   type Supplier,
   foodCostOf,
   ingredientCost,
@@ -195,6 +207,10 @@ import {
   type RecipeInput,
   type ScaledRecipeInput,
   type SupplierInput,
+  type KhataPeriod,
+  type ReceiveStockInput,
+  type SupplierPaymentInput,
+  type SupplierProfileInput,
 } from '../client';
 import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
@@ -286,6 +302,15 @@ const SETTINGS_MESSAGES = {
 } as const;
 
 /** Menu setup mistakes; `where` is the category name for items, or 'category' / 'group'. */
+const PAYMENT_MESSAGES: Record<PaymentProblem, string> = {
+  AMOUNT_INVALID: 'Type the amount paid.',
+  MORE_THAN_DUE: 'That is more than what we owe this supplier.',
+  NOTHING_DUE: 'Nothing is owed to this supplier.',
+  METHOD_INVALID: 'Choose how it was paid.',
+  DATE_INVALID: 'The payment date cannot be in the future.',
+  NOTE_TOO_LONG: 'Keep the note to 200 characters.',
+};
+
 const SCALE_MESSAGES: Record<ScaleProblem, string> = {
   BASE_QUANTITY_INVALID: 'Type how much the base recipe makes (for example 1 kg).',
   NO_SIZES: 'Tick at least one size.',
@@ -2823,9 +2848,193 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (name.length > MAX_NAME_LENGTH) throw new ApiError('VALIDATION', `Keep the name to ${MAX_NAME_LENGTH} characters.`);
         if (phone.length > 20 || (phone && !/^[\d +()-]+$/.test(phone))) throw new ApiError('VALIDATION', 'Type the phone number with digits only.');
         if (data.inventory.suppliers.some((s) => s.name.toLowerCase() === name.toLowerCase())) throw new ApiError('CONFLICT', `"${name}" is already in the list.`);
-        const supplier: Supplier = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, name, phone, isActive: true };
+        const supplier: Supplier = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, name, phone, isActive: true, category: 'OTHER', address: '', notes: '', productIds: [] };
         data.inventory.suppliers.push(supplier);
         return supplier;
+      }),
+    );
+  }
+
+  // ── Suppliers and khata (DEMO, Suppliers S1) ───────────────────────────────────────────────
+
+  private branchToday(data: DemoData): string {
+    return businessDate(new Date(), data.branch.timezone, data.branch.businessDayStart);
+  }
+
+  private khataOf(data: DemoData, supplierId: string): KhataEntry[] {
+    return data.inventory.khata.filter((e) => e.supplierId === supplierId);
+  }
+
+  getSuppliers(): Promise<SuppliersView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const today = this.branchToday(data);
+      const suppliers = data.inventory.suppliers
+        .filter((s) => s.isActive)
+        .map((supplier) => ({ supplier, summary: khataSummary(this.khataOf(data, supplier.id), today) }))
+        .sort((a, b) => a.supplier.name.localeCompare(b.supplier.name));
+      return {
+        today,
+        suppliers,
+        todayPurchases: suppliers.reduce((sum, r) => sum + r.summary.todayPurchases, 0),
+        totalDue: suppliers.reduce((sum, r) => sum + r.summary.totalDue, 0),
+      };
+    });
+  }
+
+  getSupplierWorkspace(supplierId: string, period: KhataPeriod): Promise<SupplierWorkspace> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const inv = data.inventory;
+      const supplier = inv.suppliers.find((s) => s.id === supplierId);
+      if (!supplier) throw new ApiError('NOT_FOUND', 'Supplier not found.');
+      const today = this.branchToday(data);
+      const khata = this.khataOf(data, supplier.id);
+      const after = khataBalances(khata);
+      const lastReceived = (ingredientId: string) =>
+        inv.movements.filter((m) => m.type === 'PURCHASE' && m.ingredientId === ingredientId).reduce<string | null>((latest, m) => (!latest || m.createdAt > latest ? m.createdAt : latest), null);
+      const products = supplier.productIds.flatMap((productId) => {
+        const ingredient = inv.ingredients.find((i) => i.id === productId && i.isActive);
+        return ingredient ? [{ ingredient, onHandMilli: onHandOf(ingredient.id, inv.movements), lastRatePaisa: ingredient.purchasePrice, lastReceivedAt: lastReceived(ingredient.id) }] : [];
+      });
+      const entries = khata
+        .filter((e) => period === 'ALL' || e.businessDate === today)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((entry) => ({ entry, balanceAfter: after.get(entry.id) ?? 0, byName: this.staffName(data, entry.createdBy) }));
+      return {
+        today,
+        supplier,
+        summary: khataSummary(khata, today),
+        products,
+        entries,
+        ingredients: inv.ingredients.filter((i) => i.kind === 'BOUGHT').sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    });
+  }
+
+  saveSupplier(input: SupplierProfileInput): Promise<Supplier> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        const existing = input.id ? inv.suppliers.find((s) => s.id === input.id) : null;
+        if (input.id && !existing) throw new ApiError('NOT_FOUND', 'Supplier not found.');
+        const name = cleanName(input.name);
+        const phone = input.phone.trim();
+        if (!name) throw new ApiError('VALIDATION', 'Type the supplier name.');
+        if (name.length > MAX_NAME_LENGTH) throw new ApiError('VALIDATION', `Keep the name to ${MAX_NAME_LENGTH} characters.`);
+        if (phone.length > 20 || (phone && !/^[\d +()-]+$/.test(phone))) throw new ApiError('VALIDATION', 'Type the phone number with digits only.');
+        if (inv.suppliers.some((s) => s.id !== input.id && s.name.toLowerCase() === name.toLowerCase())) throw new ApiError('CONFLICT', `"${name}" is already in the list.`);
+        if (!SUPPLIER_CATEGORIES.includes(input.category)) throw new ApiError('VALIDATION', 'Choose a category.');
+        if (input.address.trim().length > 120 || input.notes.trim().length > 200) throw new ApiError('VALIDATION', 'Keep the address to 120 and the notes to 200 characters.');
+        const productIds = [...new Set(input.productIds)];
+        if (productIds.some((pid) => !inv.ingredients.some((i) => i.id === pid && i.kind === 'BOUGHT'))) throw new ApiError('VALIDATION', 'Choose products from the ingredient list.');
+        if (!existing && (!Number.isInteger(input.openingBalance) || input.openingBalance < 0 || input.openingBalance > MAX_SUPPLIER_AMOUNT)) {
+          throw new ApiError('VALIDATION', 'Type the old balance in rupees, or leave it at 0.');
+        }
+        const fields = { name, phone, category: input.category, address: input.address.trim(), notes: input.notes.trim(), productIds };
+        if (existing) return Object.assign(existing, fields);
+        const supplier: Supplier = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, isActive: true, ...fields };
+        inv.suppliers.push(supplier);
+        if (input.openingBalance > 0) {
+          inv.khata.push({
+            id: newId(),
+            restaurantId: data.restaurant.id,
+            branchId: data.branch.id,
+            supplierId: supplier.id,
+            kind: 'OPENING_BALANCE',
+            amount: input.openingBalance,
+            lines: [],
+            method: null,
+            businessDate: this.branchToday(data),
+            note: '',
+            createdBy: user.id,
+            createdAt: nowIso(),
+          });
+        }
+        return supplier;
+      }),
+    );
+  }
+
+  receiveStock(input: ReceiveStockInput): Promise<KhataEntry> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        // A double tap or retry with the same key returns the first delivery: stock goes up once.
+        const key = 'supplier-receive:' + input.idempotencyKey;
+        const done = data.idempotency[key];
+        if (done) return inv.khata.find((e) => e.id === done)!;
+        const supplier = inv.suppliers.find((s) => s.id === input.supplierId && s.isActive);
+        if (!supplier) throw new ApiError('NOT_FOUND', 'Supplier not found.');
+        if (checkReceipt(input, inv.ingredients)) throw new ApiError('VALIDATION', 'Please check the quantities and rates.');
+        const now = nowIso();
+        const entryId = newId();
+        const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+        const lines = input.lines.map((line) => {
+          const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId)!;
+          const stockMilli = receivedStockMilli(line.quantityMilli, ingredient)!;
+          const movementId = newId();
+          inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: 'PURCHASE', quantityMilli: stockMilli, reason: null, note: input.note.trim(), createdBy: user.id, createdAt: now, supplierId: supplier.id, khataEntryId: entryId });
+          // The rate paid becomes the product's purchase price, so recipe costs follow real prices (owner, 2026-11-05).
+          Object.assign(ingredient, { purchasePrice: line.ratePaisa, updatedAt: now });
+          if (!supplier.productIds.includes(ingredient.id)) supplier.productIds.push(ingredient.id);
+          return { ingredientId: ingredient.id, quantityMilli: line.quantityMilli, ratePaisa: line.ratePaisa, amount: lineAmount(line.quantityMilli, line.ratePaisa), stockMilli, movementId };
+        });
+        const entry: KhataEntry = {
+          id: entryId,
+          ...scope,
+          supplierId: supplier.id,
+          kind: 'PURCHASE',
+          amount: lines.reduce((sum, l) => sum + l.amount, 0),
+          lines,
+          method: null,
+          businessDate: this.branchToday(data),
+          note: input.note.trim(),
+          createdBy: user.id,
+          createdAt: now,
+        };
+        inv.khata.push(entry);
+        data.idempotency[key] = entryId;
+        return entry;
+      }),
+    );
+  }
+
+  paySupplier(input: SupplierPaymentInput): Promise<KhataEntry> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        const key = 'supplier-pay:' + input.idempotencyKey;
+        const done = data.idempotency[key];
+        if (done) return inv.khata.find((e) => e.id === done)!;
+        const supplier = inv.suppliers.find((s) => s.id === input.supplierId);
+        if (!supplier) throw new ApiError('NOT_FOUND', 'Supplier not found.');
+        const today = this.branchToday(data);
+        const due = khataSummary(this.khataOf(data, supplier.id), today).totalDue;
+        const problem = checkSupplierPayment(input, due, today);
+        if (problem) throw new ApiError('VALIDATION', PAYMENT_MESSAGES[problem]);
+        const entry: KhataEntry = {
+          id: newId(),
+          restaurantId: data.restaurant.id,
+          branchId: data.branch.id,
+          supplierId: supplier.id,
+          kind: 'PAYMENT',
+          amount: -input.amount,
+          lines: [],
+          method: input.method,
+          businessDate: input.date,
+          note: input.note.trim(),
+          createdBy: user.id,
+          createdAt: nowIso(),
+        };
+        inv.khata.push(entry);
+        data.idempotency[key] = entry.id;
+        return entry;
       }),
     );
   }

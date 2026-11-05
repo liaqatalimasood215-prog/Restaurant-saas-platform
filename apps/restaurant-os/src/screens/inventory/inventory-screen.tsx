@@ -19,6 +19,7 @@ import { IngredientsTab, type IngredientFilter } from './ingredients-tab';
 import { MovementsTab } from './movements-tab';
 import { OverviewTab } from './overview-tab';
 import { RecipesTab } from './recipes/recipes-tab';
+import { SuppliersTab } from './suppliers-tab';
 
 /** Five clear sections (owner's second Inventory brief, 2026-11-04); Stock has its own sub-sections. */
 type Section = 'overview' | 'stock' | 'recipes' | 'purchasing' | 'reports';
@@ -28,7 +29,7 @@ const SECTIONS: { key: Section; icon: LucideIcon; phase?: number }[] = [
   { key: 'overview', icon: LayoutDashboard },
   { key: 'stock', icon: Boxes },
   { key: 'recipes', icon: BookOpen },
-  { key: 'purchasing', icon: ShoppingCart, phase: 3 },
+  { key: 'purchasing', icon: ShoppingCart },
   { key: 'reports', icon: ChartColumn, phase: 6 },
 ];
 const STOCK_TABS: { key: StockTab; icon: LucideIcon; phase?: number }[] = [
@@ -109,6 +110,7 @@ export function InventoryScreen() {
             openStock('ingredients');
           }}
           onOpenRecipes={() => setSection('recipes')}
+          onOpenSuppliers={() => setSection('purchasing')}
           onOpenMovements={() => {
             setHistoryOf(null);
             openStock('movements');
@@ -158,7 +160,7 @@ export function InventoryScreen() {
       )}
 
       {section === 'recipes' && <RecipesTab canManage={canManage} onBuilder={setBuilding} />}
-      {section === 'purchasing' && <PlannedPanel icon={ShoppingCart} title="inventory.planned.purchasing.title" items="inventory.planned.purchasing.items" phase={3} />}
+      {section === 'purchasing' && <SuppliersTab canManage={canManage} />}
       {section === 'reports' && <PlannedPanel icon={ChartColumn} title="inventory.planned.reports.title" items="inventory.planned.reports.items" phase={6} />}
 
       {!building && <p className="mt-4 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">{t('inventory.demoNote')}</p>}

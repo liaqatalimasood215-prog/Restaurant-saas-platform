@@ -81,7 +81,7 @@ await setup.close();
 const owner = await openAs(USER.owner, '/inventory', DESKTOP);
 await owner.locator('main [data-inventory-card]').first().waitFor();
 const upgraded = await saved(owner);
-assert.equal(upgraded.version, 18);
+assert.equal(upgraded.version, 19);
 assert.equal(upgraded.inventory.recipes.length, 18);
 assert.ok(upgraded.inventory.ingredients.every((i) => i.kind === 'BOUGHT' || i.name === 'Pizza dough'));
 assert.ok(upgraded.inventory.movements.some((m) => m.ingredientId === ONIONS && m.type === 'ADJUSTMENT' && m.quantityMilli === 2_000_000), 'the Onions correction is kept');

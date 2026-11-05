@@ -24,7 +24,7 @@ import {
   type WebsiteConfig,
   type WaiterCall,
 } from '@restaurant-saas/shared';
-import { createInventorySeed, type DemoInventory } from './inventory-seed';
+import { createInventorySeed, withSupplierProfiles, type DemoInventory } from './inventory-seed';
 import { LALA_NAME, createLalaInventory, lalaMenu, lalaWebsite, upgradeToLala } from './lala-seed';
 import { createRecipeSeed } from './recipe-seed';
 
@@ -34,7 +34,7 @@ import { createRecipeSeed } from './recipe-seed';
  * - 'acceptance': "Aziz Pizza — DEMO", the fixed data of the automatic tests (MASTER_PROMPT.md §12 Test A: Table 5 =
  *   Rs. 5,900). The walkthroughs ask for it through localStorage before the page loads (DEMO_FIXTURE_KEY).
  */
-export const DEMO_DATA_VERSION = 18;
+export const DEMO_DATA_VERSION = 19;
 export type DemoFixture = 'restaurant' | 'acceptance';
 export const DEMO_FIXTURE_KEY = 'lala-os-demo-fixture';
 
@@ -377,6 +377,7 @@ function createPizzaSeed(): DemoData {
  *   ingredients, stock and corrections he made stay as they are.
  * - 17 → 18 makes it Lala Restaurant (owner, 2026-11-05): the desi menu, stock and recipes are added, pizza and
  *   burgers are archived, and everything he made himself stays (upgradeToLala). The test fixture only gets Auto Scale.
+ * - 18 → 19 (Suppliers S1): every supplier gets a category, address, notes and his products, and an empty khata.
  * Anything older, or not demo data at all, returns null (the demo starts fresh, as before).
  */
 export function upgradeDemoData(raw: unknown, fixture: DemoFixture = 'restaurant'): DemoData | null {
@@ -417,6 +418,10 @@ export function upgradeDemoData(raw: unknown, fixture: DemoFixture = 'restaurant
       fixture === 'acceptance'
         ? { ...data, version: 18, inventory: { ...data.inventory, recipeScales: data.inventory.recipeScales ?? [] } }
         : upgradeToLala(data as DemoData);
+  }
+  if (data.version === 18 && data.inventory) {
+    const inventory = data.inventory;
+    data = { ...data, version: 19, inventory: { ...inventory, suppliers: withSupplierProfiles(inventory.suppliers, inventory.ingredients), khata: inventory.khata ?? [] } };
   }
   return data.version === DEMO_DATA_VERSION && data.inventory ? (data as DemoData) : null;
 }

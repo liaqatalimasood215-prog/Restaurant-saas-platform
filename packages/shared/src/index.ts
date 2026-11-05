@@ -24,3 +24,4 @@ export * from './online-app';
 export * from './riders';
 export * from './inventory';
 export * from './recipes';
+export * from './suppliers';

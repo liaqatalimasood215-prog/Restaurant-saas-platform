@@ -20,7 +20,9 @@ import { formatBps, formatPaisa, type InventoryView } from '@restaurant-saas/sha
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { t } from '@/i18n';
+import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { useApiQuery } from '@/lib/hooks/use-api-query';
 import type { IngredientFilter } from './ingredients-tab';
 import { STATUS_TONE, expiryLabel, stockText, whenText } from './inventory-format';
 
@@ -38,13 +40,17 @@ export function OverviewTab({
   onOpen,
   onOpenRecipes,
   onOpenMovements,
+  onOpenSuppliers,
 }: {
   view: InventoryView;
   onOpen: (filter: IngredientFilter) => void;
   onOpenRecipes: () => void;
   onOpenMovements: () => void;
+  onOpenSuppliers: () => void;
 }) {
   const { summary } = view;
+  // Suppliers S1 fills today's purchases and what we owe the suppliers.
+  const suppliers = useApiQuery(() => getApi().getSuppliers(), []).data;
   const attention = view.ingredients.filter((r) => r.status === 'LOW' || r.status === 'OUT').sort((a, b) => a.onHandMilli - b.onHandMilli);
   const expiring = view.ingredients
     .filter((r) => r.status !== 'NOT_IN_USE' && (r.expiry === 'SOON' || r.expiry === 'EXPIRED'))
@@ -66,10 +72,18 @@ export function OverviewTab({
           alert={summary.expired > 0}
           onClick={() => onOpen('EXPIRING')}
         />
-        <SoonCard icon={ShoppingCart} label={t('inventory.cards.purchases')} step="3" />
+        {suppliers ? (
+          <StatCard icon={ShoppingCart} tone="slate" label={t('inventory.cards.purchases')} value={formatPaisa(suppliers.todayPurchases)} hint={t('inventory.cardHints.purchases')} onClick={onOpenSuppliers} />
+        ) : (
+          <SoonCard icon={ShoppingCart} label={t('inventory.cards.purchases')} step="3" />
+        )}
         <SoonCard icon={ChefHat} label={t('inventory.cards.consumption')} step="2" />
         <SoonCard icon={Trash2} label={t('inventory.cards.wastage')} step="4" />
-        <SoonCard icon={HandCoins} label={t('inventory.cards.supplierDue')} step="3" />
+        {suppliers ? (
+          <StatCard icon={HandCoins} tone={suppliers.totalDue > 0 ? 'red' : 'slate'} label={t('inventory.cards.supplierDue')} value={formatPaisa(suppliers.totalDue)} hint={t('inventory.cardHints.supplierDue')} onClick={onOpenSuppliers} />
+        ) : (
+          <SoonCard icon={HandCoins} label={t('inventory.cards.supplierDue')} step="3" />
+        )}
         <StatCard
           icon={Percent}
           tone="slate"

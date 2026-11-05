@@ -28,7 +28,7 @@ import {
   type Supplier,
   type WebsiteConfig,
 } from '@restaurant-saas/shared';
-import type { DemoInventory } from './inventory-seed';
+import { withSupplierProfiles, type DemoInventory } from './inventory-seed';
 import type { DemoData } from './seed';
 
 /**
@@ -756,17 +756,15 @@ export function createLalaInventory(scope: Scope, ownerId: string, now = new Dat
       name,
       sort,
     })),
-    suppliers: SUPPLIERS.map(([name, phone, supplierId]): Supplier => ({
-      id: supplierId,
-      ...scope,
-      name,
-      phone,
-      isActive: true,
-    })),
+    suppliers: withSupplierProfiles(
+      SUPPLIERS.map(([name, phone, supplierId]) => ({ id: supplierId, ...scope, name, phone, isActive: true })),
+      ingredients,
+    ),
     ingredients,
     movements,
     recipes: [],
     recipeScales: [],
+    khata: [],
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
   };
   addRecipes(scope, inventory, ownerId, now.toISOString());
@@ -902,6 +900,10 @@ export function upgradeToLala(data: DemoData, now = new Date()): DemoData {
     suppliers: [
       ...old.suppliers.map((s) => renamed(s, SUPPLIER_NAMES.get(s.id))),
       ...SUPPLIERS.filter(([, , supplierId]) => !old.suppliers.some((s) => s.id === supplierId)).map(([name, phone, supplierId]): Supplier => ({
+        category: 'OTHER',
+        address: '',
+        notes: '',
+        productIds: [],
         id: supplierId,
         ...scope,
         name,
@@ -913,7 +915,13 @@ export function upgradeToLala(data: DemoData, now = new Date()): DemoData {
     movements: [...old.movements, ...added.movements],
     recipes: [...old.recipes],
     recipeScales: [...(old.recipeScales ?? [])],
+    khata: old.khata ?? [],
   };
+  // His products come from the ingredients that name him (also the desi ones just added); set values stay.
+  inventory.suppliers = withSupplierProfiles(
+    inventory.suppliers.map((s) => (old.suppliers.some((o) => o.id === s.id) ? s : { id: s.id, restaurantId: s.restaurantId, branchId: s.branchId, name: s.name, phone: s.phone, isActive: s.isActive })),
+    inventory.ingredients,
+  );
   addRecipes(scope, inventory, data.staff.find((s) => s.role === 'OWNER')?.id ?? id(101), at);
 
   return {

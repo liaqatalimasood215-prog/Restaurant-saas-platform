@@ -1,4 +1,5 @@
 import type { FoodCostSummary } from './recipes';
+import type { SupplierCategory } from './suppliers';
 import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
 
 /**
@@ -142,12 +143,17 @@ export interface StockLocation extends BranchScoped {
   sort: number;
 }
 
-/** A supplier as far as Step A needs one (the preferred supplier of an ingredient). Step C adds the rest. */
+/** A supplier: who brings what (Suppliers S1, owner 2026-11-05). His khata lives in suppliers.ts. */
 export interface Supplier extends BranchScoped {
   id: Uuid;
   name: string;
   phone: string;
   isActive: boolean;
+  category: SupplierCategory;
+  address: string;
+  notes: string;
+  /** The products he usually brings (shared ingredients; one product may have several suppliers) */
+  productIds: Uuid[];
 }
 
 /** BOUGHT from a supplier, or PREPARED in the kitchen from a batch recipe such as pizza dough (Step B). */
@@ -293,7 +299,8 @@ export function suggestIngredientCode(name: string, existingCodes: readonly stri
 // ── Stock ledger ──────────────────────────────────────────────────────────────────────────────
 
 /** Step A: the opening stock and corrections. Purchases, kitchen use, waste and transfers follow in later steps. */
-export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT'] as const;
+/** PURCHASE = received from a supplier (Suppliers S1); the khata entry and supplier are kept on the movement. */
+export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE'] as const;
 export type MovementType = (typeof MOVEMENT_TYPES)[number];
 
 export const ADJUST_REASONS = ['RECOUNT', 'ENTRY_MISTAKE', 'FOUND', 'OTHER'] as const;
@@ -309,6 +316,9 @@ export interface StockMovement extends BranchScoped {
   note: string;
   createdBy: Uuid;
   createdAt: IsoDateTime;
+  /** PURCHASE only: who brought it and its khata entry */
+  supplierId?: Uuid;
+  khataEntryId?: Uuid;
 }
 
 export const MAX_MOVEMENT_NOTE = 120;

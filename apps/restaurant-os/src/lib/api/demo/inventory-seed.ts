@@ -5,6 +5,7 @@ import {
   displayFactorMilli,
   rupeesToPaisa,
   type Ingredient,
+  type KhataEntry,
   type Recipe,
   type RecipeScale,
   type IngredientCategory,
@@ -13,6 +14,7 @@ import {
   type StockMovement,
   type StockUnit,
   type Supplier,
+  type SupplierCategory,
 } from '@restaurant-saas/shared';
 import { createRecipeSeed } from './recipe-seed';
 
@@ -31,7 +33,40 @@ export interface DemoInventory {
   recipes: Recipe[];
   /** Recipe Builder R2: Auto Scale setups (one base recipe shared out to every size) */
   recipeScales: RecipeScale[];
+  /** Suppliers S1: every delivery, payment and opening balance of every supplier (never edited or deleted) */
+  khata: KhataEntry[];
   expiringSoonDays: number;
+}
+
+/** A supplier before Suppliers S1 (version 18 and older): no category, address, notes or products yet. */
+export type BareSupplier = Omit<Supplier, 'category' | 'address' | 'notes' | 'productIds'> & Partial<Pick<Supplier, 'category' | 'address' | 'notes' | 'productIds'>>;
+
+const sid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+/** The sample suppliers' categories (the same ids in the Aziz Pizza and Lala Restaurant data). */
+const SAMPLE_CATEGORIES: Record<string, SupplierCategory> = {
+  [sid(1220)]: 'CHICKEN',
+  [sid(1221)]: 'VEGETABLES',
+  [sid(1222)]: 'DAIRY',
+  [sid(1223)]: 'PACKAGING',
+  [sid(1224)]: 'DRINKS',
+  [sid(1225)]: 'MEAT',
+  [sid(1226)]: 'FISH',
+  [sid(1227)]: 'GROCERY',
+  [sid(1228)]: 'FUEL',
+};
+
+/**
+ * Suppliers S1: each supplier gets a category, address, notes and his products — at first the bought ingredients that
+ * name him as their preferred supplier. Values that are already set stay.
+ */
+export function withSupplierProfiles(suppliers: readonly BareSupplier[], ingredients: readonly Ingredient[]): Supplier[] {
+  return suppliers.map((s) => ({
+    ...s,
+    category: s.category ?? SAMPLE_CATEGORIES[s.id] ?? 'OTHER',
+    address: s.address ?? '',
+    notes: s.notes ?? '',
+    productIds: s.productIds ?? ingredients.filter((i) => i.kind === 'BOUGHT' && i.preferredSupplierId === s.id).map((i) => i.id),
+  }));
 }
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -114,7 +149,7 @@ export function createInventorySeed(scope: { restaurantId: string; branchId: str
     return date.toISOString().slice(0, 10);
   };
   const locations: StockLocation[] = LOCATIONS.map(([name, locationId], sort) => ({ id: locationId, ...scope, name, sort }));
-  const suppliers: Supplier[] = SUPPLIERS.map(([name, phone, supplierId]) => ({ id: supplierId, ...scope, name, phone, isActive: true }));
+  const suppliers: BareSupplier[] = SUPPLIERS.map(([name, phone, supplierId]) => ({ id: supplierId, ...scope, name, phone, isActive: true }));
 
   const ingredients: Ingredient[] = [];
   const movements: StockMovement[] = [];
@@ -157,5 +192,5 @@ export function createInventorySeed(scope: { restaurantId: string; branchId: str
     }
   });
   const { dough, recipes } = createRecipeSeed(scope, ownerId, ingredients, now);
-  return { locations, suppliers, ingredients: [...ingredients, dough], movements, recipes, recipeScales: [], expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS };
+  return { locations, suppliers: withSupplierProfiles(suppliers, ingredients), ingredients: [...ingredients, dough], movements, recipes, recipeScales: [], khata: [], expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS };
 }

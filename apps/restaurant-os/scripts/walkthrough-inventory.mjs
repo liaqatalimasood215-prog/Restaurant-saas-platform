@@ -83,7 +83,7 @@ await setup.close();
 const owner = await openAs(USER.owner, '/inventory', DESKTOP);
 await card(owner, 'Ingredients').waitFor();
 const upgraded = await saved(owner);
-assert.equal(upgraded.version, 18, 'brought up to the newest version');
+assert.equal(upgraded.version, 19, 'brought up to the newest version');
 assert.equal(upgraded.employeeCounter, 77, 'the old data was kept');
 assert.equal(upgraded.inventory.ingredients.filter((i) => i.kind === 'BOUGHT').length, 25);
 assert.ok(upgraded.rolePermissions.MANAGER.includes('inventory.view') && upgraded.rolePermissions.MANAGER.includes('menu.view'));
@@ -226,17 +226,17 @@ assert.equal(await ledgerRows(owner).count(), 27);
 await owner.getByRole('tab', { name: 'Overview' }).click();
 await owner.getByRole('button', { name: 'View all' }).last().click();
 await ledgerRows(owner).first().waitFor();
-for (const [section, title] of [
-  ['Purchasing', 'Suppliers, purchases and expenses'],
-  ['Reports', 'Reports'],
-]) {
+// Suppliers S1 (2026-11-05): the Purchasing placeholder became the Suppliers screen (walkthrough:suppliers).
+await owner.getByRole('tab', { name: 'Suppliers', exact: true }).click();
+await owner.locator('main [data-suppliers]').waitFor();
+for (const [section, title] of [['Reports', 'Reports']]) {
   await owner.getByRole('tab', { name: new RegExp(`^${section}`) }).click();
   await owner.locator(`main [data-planned="${title}"]`).getByText('PLACEHOLDER').waitFor();
 }
 await owner.getByRole('tab', { name: 'Stock', exact: true }).click();
 await owner.getByRole('tab', { name: /^Wastage & Expiry/ }).click();
 await owner.locator('main [data-planned="Wastage & Expiry"]').getByText('Comes in inventory phase 4, after your approval.').waitFor();
-ok('History of Chicken: −1.5 kg Counted again by Aziz Ahmed → 8.5 kg, +10 kg opening → 10 kg; kind and period filters; Purchasing, Reports, Wastage are clear PLACEHOLDERs with their phase');
+ok('History of Chicken: −1.5 kg Counted again by Aziz Ahmed → 8.5 kg, +10 kg opening → 10 kg; kind and period filters; Suppliers opens; Reports and Wastage are clear PLACEHOLDERs with their phase');
 
 console.log('7. Owner and Manager only');
 const manager = await openAs(USER.manager, '/inventory', DESKTOP);
