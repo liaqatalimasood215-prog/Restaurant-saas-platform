@@ -47,6 +47,8 @@ const dialog = (page) => page.getByRole('dialog');
 const saved = (page) => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key)), DATA_KEY);
 const row = (page, name) => page.locator(`main tr[data-ingredient-row="${name}"]`);
 const card = (page, label) => page.locator(`main [data-inventory-card="${label}"]`);
+/** Inventory opens on Suppliers (owner, 2026-11-06): the cards are on Overview. */
+const openOverview = (page) => page.getByRole('tab', { name: 'Overview', exact: true }).click();
 async function openIngredients(page) {
   await page.getByRole('tab', { name: 'Stock', exact: true }).click();
   await page.getByRole('tab', { name: 'Ingredients' }).click();
@@ -81,6 +83,7 @@ await setup.evaluate((key) => {
 }, DATA_KEY);
 await setup.close();
 const owner = await openAs(USER.owner, '/inventory', DESKTOP);
+await openOverview(owner);
 await card(owner, 'Ingredients').waitFor();
 const upgraded = await saved(owner);
 assert.equal(upgraded.version, 19, 'brought up to the newest version');
@@ -240,6 +243,7 @@ ok('History of Chicken: −1.5 kg Counted again by Aziz Ahmed → 8.5 kg, +10 kg
 
 console.log('7. Owner and Manager only');
 const manager = await openAs(USER.manager, '/inventory', DESKTOP);
+await openOverview(manager);
 await card(manager, 'Ingredients').waitFor();
 await manager.getByRole('button', { name: 'Add Ingredient' }).waitFor();
 await manager.close();
@@ -255,6 +259,7 @@ for (const [label, viewport] of [
   ['tablet', TABLET],
 ]) {
   const page = await openAs(USER.owner, '/inventory', viewport);
+  await openOverview(page);
   await card(page, 'Ingredients').waitFor();
   await noSidewaysScroll(page, `${label} overview`);
   await shot(page, `05-${label}-owner-overview`);

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { BookOpen, Boxes, ChartColumn, ClipboardCheck, History, LayoutDashboard, ListChecks, Plus, ShoppingCart, SlidersHorizontal, Trash2, type LucideIcon } from 'lucide-react';
+import { useState, useSyncExternalStore } from 'react';
+import { BookOpen, Boxes, ChartColumn, ClipboardCheck, History, LayoutDashboard, ListChecks, Pencil, Plus, ShoppingCart, SlidersHorizontal, Trash2, type LucideIcon } from 'lucide-react';
 import type { IngredientRow } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
 import { Badge } from '@/components/ui/badge';
@@ -25,11 +25,12 @@ import { SuppliersTab } from './suppliers-tab';
 type Section = 'overview' | 'stock' | 'recipes' | 'purchasing' | 'reports';
 type StockTab = 'ingredients' | 'movements' | 'wastage' | 'counts';
 
+/** Owner's order (2026-11-06): Suppliers first, then Stock and Recipes; Inventory opens on the first one. */
 const SECTIONS: { key: Section; icon: LucideIcon; phase?: number }[] = [
-  { key: 'overview', icon: LayoutDashboard },
+  { key: 'purchasing', icon: ShoppingCart },
   { key: 'stock', icon: Boxes },
   { key: 'recipes', icon: BookOpen },
-  { key: 'purchasing', icon: ShoppingCart },
+  { key: 'overview', icon: LayoutDashboard },
   { key: 'reports', icon: ChartColumn, phase: 6 },
 ];
 const STOCK_TABS: { key: StockTab; icon: LucideIcon; phase?: number }[] = [
@@ -47,7 +48,16 @@ const STOCK_TABS: { key: StockTab; icon: LucideIcon; phase?: number }[] = [
 export function InventoryScreen() {
   const { allowed } = useSession();
   const inventory = useApiQuery(() => getApi().getInventory(), []);
-  const [section, setSection] = useState<Section>('overview');
+  const order = useSectionOrder();
+  const [chosen, setSection] = useState<Section | null>(null);
+  // Inventory opens on the first section of his order.
+  const section = chosen ?? order[0]!;
+  /** Edit order: the sections he has tapped so far, in that order */
+  const [picking, setPicking] = useState<Section[] | null>(null);
+  const finishPicking = (next: Section[] | null) => {
+    if (next) saveSectionOrder([...next, ...order.filter((k) => !next.includes(k))]);
+    setPicking(null);
+  };
   const [stockTab, setStockTab] = useState<StockTab>('ingredients');
   const [filter, setFilter] = useState<IngredientFilter>('ALL');
   const [historyOf, setHistoryOf] = useState<string | null>(null);
@@ -83,13 +93,13 @@ export function InventoryScreen() {
     <>
       {!building && header}
       <div role="tablist" aria-label={t('inventory.sections.label')} hidden={building} className="mb-4 flex overflow-x-auto rounded-2xl border border-slate-200 bg-white px-1 shadow-sm">
-        {SECTIONS.map(({ key, icon: Icon, phase }) => (
+        {order.map((key) => SECTIONS.find((s) => s.key === key)!).map(({ key, icon: Icon, phase }) => (
           <button
             key={key}
             type="button"
             role="tab"
             aria-selected={section === key}
-            onClick={() => setSection(key)}
+            onClick={() => (picking ? setPicking(picking.includes(key) ? picking.filter((k) => k !== key) : [...picking, key]) : setSection(key))}
             className={cn(
               'flex min-h-14 shrink-0 items-center gap-2 border-b-[3px] px-4 text-sm font-bold transition-colors',
               section === key ? 'border-brand text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-900',
@@ -98,9 +108,34 @@ export function InventoryScreen() {
             <Icon className={cn('size-5', section === key && 'text-brand')} aria-hidden />
             {t(`inventory.sections.${key}`)}
             {phase && <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-500">{t('inventory.soonChip')}</span>}
+            {picking?.includes(key) && (
+              <span className="bg-brand-gradient grid size-6 place-items-center rounded-full text-xs font-black text-white" data-order-number>
+                {picking.indexOf(key) + 1}
+              </span>
+            )}
           </button>
         ))}
+        {!picking && (
+          <button type="button" onClick={() => setPicking([])} className="press my-2 ml-auto flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-brand">
+            <Pencil className="size-4" aria-hidden />
+            {t('inventory.sections.edit')}
+          </button>
+        )}
       </div>
+      {picking && !building && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-brand/30 bg-brand-soft/60 px-4 py-3" data-order-editor>
+          <p className="min-w-48 flex-1 text-sm font-semibold text-slate-800">{t('inventory.sections.editHint')}</p>
+          <Button variant="ghost" onClick={() => finishPicking(null)}>
+            {t('inventory.form.cancel')}
+          </Button>
+          <Button variant="secondary" onClick={() => (saveSectionOrder(DEFAULT_ORDER), setPicking(null))}>
+            {t('inventory.sections.reset')}
+          </Button>
+          <Button onClick={() => finishPicking(picking)} disabled={picking.length === 0}>
+            {t('inventory.sections.done')}
+          </Button>
+        </div>
+      )}
 
       {section === 'overview' && (
         <OverviewTab
@@ -169,6 +204,50 @@ export function InventoryScreen() {
       {adjusting && <AdjustStockDialog row={adjusting === 'pick' ? null : adjusting} view={view} onClose={() => setAdjusting(null)} />}
     </>
   );
+}
+
+// ── The order of the sections (owner, 2026-11-06), kept in this browser ──────────────────────
+
+const ORDER_KEY = 'lala-os-inventory-order';
+const ORDER_EVENT = 'lala-os-inventory-order';
+const DEFAULT_ORDER: Section[] = SECTIONS.map((s) => s.key);
+
+function readOrder(): string | null {
+  try {
+    return window.localStorage.getItem(ORDER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function subscribeOrder(onChange: () => void): () => void {
+  window.addEventListener(ORDER_EVENT, onChange);
+  window.addEventListener('storage', onChange);
+  return () => {
+    window.removeEventListener(ORDER_EVENT, onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
+
+/** His saved order when it still names every section exactly once, else the usual one. */
+function useSectionOrder(): Section[] {
+  const raw = useSyncExternalStore(subscribeOrder, readOrder, () => null);
+  try {
+    const saved = raw ? (JSON.parse(raw) as unknown) : null;
+    if (Array.isArray(saved) && saved.length === DEFAULT_ORDER.length && DEFAULT_ORDER.every((k) => saved.includes(k))) return saved as Section[];
+  } catch {
+    // A broken saved order: the usual one.
+  }
+  return DEFAULT_ORDER;
+}
+
+function saveSectionOrder(order: Section[]): void {
+  try {
+    window.localStorage.setItem(ORDER_KEY, JSON.stringify(order));
+  } catch {
+    // Storage blocked: the order lasts until the page reloads.
+  }
+  window.dispatchEvent(new Event(ORDER_EVENT));
 }
 
 /** A section a later inventory phase builds: what it will hold, labelled PLACEHOLDER (PROJECT_RULES.md §17). */

@@ -187,6 +187,25 @@ try {
   await phone.close();
   ok('Manager receives and pays; Cashier "No access"; desktop, tablet and phone (list → supplier → All suppliers), no sideways scroll');
 
+  console.log('\n7. The order of the Inventory sections (owner, 2026-11-06)');
+  const tabsOf = async (page) => (await page.getByRole('tab', { name: 'Suppliers', exact: true }).waitFor(), page.getByRole('tablist', { name: 'Inventory sections' }).getByRole('tab').evaluateAll((els) => els.map((e) => e.textContent.replace(/Soon|\d/g, '').trim())));
+  const order = await openAs(USER.owner, LAPTOP);
+  assert.deepEqual(await tabsOf(order), ['Suppliers', 'Stock', 'Recipes', 'Overview', 'Reports']);
+  assert.equal(await order.getByRole('tab', { name: 'Suppliers', exact: true }).getAttribute('aria-selected'), 'true', 'Inventory opens on the first section');
+  await order.getByRole('button', { name: 'Edit order' }).click();
+  for (const name of ['Suppliers', 'Recipes', 'Stock']) await order.getByRole('tab', { name: new RegExp(`^${name}`) }).click();
+  assert.deepEqual(await order.locator('[data-order-number]').allInnerTexts(), ['1', '3', '2']);
+  await shot(order, '09-laptop-edit-order');
+  await order.getByRole('button', { name: 'Done' }).click();
+  assert.deepEqual(await tabsOf(order), ['Suppliers', 'Recipes', 'Stock', 'Overview', 'Reports']);
+  await order.reload({ waitUntil: 'networkidle' });
+  assert.deepEqual(await tabsOf(order), ['Suppliers', 'Recipes', 'Stock', 'Overview', 'Reports'], 'kept after a reload');
+  await order.getByRole('button', { name: 'Edit order' }).click();
+  await order.getByRole('button', { name: 'Reset' }).click();
+  assert.deepEqual(await tabsOf(order), ['Suppliers', 'Stock', 'Recipes', 'Overview', 'Reports']);
+  await order.close();
+  ok('Sections: Suppliers, Stock, Recipes, Overview, Reports; opens on Suppliers; Edit order → tap Suppliers, Recipes, Stock → 1, 2, 3 → Done keeps it after a reload; Reset brings the usual order back');
+
   assert.deepEqual(errors, [], `browser errors: ${errors.join(' | ')}`);
   console.log('\nAll Suppliers checks passed (DEMO data).');
 } finally {

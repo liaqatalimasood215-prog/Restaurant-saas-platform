@@ -859,7 +859,7 @@ export const en = {
       reports: 'Reports',
       settings: 'Settings',
     },
-    sections: { label: 'Inventory sections', overview: 'Overview', stock: 'Stock', recipes: 'Recipes', purchasing: 'Suppliers', reports: 'Reports' },
+    sections: { label: 'Inventory sections', overview: 'Overview', stock: 'Stock', recipes: 'Recipes', purchasing: 'Suppliers', reports: 'Reports', edit: 'Edit order', editHint: 'Tap the sections in the order you want: first, second, third … The ones you do not tap come after them.', done: 'Done', reset: 'Reset' },
     stockTabs: { label: 'Stock sections', ingredients: 'Ingredients', movements: 'Stock Movements', wastage: 'Wastage & Expiry', counts: 'Stock Counts' },
     soonChip: 'Soon',
     planned: {

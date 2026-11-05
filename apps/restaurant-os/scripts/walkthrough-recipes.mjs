@@ -79,6 +79,8 @@ await setup.evaluate((key) => {
 }, DATA_KEY);
 await setup.close();
 const owner = await openAs(USER.owner, '/inventory', DESKTOP);
+// Inventory opens on Suppliers (owner, 2026-11-06): the cards are on Overview.
+await owner.getByRole('tab', { name: 'Overview', exact: true }).click();
 await owner.locator('main [data-inventory-card]').first().waitFor();
 const upgraded = await saved(owner);
 assert.equal(upgraded.version, 19);
