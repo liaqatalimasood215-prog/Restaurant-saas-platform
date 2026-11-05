@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Check, LayoutGrid, Plus } from 'lucide-react';
-import { formatPaisa, type MenuItem, type MenuSnapshot } from '@restaurant-saas/shared';
+import { cardPrice, formatPaisa, type MenuItem, type MenuSnapshot } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -65,9 +65,11 @@ export function MenuPanel({
       ) : (
         <ul className="grid grid-cols-2 content-start gap-3 @md:grid-cols-3 @2xl:grid-cols-4 @5xl:grid-cols-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-0.5 short:gap-2.5">
           {items.map((item) => {
-            const from = item.variants.length ? Math.min(...item.variants.map((v) => v.price)) : item.basePrice;
-            const price = item.variants.length
-              ? t('waiter.fromPrice', { price: formatPaisa(from) })
+            // Owner 2026-11-05: the first size ("1 kg") on the card; ½ kg and Pao are chosen after a tap. "1 kg" stays on one line.
+            const shown = cardPrice(item);
+            const from = shown.price;
+            const price = shown.sizeName
+              ? t('waiter.sizePrice', { price: formatPaisa(from), size: shown.sizeName.replaceAll(' ', '\u00a0') })
               : item.unit === 'piece'
                 ? formatPaisa(from)
                 : t('waiter.perUnit', { price: formatPaisa(from), unit: item.unit });

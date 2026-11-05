@@ -956,7 +956,7 @@ pool or courier integration, table reservations, loyalty and coupons, marketplac
 
 ### Acceptance tests (DEMO in Phases 1–3, REAL / VERIFIED from Phases 4–5)
 
-**DEMO test data:** areas Hall (T1–T10) and Family (T11–T16); stations Pizza Oven, Grill & Fry, Hot
+**DEMO test data** (the automatic tests' fixed "Aziz Pizza — DEMO" data; since 2026-11-05 the owner's own demo is "Lala Restaurant — DEMO" with his desi menu): areas Hall (T1–T10) and Family (T11–T16); stations Pizza Oven, Grill & Fry, Hot
 Kitchen, Drinks (auto-ready); items Classic Pizza (Medium) Rs. 850, Zinger Burger Rs. 450, Loaded
 Fries Rs. 350, Alfredo Pasta Rs. 600, Cold Drink Rs. 125; tax 0%, service charge off.
 
@@ -1233,4 +1233,5 @@ screenshots. List everything that is not REAL / VERIFIED yet. Do not invent any 
 | 2026-11-01 | §5.6, §7.3, §16 #16: Riders page and Rider App built as DEMO (Phase 3). Only the Owner adds and changes riders; Online / Offline decides who can get a new order; a running delivery keeps the rider Online and enabled. `users.rider_online` to add to the data model in Phase 4. |
 | 2026-11-04 | §7.1: Inventory, Suppliers and Expenses frontend (DEMO) moved up from Phase 8, in steps A–H with the owner's approval after each; backend stays Phase 4+ with his separate approval. Decisions: stock is used when the kitchen marks a ticket READY (once per ticket, undone by Undo; ready-at-once drinks when sent; never by payment or rider); no Inventory Staff role yet (Owner / Manager manage, Kitchen later records waste); automatic Sold out only for items with a verified recipe; salaries as a simple expense until Payroll (P8); the Inventory section moves out of Coming Soon for Owner / Manager. Stock is the sum of stock movements; nobody types a new stock number. |
 | 2026-11-04 | §7.1: the owner's second Inventory brief; steps C–H replaced by inventory phases 1–6 (stock use from orders moved before suppliers). Order lines will keep the size id, add-on ids and recipe version for stock use. |
+| 2026-11-05 | §7.1, §12: Recipe Builder R2 (Auto Scale: one base recipe, each size = base × share, Custom / Back to Auto, Customize Sizes, Menu prices only after a confirm box) built as DEMO; the Restaurant OS demo becomes "Lala Restaurant — DEMO" with the owner's desi menu; the §12 test data stays Aziz Pizza for the automatic tests. A sold size will take its own size recipe from stock in inventory phase 2. |
 | 2026-11-02 | §5.1: sub-orders: each customer at a shared table is an own order (T1-1, T1-2) with an own bill and invoice, plus paying the whole table at once; moved up from Phase 7. Built as DEMO. |

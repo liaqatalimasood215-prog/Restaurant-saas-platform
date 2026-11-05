@@ -6,6 +6,7 @@ import {
   rupeesToPaisa,
   type Ingredient,
   type Recipe,
+  type RecipeScale,
   type IngredientCategory,
   type PurchaseUnit,
   type StockLocation,
@@ -16,8 +17,8 @@ import {
 import { createRecipeSeed } from './recipe-seed';
 
 /**
- * DEMO stock of "Aziz Pizza — DEMO" (Inventory Step A, owner 2026-11-04): sample ingredients with PKR
- * prices, never real stock or suppliers. Each opening stock is an OPENING movement, so the stock is the
+ * DEMO stock of "Aziz Pizza — DEMO" (Inventory Step A, owner 2026-11-04), kept as the fixed data of the automatic
+ * tests (the owner's demo is Lala Restaurant, lala-seed.ts): sample ingredients with PKR prices, never real stock or suppliers. Each opening stock is an OPENING movement, so the stock is the
  * sum of movements from the first day. Expiry dates count from the day the demo data is made, so the
  * dashboard always has something expiring soon.
  */
@@ -28,6 +29,8 @@ export interface DemoInventory {
   movements: StockMovement[];
   /** Step B: menu, add-on and prepared-item recipes (every save adds a version) */
   recipes: Recipe[];
+  /** Recipe Builder R2: Auto Scale setups (one base recipe shared out to every size) */
+  recipeScales: RecipeScale[];
   expiringSoonDays: number;
 }
 
@@ -154,5 +157,5 @@ export function createInventorySeed(scope: { restaurantId: string; branchId: str
     }
   });
   const { dough, recipes } = createRecipeSeed(scope, ownerId, ingredients, now);
-  return { locations, suppliers, ingredients: [...ingredients, dough], movements, recipes, expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS };
+  return { locations, suppliers, ingredients: [...ingredients, dough], movements, recipes, recipeScales: [], expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS };
 }

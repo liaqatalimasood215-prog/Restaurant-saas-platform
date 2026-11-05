@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Search, Send, Trash2 } from 'lucide-react';
 import {
+  cardPrice,
   formatPaisa,
   formatQuantity,
   orderPlaceName,
@@ -289,7 +290,8 @@ function OrderWorkspace({
           ) : (
             <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
               {items.map((item) => {
-                const from = item.variants.length ? Math.min(...item.variants.map((v) => v.price)) : item.basePrice;
+                const shown = cardPrice(item);
+                const from = shown.price;
                 return (
                   <li key={item.id}>
                     <button
@@ -301,8 +303,8 @@ function OrderWorkspace({
                       <span className="font-bold text-slate-900">{item.name}</span>
                       <span className="flex items-center justify-between gap-1 text-sm font-semibold text-slate-700">
                         {item.isAvailable ? (
-                          item.variants.length
-                            ? t('waiter.fromPrice', { price: formatPaisa(from) })
+                          shown.sizeName
+                            ? t('waiter.sizePrice', { price: formatPaisa(from), size: shown.sizeName.replaceAll(' ', '\u00a0') })
                             : item.unit === 'piece'
                               ? formatPaisa(from)
                               : t('waiter.perUnit', { price: formatPaisa(from), unit: item.unit })

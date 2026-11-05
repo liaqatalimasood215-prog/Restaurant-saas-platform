@@ -144,8 +144,15 @@ import {
   type Ingredient,
   type InventoryView,
   checkRecipe,
+  checkRecipeScale,
   currentVersion,
   displayFactorMilli,
+  scaleCost,
+  scaleLines,
+  type RecipeLine,
+  type RecipeScale,
+  type ScaleProblem,
+  type Supplier,
   foodCostOf,
   ingredientCost,
   linesCost,
@@ -186,6 +193,8 @@ import {
   type IngredientInput,
   type StockAdjustInput,
   type RecipeInput,
+  type ScaledRecipeInput,
+  type SupplierInput,
 } from '../client';
 import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
@@ -277,6 +286,13 @@ const SETTINGS_MESSAGES = {
 } as const;
 
 /** Menu setup mistakes; `where` is the category name for items, or 'category' / 'group'. */
+const SCALE_MESSAGES: Record<ScaleProblem, string> = {
+  BASE_QUANTITY_INVALID: 'Type how much the base recipe makes (for example 1 kg).',
+  NO_SIZES: 'Tick at least one size.',
+  SIZE_QUANTITY_INVALID: 'Every size needs a quantity (at most 100 × the base).',
+  SIZE_DUPLICATE: 'A size is in the list twice.',
+};
+
 function menuMessage(check: NonNullable<MenuCheck>, name: string, where: string): string {
   const detail = check.detail ?? name;
   switch (check.problem) {
@@ -2577,6 +2593,20 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return data.inventory.recipes.find((r) => sameTarget(r.target, target)) ?? null;
   }
 
+  /**
+   * What a size costs: under Auto Scale an automatic size is the base cost × its share (so the sizes match the base
+   * exactly); a custom size, or a size without Auto Scale, costs its own lines.
+   */
+  private sizeCost(data: DemoData, book: ReturnType<DemoAdapter['costBook']>, menuItemId: string, variantId: string | null, recipe: Recipe | null): number | null {
+    const scale = variantId ? (data.inventory.recipeScales ?? []).find((s) => s.menuItemId === menuItemId && s.enabled) : undefined;
+    const size = scale?.sizes.find((s) => s.variantId === variantId && s.active && !s.custom);
+    const base = size ? this.recipeFor(data, { kind: 'ITEM', menuItemId, variantId: null }) : null;
+    const baseVersion = base ? currentVersion(base) : null;
+    if (scale && size && baseVersion) return scaleCost(linesCost(book, baseVersion.lines).total, size.quantityMilli, scale.baseQuantityMilli);
+    const version = recipe ? currentVersion(recipe) : null;
+    return version ? linesCost(book, version.lines).total : null;
+  }
+
   /** One row per menu item and size (an item without sizes has one row). */
   private menuRecipeRows(data: DemoData): MenuRecipeRow[] {
     const book = this.costBook(data);
@@ -2587,7 +2617,6 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const sizes = item.variants.length ? [...item.variants].sort((a, b) => a.sort - b.sort) : [null];
       return sizes.map((variant) => {
         const recipe = this.recipeFor(data, { kind: 'ITEM', menuItemId: item.id, variantId: variant?.id ?? null });
-        const version = recipe ? currentVersion(recipe) : null;
         return {
           menuItemId: item.id,
           itemName: item.name,
@@ -2596,7 +2625,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           variantId: variant?.id ?? null,
           variantName: variant?.name ?? null,
           recipe,
-          costing: foodCostOf(version ? linesCost(book, version.lines).total : null, variant?.price ?? item.basePrice, tax),
+          costing: foodCostOf(this.sizeCost(data, book, item.id, variant?.id ?? null, recipe), variant?.price ?? item.basePrice, tax),
         };
       });
     });
@@ -2617,7 +2646,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         }),
       );
       const prepared = inv.ingredients
-        .filter((i) => i.kind === 'PREPARED')
+        .filter((i) => i.kind === 'PREPARED' && i.isActive)
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((ingredient) => {
           const recipe = this.recipeFor(data, { kind: 'PREPARED', ingredientId: ingredient.id });
@@ -2636,6 +2665,9 @@ export class DemoAdapter implements ApiClient, DemoControls {
         prepared,
         ingredients: [...inv.ingredients].sort((a, b) => a.name.localeCompare(b.name)),
         batches: [...book.prepared.entries()].map(([ingredientId, v]) => ({ ingredientId, lines: v.lines, yieldMilli: v.yieldMilli })),
+        scales: inv.recipeScales ?? [],
+        // Base recipes of items with sizes: the pot that Auto Scale shares out (target variantId null).
+        baseRecipes: inv.recipes.filter((r) => r.target.kind === 'ITEM' && r.target.variantId === null && data.items.some((i) => r.target.kind === 'ITEM' && i.id === r.target.menuItemId && i.variants.length > 0)),
         tax: { rateBps: tax.rateBps, pricesIncludeTax: tax.pricesIncludeTax },
         staffNames: Object.fromEntries([...people].filter(Boolean).map((uid) => [uid, this.staffName(data, uid) ?? ''])),
       };
@@ -2658,31 +2690,142 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const book = this.costBook(data);
         const problem = checkRecipe(input, inv.ingredients, book);
         if (problem) throw new ApiError('VALIDATION', 'Please check the recipe lines.');
-        const now = nowIso();
-        let recipe = this.recipeFor(data, target);
-        if (!recipe) {
-          recipe = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, target, versions: [] };
-          inv.recipes.push(recipe);
+        return this.writeRecipe(data, user, book, target, input.lines, target.kind === 'PREPARED' ? input.yieldMilli : null, input.note, input.verify);
+      }),
+    );
+  }
+
+  /** Adds a version when the lines changed (old versions stay); the same lines again only verify. */
+  private writeRecipe(data: DemoData, user: StaffUser, book: ReturnType<DemoAdapter['costBook']>, target: RecipeTarget, lines: RecipeLine[], yieldMilli: number | null, note: string, verify: boolean): Recipe {
+    const now = nowIso();
+    let recipe = this.recipeFor(data, target);
+    if (!recipe) {
+      recipe = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, target, versions: [] };
+      data.inventory.recipes.push(recipe);
+    }
+    const current = currentVersion(recipe);
+    const next = { lines, yieldMilli };
+    if (current && sameRecipe(current, next)) {
+      // Nothing changed: a double tap adds nothing; "Save & verify" only marks it verified.
+      if (verify && current.status === 'DRAFT') Object.assign(current, { status: 'VERIFIED', verifiedBy: user.id, verifiedAt: now });
+      return recipe;
+    }
+    recipe.versions.push({
+      version: (current?.version ?? 0) + 1,
+      ...next,
+      status: verify ? 'VERIFIED' : 'DRAFT',
+      note: note.trim(),
+      savedBy: user.id,
+      savedAt: now,
+      verifiedBy: verify ? user.id : null,
+      verifiedAt: verify ? now : null,
+      costAtSave: linesCost(book, lines).total,
+    });
+    return recipe;
+  }
+
+  /**
+   * Auto Scale in one step, like one database transaction: (1) the Menu, only when the owner confirmed: new sizes and
+   * changed prices, sizes keep their ids; (2) the base recipe (variantId null); (3) every ticked size: its own lines
+   * when custom, else the base × its share; (4) the setup. Nothing is saved while one part is wrong.
+   */
+  saveScaledRecipe(input: ScaledRecipeInput): Promise<RecipeScale> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        inv.recipeScales ??= [];
+        const item = data.items.find((i) => i.id === input.menuItemId && !i.archivedAt);
+        if (!item) throw new ApiError('NOT_FOUND', 'This menu item was not found.');
+        const variantOf = (variantId: string | null) => (variantId ? item.variants.find((v) => v.id === variantId) : undefined);
+        if (input.sizes.some((s) => s.variantId !== null && !variantOf(s.variantId))) throw new ApiError('NOT_FOUND', 'This size was not found in the Menu.');
+        const added = input.sizes.filter((s) => s.variantId === null);
+        if (added.length > 0 && !input.updateMenu) throw new ApiError('VALIDATION', 'A new size reaches the Menu only after you confirm it.');
+        const repriced = input.sizes.filter((s) => s.variantId !== null && variantOf(s.variantId)!.price !== s.price);
+        const ids = new Map<number, string>();
+        if (input.updateMenu && (added.length > 0 || repriced.length > 0)) {
+          this.require(data, 'menu.manage');
+          const sizes = [
+            ...item.variants.map((v) => ({ name: v.name, price: input.sizes.find((s) => s.variantId === v.id)?.price ?? v.price })),
+            ...added.map((s) => ({ name: cleanName(s.name), price: s.price })),
+          ];
+          const check = checkMenuItem({ name: item.name, description: item.description, price: null, sizes }, []);
+          const category = data.categories.find((c) => c.id === item.categoryId);
+          if (check) throw new ApiError('VALIDATION', menuMessage(check, item.name, category?.name ?? ''));
+          for (const v of item.variants) v.price = input.sizes.find((s) => s.variantId === v.id)?.price ?? v.price;
+          // An item sold per kg gets sizes for the first time: the size now says the weight ("1 × Chicken Karahi (½ kg)").
+          if (item.variants.length === 0 && item.unit === 'kg') item.unit = 'piece';
+          input.sizes.forEach((s, index) => {
+            if (s.variantId !== null) return;
+            const variant = { id: newId(), name: cleanName(s.name), price: s.price, sort: item.variants.length + 1 };
+            item.variants.push(variant);
+            ids.set(index, variant.id);
+          });
+          item.basePrice = Math.min(...item.variants.map((v) => v.price));
         }
-        const current = currentVersion(recipe);
-        const next = { lines: input.lines, yieldMilli: target.kind === 'PREPARED' ? input.yieldMilli : null };
-        if (current && sameRecipe(current, next)) {
-          // Nothing changed: a double tap adds nothing; "Save & verify" only marks it verified.
-          if (input.verify && current.status === 'DRAFT') Object.assign(current, { status: 'VERIFIED', verifiedBy: user.id, verifiedAt: now });
-          return recipe;
-        }
-        recipe.versions.push({
-          version: (current?.version ?? 0) + 1,
-          ...next,
-          status: input.verify ? 'VERIFIED' : 'DRAFT',
-          note: input.note.trim(),
-          savedBy: user.id,
-          savedAt: now,
-          verifiedBy: input.verify ? user.id : null,
-          verifiedAt: input.verify ? now : null,
-          costAtSave: linesCost(book, input.lines).total,
+        const sizes = input.sizes.map((s, index) => ({ ...s, variantId: s.variantId ?? ids.get(index)! }));
+
+        const scaleProblem = checkRecipeScale({
+          baseQuantityMilli: input.baseQuantityMilli,
+          baseUnit: input.baseUnit,
+          sizes: sizes.map((s) => ({ variantId: s.variantId, quantityMilli: s.quantityMilli, active: s.active, custom: s.customLines !== null })),
         });
-        return recipe;
+        if (scaleProblem) throw new ApiError('VALIDATION', SCALE_MESSAGES[scaleProblem.problem]);
+        const book = this.costBook(data);
+        const baseTarget: RecipeTarget = { kind: 'ITEM', menuItemId: item.id, variantId: null };
+        const toCheck = [
+          { target: baseTarget, lines: input.baseLines },
+          ...sizes.filter((s) => s.active && s.customLines).map((s) => ({ target: { kind: 'ITEM' as const, menuItemId: item.id, variantId: s.variantId }, lines: s.customLines! })),
+        ];
+        if (toCheck.some((r) => checkRecipe({ target: r.target, lines: r.lines, yieldMilli: null, note: input.note }, inv.ingredients, book) !== null)) {
+          throw new ApiError('VALIDATION', 'Please check the recipe lines.');
+        }
+
+        this.writeRecipe(data, user, book, baseTarget, input.baseLines, null, input.note, input.verify);
+        for (const size of sizes.filter((s) => s.active)) {
+          const lines = size.customLines ?? scaleLines(input.baseLines, size.quantityMilli, input.baseQuantityMilli);
+          this.writeRecipe(data, user, book, { kind: 'ITEM', menuItemId: item.id, variantId: size.variantId }, lines, null, input.note, input.verify);
+        }
+        const setup = {
+          enabled: true,
+          baseQuantityMilli: input.baseQuantityMilli,
+          baseUnit: input.baseUnit,
+          sizes: sizes.map((s) => ({ variantId: s.variantId, quantityMilli: s.quantityMilli, active: s.active, custom: s.customLines !== null })),
+          updatedBy: user.id,
+          updatedAt: nowIso(),
+        };
+        const existing = inv.recipeScales.find((s) => s.menuItemId === item.id);
+        if (existing) return Object.assign(existing, setup);
+        const scale: RecipeScale = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, menuItemId: item.id, ...setup };
+        inv.recipeScales.push(scale);
+        return scale;
+      }),
+    );
+  }
+
+  turnOffRecipeScale(menuItemId: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const scale = (data.inventory.recipeScales ?? []).find((s) => s.menuItemId === menuItemId);
+        if (scale) Object.assign(scale, { enabled: false, updatedBy: user.id, updatedAt: nowIso() });
+      }),
+    );
+  }
+
+  addSupplier(input: SupplierInput): Promise<Supplier> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'inventory.manage');
+        const name = cleanName(input.name);
+        const phone = input.phone.trim();
+        if (!name) throw new ApiError('VALIDATION', 'Type the supplier name.');
+        if (name.length > MAX_NAME_LENGTH) throw new ApiError('VALIDATION', `Keep the name to ${MAX_NAME_LENGTH} characters.`);
+        if (phone.length > 20 || (phone && !/^[\d +()-]+$/.test(phone))) throw new ApiError('VALIDATION', 'Type the phone number with digits only.');
+        if (data.inventory.suppliers.some((s) => s.name.toLowerCase() === name.toLowerCase())) throw new ApiError('CONFLICT', `"${name}" is already in the list.`);
+        const supplier: Supplier = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, name, phone, isActive: true };
+        data.inventory.suppliers.push(supplier);
+        return supplier;
       }),
     );
   }

@@ -23,6 +23,8 @@ const DESKTOP = { width: 1440, height: 900 };
 await mkdir(OUT_DIR, { recursive: true });
 const browser = await chromium.launch({ channel: 'msedge' });
 const context = await browser.newContext({ deviceScaleFactor: 1 });
+// The Aziz Pizza test data (MASTER_PROMPT.md §12): the owner's own demo is Lala Restaurant.
+await context.addInitScript(() => window.localStorage.setItem('lala-os-demo-fixture', 'acceptance'));
 const errors = [];
 
 async function openAs(userId, url, viewport) {
@@ -81,7 +83,7 @@ await setup.close();
 const owner = await openAs(USER.owner, '/inventory', DESKTOP);
 await card(owner, 'Ingredients').waitFor();
 const upgraded = await saved(owner);
-assert.equal(upgraded.version, 17, 'brought up to the newest version');
+assert.equal(upgraded.version, 18, 'brought up to the newest version');
 assert.equal(upgraded.employeeCounter, 77, 'the old data was kept');
 assert.equal(upgraded.inventory.ingredients.filter((i) => i.kind === 'BOUGHT').length, 25);
 assert.ok(upgraded.rolePermissions.MANAGER.includes('inventory.view') && upgraded.rolePermissions.MANAGER.includes('menu.view'));

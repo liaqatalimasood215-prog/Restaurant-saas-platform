@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Plus, Search, Trash2 } from 'lucide-react';
 import {
   INGREDIENT_CATEGORIES,
@@ -43,6 +43,40 @@ export const CATEGORY_ART: Record<IngredientCategory, string> = {
   CLEANING: '🧴',
   OTHER: '🥄',
 };
+
+/** Ingredient pictures by name (Recipe Builder, owner's picture), else by category. */
+const NAMED_ART: [RegExp, string][] = [
+  [/mutton|beef|mince|gosht/i, '🥩'],
+  [/chicken/i, '🍗'],
+  [/fish/i, '🐟'],
+  [/tomato/i, '🍅'],
+  [/onion/i, '🧅'],
+  [/chill?i|pepper|masala/i, '🌶️'],
+  [/ginger/i, '🫚'],
+  [/garlic/i, '🧄'],
+  [/cucumber/i, '🥒'],
+  [/lemon/i, '🍋'],
+  [/coriander|dhania|mint|lettuce/i, '🌿'],
+  [/yogurt|dahi|milk|cream/i, '🥛'],
+  [/butter|makhan|ghee/i, '🧈'],
+  [/cheese|mozzarella/i, '🧀'],
+  [/oil/i, '🫗'],
+  [/daal|lentil|chana/i, '🫘'],
+  [/atta|maida|flour|besan/i, '🌾'],
+  [/sugar/i, '🍬'],
+  [/salt/i, '🧂'],
+  [/tea|chai/i, '🍃'],
+  [/coffee/i, '☕'],
+  [/charcoal|koyla/i, '🔥'],
+  [/water/i, '💧'],
+  [/drink/i, '🥤'],
+  [/rice/i, '🍚'],
+];
+
+export function ingredientArt(ingredient: Pick<Ingredient, 'name' | 'kind' | 'category'>): string {
+  if (ingredient.kind === 'PREPARED') return '🥣';
+  return NAMED_ART.find(([pattern]) => pattern.test(ingredient.name))?.[1] ?? CATEGORY_ART[ingredient.category];
+}
 
 /**
  * The ingredients table of the Recipe Builder: #, ingredient, Quantity, Unit, cost. The unit list fits the ingredient
@@ -118,6 +152,7 @@ export function RecipeLines({
             }}
             placeholder={t('inventory.recipes.builder.search')}
             aria-label={t('inventory.recipes.builder.search')}
+            data-recipe-search
             className="w-full bg-transparent text-sm"
           />
         </label>
@@ -129,7 +164,7 @@ export function RecipeLines({
               matches.map((i) => (
                 <li key={i.id}>
                   <button type="button" role="option" aria-selected={false} onClick={() => add(i)} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm hover:bg-brand-soft">
-                    <span aria-hidden>{i.kind === 'PREPARED' ? '🥣' : CATEGORY_ART[i.category]}</span>
+                    <span aria-hidden>{ingredientArt(i)}</span>
                     <span className="flex-1 font-semibold text-slate-900">{i.name}</span>
                     <span className="text-xs text-slate-500">{i.code}</span>
                   </button>
@@ -140,7 +175,7 @@ export function RecipeLines({
         )}
       </div>
 
-      <div className="hidden grid-cols-[1.25rem_minmax(0,1fr)_4rem_4.25rem_4.5rem_3.75rem] gap-2 rounded-lg bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600 md:grid">
+      <div className="hidden grid-cols-[1.25rem_minmax(0,1fr)_3.75rem_4rem_4.5rem_4.25rem] gap-2 rounded-lg bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600 md:grid">
         <span>{t('inventory.recipes.builder.number')}</span>
         <span>{t('inventory.recipes.editor.ingredient')}</span>
         <span>{t('inventory.recipes.editor.quantity')}</span>
@@ -164,11 +199,11 @@ export function RecipeLines({
           const more = open === line.key || line.optional || Boolean(line.substituteId);
           return (
             <li key={line.key} data-recipe-line={index + 1} className={cn('py-1', errorLine === index && 'rounded-xl bg-red-50/60 ring-2 ring-red-200')}>
-              <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2 px-1 md:grid-cols-[1.25rem_minmax(0,1fr)_4rem_4.25rem_4.5rem_3.75rem] md:px-3">
+              <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2 px-1 md:grid-cols-[1.25rem_minmax(0,1fr)_3.75rem_4rem_4.5rem_4.25rem] md:px-3">
                 <span className="text-sm font-bold text-slate-500">{index + 1}</span>
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="text-lg lg:hidden xl:inline" aria-hidden>
-                    {ingredient ? (ingredient.kind === 'PREPARED' ? '🥣' : CATEGORY_ART[ingredient.category]) : '➕'}
+                  <span className="text-lg" aria-hidden>
+                    {ingredient ? ingredientArt(ingredient) : '➕'}
                   </span>
                   <select
                     value={line.ingredientId}
@@ -238,7 +273,7 @@ export function RecipeLines({
                     onClick={() => setOpen(open === line.key ? null : line.key)}
                     aria-expanded={more}
                     aria-label={t('inventory.recipes.editor.more', { n: index + 1 })}
-                    className="press grid size-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100"
+                    className="press grid size-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 md:size-8"
                   >
                     <ChevronDown className={cn('size-4 transition-transform', more && 'rotate-180')} aria-hidden />
                   </button>
@@ -246,7 +281,7 @@ export function RecipeLines({
                     type="button"
                     onClick={() => onChange(lines.filter((l) => l.key !== line.key))}
                     aria-label={t('inventory.recipes.editor.removeLine', { n: index + 1 })}
-                    className="press grid size-9 place-items-center rounded-lg text-red-700 hover:bg-red-50"
+                    className="press grid size-9 place-items-center rounded-lg text-red-700 hover:bg-red-50 md:size-8"
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </button>
@@ -333,7 +368,7 @@ export function RecipeLines({
 export const LEVEL_TONE = { GOOD: 'green', WATCH: 'amber', HIGH: 'red' } as const;
 
 /** Recipe cost, selling price, food cost %, gross profit and margin — the same numbers everywhere. */
-export function CostingRows({ costing, showNetPrice, priceNote }: { costing: FoodCost; showNetPrice: boolean; priceNote?: string }) {
+export function CostingRows({ costing, showNetPrice, priceNote, price }: { costing: FoodCost; showNetPrice: boolean; priceNote?: string; /** Replaces the shown price (Auto Scale: a price field) */ price?: ReactNode }) {
   const row = 'flex items-baseline justify-between gap-3 py-1.5';
   return (
     <dl className="divide-y divide-slate-100 text-sm" data-costing>
@@ -348,7 +383,7 @@ export function CostingRows({ costing, showNetPrice, priceNote }: { costing: Foo
           {t('inventory.recipes.editor.sellingPrice')}
           {priceNote && <span className="block text-[11px] text-slate-400">{priceNote}</span>}
         </dt>
-        <dd className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 tabular-nums text-slate-900">{formatPaisa(costing.price)}</dd>
+        {price !== undefined ? <dd data-price>{price}</dd> : <dd className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 tabular-nums text-slate-900">{formatPaisa(costing.price)}</dd>}
       </div>
       {showNetPrice && (
         <div className={row}>

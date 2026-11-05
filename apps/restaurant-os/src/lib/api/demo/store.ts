@@ -1,5 +1,5 @@
 import { ApiError } from '../client';
-import { createSeed, DEMO_DATA_VERSION, upgradeDemoData, type DemoData } from './seed';
+import { createSeed, DEMO_DATA_VERSION, DEMO_FIXTURE_KEY, upgradeDemoData, type DemoData, type DemoFixture } from './seed';
 
 /**
  * In-memory DEMO state shared by all screens.
@@ -31,10 +31,23 @@ function writeJson(storage: () => Storage, key: string, value: unknown): void {
   }
 }
 
+/** The owner's Lala Restaurant, or the Aziz Pizza test data when a walkthrough asked for it. */
+function fixture(): DemoFixture {
+  try {
+    return window.localStorage.getItem(DEMO_FIXTURE_KEY) === 'acceptance' ? 'acceptance' : 'restaurant';
+  } catch {
+    return 'restaurant';
+  }
+}
+
+function freshSeed(): DemoData {
+  return createSeed(fixture());
+}
+
 /** The saved demo data, brought up to date when it is one version old (never thrown away for that). */
 function loadData(): DemoData | null {
   const saved = readJson<unknown>(() => window.localStorage, DATA_KEY);
-  const data = upgradeDemoData(saved);
+  const data = upgradeDemoData(saved, fixture());
   if (data && (saved as { version?: number }).version !== DEMO_DATA_VERSION) writeJson(() => window.localStorage, DATA_KEY, data);
   return data;
 }
@@ -58,7 +71,7 @@ export class DemoStore {
     // The hidden link page of the website and Rider App may get its own browser storage, so it never uses storage: it starts
     // with nothing to say, asks an open Restaurant OS tab for the data, and only then answers or changes anything.
     this.isLinkPage = window.self !== window.top && window.location.pathname === '/demo-link';
-    this.data = (this.isLinkPage ? null : loadData()) ?? createSeed();
+    this.data = (this.isLinkPage ? null : loadData()) ?? freshSeed();
     this.ready = !this.isLinkPage;
     this.session = readJson<DemoSessionState>(() => window.sessionStorage, SESSION_KEY);
     this.channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(CHANNEL_NAME);
@@ -111,7 +124,7 @@ export class DemoStore {
   }
 
   reset(): void {
-    this.data = createSeed();
+    this.data = freshSeed();
     try {
       window.localStorage.removeItem(DATA_KEY);
     } catch {

@@ -14,6 +14,8 @@ const DESKTOP = { width: 1440, height: 900 };
 await mkdir(OUT_DIR, { recursive: true });
 const browser = await chromium.launch({ channel: 'msedge' });
 const context = await browser.newContext({ deviceScaleFactor: 1, viewport: DESKTOP, serviceWorkers: 'block' });
+// The Aziz Pizza test data (MASTER_PROMPT.md §12): the owner's own demo is Lala Restaurant.
+await context.addInitScript(() => window.localStorage.setItem('lala-os-demo-fixture', 'acceptance'));
 await context.addInitScript((uid) => window.sessionStorage.setItem('lala-os-demo-session', JSON.stringify({ userId: uid })), OWNER);
 const page = await context.newPage();
 const ok = (message) => console.log(`  ✓ ${message}`);

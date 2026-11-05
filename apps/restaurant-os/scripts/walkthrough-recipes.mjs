@@ -22,6 +22,8 @@ const DESKTOP = { width: 1440, height: 900 };
 await mkdir(OUT_DIR, { recursive: true });
 const browser = await chromium.launch({ channel: 'msedge' });
 const context = await browser.newContext({ deviceScaleFactor: 1 });
+// The Aziz Pizza test data (MASTER_PROMPT.md §12): the owner's own demo is Lala Restaurant.
+await context.addInitScript(() => window.localStorage.setItem('lala-os-demo-fixture', 'acceptance'));
 const errors = [];
 
 async function openAs(userId, url, viewport) {
@@ -79,7 +81,7 @@ await setup.close();
 const owner = await openAs(USER.owner, '/inventory', DESKTOP);
 await owner.locator('main [data-inventory-card]').first().waitFor();
 const upgraded = await saved(owner);
-assert.equal(upgraded.version, 17);
+assert.equal(upgraded.version, 18);
 assert.equal(upgraded.inventory.recipes.length, 18);
 assert.ok(upgraded.inventory.ingredients.every((i) => i.kind === 'BOUGHT' || i.name === 'Pizza dough'));
 assert.ok(upgraded.inventory.movements.some((m) => m.ingredientId === ONIONS && m.type === 'ADJUSTMENT' && m.quantityMilli === 2_000_000), 'the Onions correction is kept');
@@ -177,14 +179,14 @@ await builder(owner).getByLabel('Loss 1').fill('95');
 await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
 await builder(owner).getByText('Line 1: the loss must be 0–90 %.').waitFor();
 await builder(owner).getByLabel('Loss 1').fill('10');
-await builder(owner).getByRole('button', { name: 'Add ingredient' }).click();
+await builder(owner).getByRole('button', { name: 'Add ingredient', exact: true }).click();
 await builder(owner).getByLabel('Ingredient 2').selectOption({ label: 'Chicken (boneless)' });
 await builder(owner).getByLabel('Quantity 2').fill('5');
 await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
 await builder(owner).getByText('Line 2: this ingredient is already in the recipe.').waitFor();
 await builder(owner).getByLabel('Ingredient 2').selectOption({ label: 'Cooking oil' });
 await builder(owner).getByLabel('Quantity 2').fill('40');
-await builder(owner).getByRole('button', { name: 'Add ingredient' }).click();
+await builder(owner).getByRole('button', { name: 'Add ingredient', exact: true }).click();
 await builder(owner).getByLabel('Ingredient 3').selectOption({ label: 'Red chilli powder (500 g pack)' });
 await builder(owner).getByLabel('Quantity 3').fill('5');
 await builder(owner).getByRole('button', { name: 'More options for line 3' }).click();
@@ -200,11 +202,12 @@ ok('empty ingredient, 95 % loss and a double ingredient refused; Wings: 200 g ch
 
 console.log('5. Sizes: Copy from Medium into Large');
 await owner.getByRole('button', { name: 'Edit recipe: Classic Pizza' }).click();
-await builder(owner).getByRole('tab', { name: /^Large/ }).click();
+// R2: sizes are rows of the Recipe Sizes table (Auto Scale off: each size keeps its own recipe).
+await builder(owner).locator('[data-size-row="Large"] td').first().click();
 await builder(owner).getByLabel('Copy from').selectOption({ label: 'Medium' });
 assert.equal(await builder(owner).getByLabel('Quantity 3').inputValue(), '110', 'Medium has 110 g mozzarella');
 await builder(owner).getByLabel('Quantity 3').fill('170');
-await builder(owner).getByRole('tab', { name: /^Large/ }).getByText('Changed').waitFor();
+await builder(owner).locator('[data-size-row="Large"]').getByText('Changed').waitFor();
 await shot(owner, '03-desktop-owner-pizza-sizes');
 await builder(owner).getByRole('button', { name: 'Save Draft' }).click();
 await saveDone(owner);
@@ -243,7 +246,7 @@ await builder(owner).getByLabel('Name', { exact: true }).fill('Spicy mayo');
 await builder(owner).getByLabel('Category').selectOption('SAUCES_SPICES');
 await builder(owner).getByLabel('Ingredient 1').selectOption({ label: 'Mayonnaise (1 kg bottle)' });
 await builder(owner).getByLabel('Quantity 1').fill('950');
-await builder(owner).getByRole('button', { name: 'Add ingredient' }).click();
+await builder(owner).getByRole('button', { name: 'Add ingredient', exact: true }).click();
 await builder(owner).getByLabel('Ingredient 2').selectOption({ label: 'Red chilli powder (500 g pack)' });
 await builder(owner).getByLabel('Quantity 2').fill('50');
 await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
@@ -273,20 +276,21 @@ await cashier.getByText('No access').first().waitFor();
 await cashier.close();
 ok('the Manager edits recipes; the Cashier gets "No access"');
 
-console.log("8b. The owner's laptop (1265 × 628 at 150 %): the builder fits one screen");
+// R2 (owner's second picture, 2026-11-05): the Recipe Sizes table sits below the builder, so the page scrolls once; nothing scrolls sideways.
+console.log("8b. The owner's laptop (1265 × 628 at 150 %): Save Draft and Verify at the top, no sideways scroll");
 const laptop = await openAs(USER.owner, '/inventory', { width: 1265, height: 628 });
 await openRecipes(laptop);
 for (const name of ['Chicken Karahi', 'Fajita Pizza']) {
   await laptop.getByRole('button', { name: `Edit recipe: ${name}` }).click();
   await builder(laptop).waitFor();
-  const extra = await laptop.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
-  assert.ok(extra <= 1, `${name}: the page scrolls by ${extra}px`);
+  await noSidewaysScroll(laptop, name);
+  assert.ok(await builder(laptop).getByRole('button', { name: 'Verify Recipe' }).isVisible(), `${name}: Verify Recipe is on the first screen`);
   await shot(laptop, `07-laptop-owner-builder-${name.split(' ')[1].toLowerCase()}`);
   await builder(laptop).getByRole('button', { name: 'Recipes', exact: true }).click();
   await builder(laptop).waitFor({ state: 'detached' });
 }
 await laptop.close();
-ok('Karahi and Fajita Pizza open without any page scroll; a long ingredient list scrolls inside its box');
+ok('Karahi and Fajita Pizza: Save Draft and Verify Recipe on the first screen, no sideways scroll');
 
 console.log('9. Phone');
 const phone = await openAs(USER.owner, '/inventory', PHONE);

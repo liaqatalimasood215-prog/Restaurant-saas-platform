@@ -50,10 +50,12 @@ function subjectOf(ref: EditingRef, view: RecipesView): EditorSubject | null {
   return { kind: 'PREPARED', row: ref.ingredientId ? (view.prepared.find((p) => p.ingredient.id === ref.ingredientId) ?? null) : null };
 }
 
-/** Changes when a saved recipe of the subject changes, so the editor starts again from the newest version. */
-function versionsKey(subject: EditorSubject): string {
+/** Changes when a saved recipe or Auto Scale setup of the subject changes, so the editor starts again from the newest version. */
+function versionsKey(subject: EditorSubject, view: RecipesView): string {
   const recipes = subject.kind === 'ITEM' ? subject.sizes.map((s) => s.recipe) : subject.kind === 'ADDON' ? [subject.recipe] : [subject.row?.recipe ?? null];
-  return recipes.map((r) => (r ? `${r.id}:${r.versions.length}` : '-')).join('|');
+  const base = subject.kind === 'ITEM' ? view.baseRecipes.find((r) => r.target.kind === 'ITEM' && r.target.menuItemId === subject.menuItemId) : undefined;
+  const scale = subject.kind === 'ITEM' ? view.scales.find((s) => s.menuItemId === subject.menuItemId) : undefined;
+  return [...recipes, base ?? null].map((r) => (r ? `${r.id}:${r.versions.length}` : '-')).join('|') + (scale ? `|${scale.updatedAt}` : '');
 }
 
 interface MenuItemGroup {
@@ -114,7 +116,7 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
   const shown = searched.filter((g) => matches(g, filter));
   const openItem = (group: MenuItemGroup, variantId: string | null) =>
     setEditing({ kind: 'ITEM', menuItemId: group.menuItemId, variantId });
-  if (subject) return <RecipeBuilder key={versionsKey(subject)} subject={subject} view={view} onClose={() => setEditing(null)} />;
+  if (subject) return <RecipeBuilder key={versionsKey(subject, view)} subject={subject} view={view} onClose={() => setEditing(null)} />;
 
   return (
     <div className="space-y-4">
@@ -187,7 +189,10 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
                             {group.unit !== 'piece' && ` · ${t('inventory.recipes.perUnit', { unit: group.unit })}`}
                           </p>
                         </div>
-                        <Badge tone={STATE_TONE[state]}>{t(`inventory.recipes.status.${state}`)}</Badge>
+                        <span className="flex shrink-0 flex-col items-end gap-1">
+                          <Badge tone={STATE_TONE[state]}>{t(`inventory.recipes.status.${state}`)}</Badge>
+                          {view.scales.some((sc) => sc.menuItemId === group.menuItemId && sc.enabled) && <Badge tone="blue">{t('inventory.recipes.scale.autoBadge')}</Badge>}
+                        </span>
                       </div>
                       <ul className="flex-1 divide-y divide-slate-100 px-4">
                         {group.rows.map((row) => (

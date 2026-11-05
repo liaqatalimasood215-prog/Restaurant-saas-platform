@@ -31,6 +31,8 @@ import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { fromDisplayMilli, quantityText, stockText, toDisplayMilli, unitLabel } from './inventory-format';
 
+const NEW_SUPPLIER = '__new_supplier';
+
 /** The recipe unit that fits a purchase unit; packages keep what was chosen (pieces by default). */
 function stockUnitFor(purchase: PurchaseUnit, current: StockUnit): StockUnit {
   if (purchase === 'kg' || purchase === 'g') return 'g';
@@ -61,6 +63,21 @@ export function IngredientDialog({ row, view, onClose }: { row: IngredientRow | 
   const [reorder, setReorder] = useState(item ? milliToInput(item.reorderQtyMilli) : '');
   const [price, setPrice] = useState(item ? paisaToInput(item.purchasePrice) : '');
   const [supplierId, setSupplierId] = useState(item?.preferredSupplierId ?? '');
+  // A supplier can be added right here (name + phone); the full Suppliers page comes with inventory phase 3.
+  const [suppliers, setSuppliers] = useState(view.suppliers);
+  const [newSupplier, setNewSupplier] = useState<{ name: string; phone: string; error: string } | null>(null);
+  const addSupplier = async () => {
+    if (!newSupplier) return;
+    try {
+      const saved = await getApi().addSupplier({ name: newSupplier.name, phone: newSupplier.phone });
+      setSuppliers((all) => [...all, saved]);
+      setSupplierId(saved.id);
+      setNewSupplier(null);
+      toast.show({ tone: 'success', title: t('inventory.form.supplierAdded', { name: saved.name }) });
+    } catch (err) {
+      setNewSupplier({ ...newSupplier, error: err instanceof Error ? err.message : t('states.errorBody') });
+    }
+  };
   const [locationId, setLocationId] = useState(item?.locationId ?? '');
   const [batchNo, setBatchNo] = useState(item?.batchNo ?? '');
   const [expiryDate, setExpiryDate] = useState(item?.expiryDate ?? '');
@@ -255,15 +272,37 @@ export function IngredientDialog({ row, view, onClose }: { row: IngredientRow | 
             </span>
           </Field>
           <Field label={t('inventory.form.supplier')} hint={t('inventory.form.supplierHint')}>
-            <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} aria-label={t('inventory.form.supplier')} className={plainField}>
+            <select
+              value={supplierId}
+              onChange={(e) => (e.target.value === NEW_SUPPLIER ? setNewSupplier({ name: '', phone: '', error: '' }) : setSupplierId(e.target.value))}
+              aria-label={t('inventory.form.supplier')}
+              className={plainField}
+            >
               <option value="">{t('inventory.form.noSupplier')}</option>
-              {view.suppliers.map((s) => (
+              {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
+              <option value={NEW_SUPPLIER}>+ {t('inventory.form.newSupplier')}</option>
             </select>
           </Field>
+          {newSupplier && (
+            <div className="space-y-2 rounded-xl border border-brand/30 bg-brand-soft/40 p-3 sm:col-span-2" data-new-supplier>
+              <p className="text-sm font-bold text-slate-900">{t('inventory.form.newSupplier')}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input value={newSupplier.name} onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value, error: '' })} maxLength={60} placeholder={t('inventory.form.supplierNamePlaceholder')} aria-label={t('inventory.form.supplierName')} className={plainField} />
+                <input value={newSupplier.phone} onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value, error: '' })} inputMode="tel" maxLength={20} placeholder="0300-0000000" aria-label={t('inventory.form.supplierPhone')} className={plainField} />
+              </div>
+              {newSupplier.error && <p className="text-sm font-semibold text-red-700">{newSupplier.error}</p>}
+              <div className="flex gap-2">
+                <Button onClick={() => void addSupplier()}>{t('inventory.form.addSupplier')}</Button>
+                <Button variant="ghost" onClick={() => setNewSupplier(null)}>
+                  {t('inventory.form.cancel')}
+                </Button>
+              </div>
+            </div>
+          )}
         </Group>
 
         <Group title={t('inventory.form.storage')}>

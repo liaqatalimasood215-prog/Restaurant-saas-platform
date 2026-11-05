@@ -52,8 +52,11 @@ import type {
   IngredientKind,
   Recipe,
   RecipeLine,
+  RecipeScale,
   RecipeTarget,
   RecipesView,
+  ScaleUnit,
+  Supplier,
   StockLedgerQuery,
   StockLedgerView,
   IngredientCategory,
@@ -316,6 +319,42 @@ export interface RecipeInput {
   verify: boolean;
 }
 
+/** One size in Auto Scale (Recipe Builder R2). */
+export interface ScaledSizeInput {
+  /** null = a new size: added to the Menu with this name and price (only with updateMenu) */
+  variantId: Uuid | null;
+  name: string;
+  /** Thousandths of the base unit: ½ kg with a kg base = 500 */
+  quantityMilli: number;
+  /** Ticked: this size gets its recipe */
+  active: boolean;
+  /** A custom size keeps these lines; an automatic one (null) gets the base × its share */
+  customLines: RecipeLine[] | null;
+  /** Selling price (paisa) the owner typed; it reaches the Menu only with updateMenu */
+  price: number;
+}
+
+/** Saves an Auto Scale recipe in one step: the base recipe, every ticked size's recipe and the setup. */
+export interface ScaledRecipeInput {
+  menuItemId: Uuid;
+  baseQuantityMilli: number;
+  baseUnit: ScaleUnit;
+  baseLines: RecipeLine[];
+  sizes: ScaledSizeInput[];
+  /**
+   * The owner confirmed the Menu change: changed prices and new sizes are written to the Menu (new bills only; old
+   * bills keep their prices). Without it the Menu stays exactly as it is.
+   */
+  updateMenu: boolean;
+  note: string;
+  verify: boolean;
+}
+
+export interface SupplierInput {
+  name: string;
+  phone: string;
+}
+
 export interface StockAdjustInput {
   ingredientId: Uuid;
   direction: 'ADD' | 'REMOVE';
@@ -520,6 +559,12 @@ export interface ApiClient {
    * verify = true only marks the current version VERIFIED.
    */
   saveRecipe(input: RecipeInput): Promise<Recipe>;
+  /** Recipe Builder R2: one base recipe shared out to every ticked size (and, when confirmed, the Menu sizes and prices). */
+  saveScaledRecipe(input: ScaledRecipeInput): Promise<RecipeScale>;
+  /** Auto Scale off: every size keeps the recipe it has and is edited on its own again. */
+  turnOffRecipeScale(menuItemId: Uuid): Promise<void>;
+  /** A supplier added from the ingredient form (name + phone); the full Suppliers page is inventory phase 3. */
+  addSupplier(input: SupplierInput): Promise<Supplier>;
 
   /** Activation page (no login): who the link is for, or an error when it is used, revoked or expired. */
   getActivation(token: string): Promise<ActivationInfo>;

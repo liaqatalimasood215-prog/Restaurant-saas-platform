@@ -22,6 +22,7 @@
     "walkthrough:refunds": "node scripts/walkthrough-refunds.mjs",
     "walkthrough:inventory": "node scripts/walkthrough-inventory.mjs",
     "walkthrough:recipes": "node scripts/walkthrough-recipes.mjs",
+    "walkthrough:auto-scale": "node scripts/walkthrough-auto-scale.mjs",
     "walkthrough:connected": "node scripts/walkthrough-connected.mjs",
     "walkthrough:sub-orders": "node scripts/walkthrough-sub-orders.mjs",
     "walkthrough:previews": "node scripts/walkthrough-previews.mjs"

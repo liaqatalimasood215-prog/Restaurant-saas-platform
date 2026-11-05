@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkAddonGroup, checkMenuItem, paisaToInput, parseRupees } from './index';
+import { cardPrice, checkAddonGroup, checkMenuItem, paisaToInput, parseRupees } from './index';
 
 test('prices are typed in rupees and kept in paisa', () => {
   assert.equal(parseRupees('850'), 85_000);
@@ -32,4 +32,10 @@ test('add-on group: a name, add-ons (free is fine) and 0 ≤ min ≤ max ≤ num
   assert.deepEqual(checkAddonGroup({ ...group, addons: [] }, []), { problem: 'GROUP_RULE_INVALID' });
   assert.deepEqual(checkAddonGroup(group, ['pizza EXTRAS']), { problem: 'NAME_TAKEN' });
   assert.deepEqual(checkAddonGroup({ ...group, addons: [{ name: 'Oregano', price: -1 }] , maxSelect: 1 }, []), { problem: 'PRICE_INVALID', detail: 'Oregano' });
+});
+
+test('a product card shows the first size (1 kg), not the cheapest (Pao); no sizes = the one price', () => {
+  const karahi = { basePrice: 80_000, variants: [{ name: 'Pao', price: 80_000, sort: 3 }, { name: '1 kg', price: 280_000, sort: 1 }, { name: '½ kg', price: 150_000, sort: 2 }] };
+  assert.deepEqual(cardPrice(karahi), { price: 280_000, sizeName: '1 kg' });
+  assert.deepEqual(cardPrice({ basePrice: 45_000, variants: [] }), { price: 45_000, sizeName: null });
 });

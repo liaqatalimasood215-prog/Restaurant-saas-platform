@@ -25,13 +25,18 @@ import {
   type WaiterCall,
 } from '@restaurant-saas/shared';
 import { createInventorySeed, type DemoInventory } from './inventory-seed';
+import { LALA_NAME, createLalaInventory, lalaMenu, lalaWebsite, upgradeToLala } from './lala-seed';
 import { createRecipeSeed } from './recipe-seed';
 
 /**
- * DEMO data for "Aziz Pizza — DEMO" (MASTER_PROMPT.md §12 test data, §16 assumptions).
- * Sample data only — never real customers, staff or prices.
+ * DEMO data. Sample data only — never real customers, staff or prices.
+ * - 'restaurant' (what the owner sees): "Lala Restaurant — DEMO", his desi menu (owner, 2026-11-05; lala-seed.ts).
+ * - 'acceptance': "Aziz Pizza — DEMO", the fixed data of the automatic tests (MASTER_PROMPT.md §12 Test A: Table 5 =
+ *   Rs. 5,900). The walkthroughs ask for it through localStorage before the page loads (DEMO_FIXTURE_KEY).
  */
-export const DEMO_DATA_VERSION = 17;
+export const DEMO_DATA_VERSION = 18;
+export type DemoFixture = 'restaurant' | 'acceptance';
+export const DEMO_FIXTURE_KEY = 'lala-os-demo-fixture';
 
 /** Permissions added after demo data of an older version was saved: the Managers get them as recommended. */
 const NEW_MANAGER_PERMISSIONS_16: Permission[] = ['inventory.view', 'inventory.manage'];
@@ -202,7 +207,26 @@ function item(
   };
 }
 
-export function createSeed(): DemoData {
+export function createSeed(fixture: DemoFixture = 'restaurant'): DemoData {
+  const data = createPizzaSeed();
+  if (fixture === 'acceptance') return data;
+  const menu = lalaMenu(RESTAURANT_ID, BRANCH_ID);
+  return {
+    ...data,
+    restaurant: { ...data.restaurant, name: LALA_NAME },
+    branch: { ...data.branch, receiptHeader: LALA_NAME },
+    onlineWebsite: lalaWebsite(data.onlineWebsite),
+    staff: data.staff.map((s) => (menu.chefs[s.id] ? { ...s, name: menu.chefs[s.id]! } : s)),
+    stations: menu.stations,
+    categories: menu.categories,
+    modifierGroups: menu.modifierGroups,
+    items: menu.items,
+    inventory: createLalaInventory(scoped, demoId(101)),
+  };
+}
+
+/** The Aziz Pizza data (test fixture). The slug stays "aziz-pizza" in both: the DEMO website and Rider App links use it. */
+function createPizzaSeed(): DemoData {
   itemSort = 0;
   return {
     version: DEMO_DATA_VERSION,
@@ -351,9 +375,11 @@ export function createSeed(): DemoData {
  * - 15 → 16 adds the sample inventory and the new Inventory permissions.
  * - 16 → 17 marks every ingredient as bought and adds the sample recipes and the prepared pizza dough; the
  *   ingredients, stock and corrections he made stay as they are.
+ * - 17 → 18 makes it Lala Restaurant (owner, 2026-11-05): the desi menu, stock and recipes are added, pizza and
+ *   burgers are archived, and everything he made himself stays (upgradeToLala). The test fixture only gets Auto Scale.
  * Anything older, or not demo data at all, returns null (the demo starts fresh, as before).
  */
-export function upgradeDemoData(raw: unknown): DemoData | null {
+export function upgradeDemoData(raw: unknown, fixture: DemoFixture = 'restaurant'): DemoData | null {
   let data = raw as (Omit<DemoData, 'inventory'> & { inventory?: DemoInventory }) | null;
   if (!data || typeof data !== 'object' || typeof data.version !== 'number') return null;
   if (data.version === DEMO_DATA_VERSION) return data as DemoData;
@@ -369,7 +395,7 @@ export function upgradeDemoData(raw: unknown): DemoData | null {
       staff: data.staff.map((s) => (s.role === 'MANAGER' && s.permissions ? { ...s, permissions: withNew(s.permissions) } : s)),
     };
     // A brand-new sample inventory already has version 17's recipes.
-    if (!raw || (raw as { inventory?: unknown }).inventory === undefined) return { ...data, version: 17 } as DemoData;
+    if (!raw || (raw as { inventory?: unknown }).inventory === undefined) data = { ...data, version: 17 };
   }
   if (data.version === 16 && data.inventory) {
     const inventory = data.inventory;
@@ -384,6 +410,13 @@ export function upgradeDemoData(raw: unknown): DemoData | null {
         recipes: inventory.recipes ?? recipes,
       },
     };
+  }
+  if (data.version === 17 && data.inventory) {
+    // The automatic tests' Aziz Pizza data stays Aziz Pizza; only the owner's demo becomes Lala Restaurant.
+    data =
+      fixture === 'acceptance'
+        ? { ...data, version: 18, inventory: { ...data.inventory, recipeScales: data.inventory.recipeScales ?? [] } }
+        : upgradeToLala(data as DemoData);
   }
   return data.version === DEMO_DATA_VERSION && data.inventory ? (data as DemoData) : null;
 }

@@ -22,6 +22,8 @@ const PHONE = { width: 390, height: 844 };
 await mkdir(OUT_DIR, { recursive: true });
 const browser = await chromium.launch({ channel: 'msedge' });
 const context = await browser.newContext({ deviceScaleFactor: 1, serviceWorkers: 'block' });
+// The Aziz Pizza test data (MASTER_PROMPT.md §12): the owner's own demo is Lala Restaurant.
+await context.addInitScript(() => window.localStorage.setItem('lala-os-demo-fixture', 'acceptance'));
 const errors = [];
 // Records what each page says aloud; the sound itself cannot be checked here.
 await context.addInitScript(() => {

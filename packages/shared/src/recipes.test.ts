@@ -2,7 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   checkRecipe,
+  checkRecipeScale,
+  convertScaleQuantity,
   currentVersion,
+  guessSizeQuantity,
+  scaleCost,
+  scaleLines,
+  scaleShareBps,
   foodCostLevel,
   foodCostOf,
   formatBps,
@@ -194,4 +200,66 @@ test('a line with a unit must fit the ingredient and a package needs its size', 
   assert.deepEqual(check({ ...line('chicken', g(750)), unit: 'bag' }), { line: 0, problem: 'UNIT_SIZE_REQUIRED' });
   assert.equal(check({ ...line('chicken', g(750)), unit: 'bag', unitSizeMilli: g(5000) }), null);
   assert.equal(check(line('chicken', g(750))), null, 'old lines without a unit stay valid');
+});
+
+// ── Auto Scale (Recipe Builder R2): the numbers of the owner's picture ──────────────────────────
+
+test('Auto Scale: ½ kg uses half of every base line, the loss stays the same', () => {
+  const base = [line('chicken', g(750)), line('tomato', g(200), 500), line('onion', g(150)), line('oil', g(50))];
+  const half = scaleLines(base, 500, 1000);
+  assert.deepEqual(half.map((l) => l.quantityMilli), [g(375), g(100), g(75), g(25)]);
+  assert.equal(half[1]!.lossBps, 500, 'loss % is not scaled (never counted twice)');
+  assert.deepEqual(scaleLines(base, 125, 1000).map((l) => l.quantityMilli), [g(93.75), g(25), g(18.75), g(6.25)]);
+  assert.deepEqual(scaleLines(base, 2000, 1000).map((l) => l.quantityMilli), [g(1500), g(400), g(300), g(100)], 'a bigger size grows');
+  assert.equal(scaleLines([line('salt', 1)], 125, 1000)[0]!.quantityMilli, 1, 'a quantity never becomes zero');
+});
+
+test('Auto Scale: cost, food cost and profit of every size (picture: 1 kg Rs. 1,505)', () => {
+  const tax = { rateBps: 0, pricesIncludeTax: false };
+  const baseCost = 150_500;
+  const sizes: [number, number, number, string, number][] = [
+    // size (thousandths of a kg), price, scaled cost, food cost, profit (paisa)
+    [1000, 280_000, 150_500, '53.8 %', 129_500],
+    [500, 150_000, 75_250, '50.2 %', 74_750],
+    [250, 80_000, 37_625, '47 %', 42_375],
+    // 188.125 rounds to Rs. 188.13; cost + profit stay the full price (the picture rounds the profit on its own: 261.88)
+    [125, 45_000, 18_813, '41.8 %', 26_187],
+  ];
+  for (const [size, price, cost, foodCost, profit] of sizes) {
+    const scaled = scaleCost(baseCost, size, 1000);
+    assert.equal(scaled, cost);
+    const costing = foodCostOf(scaled, price, tax);
+    assert.equal(formatBps(costing.foodCostBps!), foodCost);
+    assert.equal(costing.profit, profit);
+    assert.equal(costing.profit! + scaled!, price);
+  }
+  assert.equal(scaleShareBps(125, 1000), 1250, '⅛ kg = 12.5 %');
+  assert.equal(scaleCost(null, 500, 1000), null);
+  assert.equal(foodCostOf(75_250, 0, tax).foodCostBps, null, 'no selling price: no food cost %');
+});
+
+test('Auto Scale: a size name tells its quantity; units convert only inside their family', () => {
+  assert.equal(guessSizeQuantity('1 kg', 'kg'), 1000);
+  assert.equal(guessSizeQuantity('½ kg', 'kg'), 500);
+  assert.equal(guessSizeQuantity('¼ kg (Pao)', 'kg'), 250);
+  assert.equal(guessSizeQuantity('Pao', 'kg'), 250);
+  assert.equal(guessSizeQuantity('Half Pao', 'kg'), 125);
+  assert.equal(guessSizeQuantity('1½ kg', 'kg'), 1500);
+  assert.equal(guessSizeQuantity('250 g', 'kg'), 250);
+  assert.equal(guessSizeQuantity('½ kg', 'g'), 500_000);
+  assert.equal(guessSizeQuantity('1.5 litre', 'ml'), 1_500_000);
+  assert.equal(guessSizeQuantity('Medium', 'piece'), null);
+  assert.equal(guessSizeQuantity('½ kg', 'piece'), null, 'a weight never becomes pieces');
+  assert.equal(convertScaleQuantity(500, 'kg', 'g'), 500_000);
+  assert.equal(convertScaleQuantity(1000, 'l', 'kg'), null);
+});
+
+test('Auto Scale: the base needs a quantity and at least one ticked size', () => {
+  const size = (variantId: string, quantityMilli: number, active = true) => ({ variantId, quantityMilli, active, custom: false });
+  const ok = { baseQuantityMilli: 1000, baseUnit: 'kg' as const, sizes: [size('1kg', 1000), size('half', 500), size('pao', 250)] };
+  assert.equal(checkRecipeScale(ok), null);
+  assert.deepEqual(checkRecipeScale({ ...ok, baseQuantityMilli: 0 }), { size: null, problem: 'BASE_QUANTITY_INVALID' });
+  assert.deepEqual(checkRecipeScale({ ...ok, sizes: ok.sizes.map((s) => ({ ...s, active: false })) }), { size: null, problem: 'NO_SIZES' });
+  assert.deepEqual(checkRecipeScale({ ...ok, sizes: [...ok.sizes, size('pao', 125)] }), { size: 3, problem: 'SIZE_DUPLICATE' });
+  assert.deepEqual(checkRecipeScale({ ...ok, sizes: [size('big', 200_000)] }), { size: 0, problem: 'SIZE_QUANTITY_INVALID' });
 });

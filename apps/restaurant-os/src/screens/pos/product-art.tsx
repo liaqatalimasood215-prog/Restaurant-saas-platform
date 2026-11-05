@@ -1,4 +1,4 @@
-import { CupSoda, Drumstick, Hamburger, Pizza, Popcorn, Soup, UtensilsCrossed } from 'lucide-react';
+import { Coffee, CupSoda, Drumstick, Fish, Hamburger, Pizza, Popcorn, Salad, Soup, UtensilsCrossed, Wheat } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 /**
@@ -9,13 +9,20 @@ import { cn } from '@/lib/cn';
 const ART: { match: RegExp; icon: typeof Pizza; emoji: string; tone: string }[] = [
   { match: /pizza/i, icon: Pizza, emoji: '🍕', tone: 'from-orange-100 to-red-100' },
   { match: /burger/i, icon: Hamburger, emoji: '🍔', tone: 'from-amber-100 to-orange-100' },
-  { match: /karahi/i, icon: Drumstick, emoji: '🍲', tone: 'from-orange-100 to-red-50' },
-  { match: /tikka/i, icon: Drumstick, emoji: '🍢', tone: 'from-orange-100 to-amber-50' },
+  { match: /karahi|handi|salan/i, icon: Soup, emoji: '🍲', tone: 'from-orange-100 to-red-50' },
+  { match: /tikka|kabab|kebab|boti|bbq|seekh/i, icon: Drumstick, emoji: '🍢', tone: 'from-orange-100 to-amber-50' },
+  { match: /fish/i, icon: Fish, emoji: '🐟', tone: 'from-sky-100 to-orange-50' },
+  { match: /daal|lentil/i, icon: Soup, emoji: '🍛', tone: 'from-amber-100 to-yellow-50' },
+  { match: /mutton|muttan|gosht/i, icon: Soup, emoji: '🍖', tone: 'from-orange-100 to-red-50' },
+  { match: /sabzi|vegetable|salad/i, icon: Salad, emoji: '🥗', tone: 'from-green-100 to-lime-50' },
+  { match: /roti|naan|paratha|tandoor/i, icon: Wheat, emoji: '🫓', tone: 'from-amber-100 to-orange-50' },
+  { match: /raita/i, icon: Soup, emoji: '🥣', tone: 'from-slate-100 to-sky-50' },
+  { match: /chai|tea|coffee/i, icon: Coffee, emoji: '☕', tone: 'from-amber-100 to-stone-50' },
   { match: /chicken|wing/i, icon: Drumstick, emoji: '🍗', tone: 'from-orange-100 to-amber-50' },
   { match: /fries|side/i, icon: Popcorn, emoji: '🍟', tone: 'from-yellow-100 to-amber-50' },
   { match: /pasta/i, icon: Soup, emoji: '🍝', tone: 'from-rose-100 to-orange-50' },
   { match: /water/i, icon: CupSoda, emoji: '💧', tone: 'from-sky-100 to-cyan-50' },
-  { match: /drink|juice|tea/i, icon: CupSoda, emoji: '🥤', tone: 'from-sky-100 to-cyan-50' },
+  { match: /drink|juice/i, icon: CupSoda, emoji: '🥤', tone: 'from-sky-100 to-cyan-50' },
 ];
 const FALLBACK = { icon: UtensilsCrossed, emoji: '🍽️', tone: 'from-slate-100 to-slate-50' };
 

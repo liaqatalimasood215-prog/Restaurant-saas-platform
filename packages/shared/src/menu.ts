@@ -7,6 +7,15 @@ import { checkName, cleanName, sameName } from './tables';
  * Roman Urdu: Menu ke qaide — naam, qeemat, size aur add-on; purane bill kabhi nahi badalte.
  */
 export const MAX_SIZES = 6;
+
+/**
+ * The price a product card shows (owner, 2026-11-05): the FIRST size in the Menu order — "1 kg first", then ½ kg and Pao
+ * when the item is tapped — never the cheapest one; an item without sizes shows its one price.
+ */
+export function cardPrice(item: { basePrice: number; variants: readonly { name: string; price: number; sort: number }[] }): { price: number; sizeName: string | null } {
+  const first = [...item.variants].sort((a, b) => a.sort - b.sort)[0];
+  return first ? { price: first.price, sizeName: first.name } : { price: item.basePrice, sizeName: null };
+}
 export const MAX_ADDONS_PER_GROUP = 20;
 /** Rs. 1,000,000 — a typing mistake guard */
 export const MAX_MENU_PRICE = 100_000_000;

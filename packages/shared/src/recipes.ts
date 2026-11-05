@@ -314,6 +314,119 @@ export function sameRecipe(a: Pick<RecipeVersion, 'lines' | 'yieldMilli'>, b: Pi
   return a.yieldMilli === b.yieldMilli && JSON.stringify(a.lines) === JSON.stringify(b.lines);
 }
 
+// ── Auto Scale (Recipe Builder R2, owner 2026-11-05) ──────────────────────────────────────────
+
+/**
+ * One base recipe for a menu item with sizes (1 kg Chicken Karahi); every ticked size follows it by its share:
+ * ½ kg uses half of every line, Pao a quarter. The base recipe is the item's own recipe (target variantId null);
+ * each size still gets its own saved recipe (target with its variantId), so stock use later takes exactly what was
+ * sold. A size the owner changes by hand is "custom" and keeps its own lines until "Back to Auto".
+ * Roman Urdu: Ek dafa 1 kg ki recipe likhein — ½ kg, Pao aur Half Pao khud ban jate hain.
+ */
+export const SCALE_UNITS = ['kg', 'g', 'l', 'ml', 'piece', 'plate', 'portion'] as const;
+export type ScaleUnit = (typeof SCALE_UNITS)[number];
+
+/** Weight and volume convert (1 kg = 1,000 g); counted units (piece, plate, portion) never do. */
+const SCALE_FAMILY: Record<ScaleUnit, { family: string; perUnit: number }> = {
+  kg: { family: 'weight', perUnit: 1000 },
+  g: { family: 'weight', perUnit: 1 },
+  l: { family: 'volume', perUnit: 1000 },
+  ml: { family: 'volume', perUnit: 1 },
+  piece: { family: 'piece', perUnit: 1 },
+  plate: { family: 'plate', perUnit: 1 },
+  portion: { family: 'portion', perUnit: 1 },
+};
+
+/** Thousandths of one unit in another of the same family (0.5 kg → 500 g), or null when they do not convert. */
+export function convertScaleQuantity(milli: number, from: ScaleUnit, to: ScaleUnit): number | null {
+  if (SCALE_FAMILY[from].family !== SCALE_FAMILY[to].family) return null;
+  return mulDivRound(milli, SCALE_FAMILY[from].perUnit, SCALE_FAMILY[to].perUnit);
+}
+
+export interface RecipeScaleSize {
+  variantId: Uuid;
+  /** How much this size is, in thousandths of the base unit: ½ kg with a kg base = 500 */
+  quantityMilli: number;
+  /** Ticked: Auto Scale makes this size's recipe. Unticked: no recipe from Auto Scale (Not tracked). */
+  active: boolean;
+  /** The owner typed this size's own quantities: they stay until "Back to Auto". */
+  custom: boolean;
+}
+
+export interface RecipeScale extends BranchScoped {
+  id: Uuid;
+  menuItemId: Uuid;
+  /** Off: every size keeps the recipe it has and is edited on its own (as before Auto Scale) */
+  enabled: boolean;
+  /** What the base recipe makes, in thousandths of `baseUnit` (1 kg = 1,000) */
+  baseQuantityMilli: number;
+  baseUnit: ScaleUnit;
+  sizes: RecipeScaleSize[];
+  updatedBy: Uuid;
+  updatedAt: IsoDateTime;
+}
+
+/** Share of the base in basis points: ½ kg of a 1 kg base = 5,000 (50 %). */
+export function scaleShareBps(sizeMilli: number, baseMilli: number): number {
+  return baseMilli > 0 ? mulDivRound(sizeMilli, 10_000, baseMilli) : 0;
+}
+
+/**
+ * The base lines for one size: every quantity × size ÷ base (750 g at ½ of 1 kg = 375 g). Loss %, optional,
+ * substitute and unit stay as they are, so the loss is never counted twice. A quantity never becomes zero.
+ */
+export function scaleLines(lines: readonly RecipeLine[], sizeMilli: number, baseMilli: number): RecipeLine[] {
+  return lines.map((line) => ({ ...line, quantityMilli: Math.max(1, mulDivRound(line.quantityMilli, sizeMilli, baseMilli)) }));
+}
+
+/** Scaled cost = base recipe cost × size ÷ base (Rs. 1,505 for 1 kg → Rs. 188.13 for ⅛ kg). */
+export function scaleCost(baseCost: Paisa | null, sizeMilli: number, baseMilli: number): Paisa | null {
+  return baseCost === null || baseMilli <= 0 ? null : mulDivRound(baseCost, sizeMilli, baseMilli);
+}
+
+/** Size names the kitchen uses, in grams or ml. "Pao" is a quarter kilo, "Half Pao" an eighth. */
+const NAMED_SIZES: [RegExp, number][] = [
+  [/\b(half|adha|aadha)\s*pa+o\b/i, 125],
+  [/\bpa+o\b/i, 250],
+];
+const FRACTIONS: Record<string, number> = { '½': 0.5, '¼': 0.25, '⅛': 0.125, '¾': 0.75, '1½': 1.5 };
+
+/**
+ * A size's quantity read from its name, in thousandths of the base unit: "½ kg" → 500 with a kg base,
+ * "Pao" → 250, "250 g" → 250 with a kg base; null when the name says nothing (Small, Medium) or the units differ.
+ */
+export function guessSizeQuantity(name: string, baseUnit: ScaleUnit): number | null {
+  const text = name.trim();
+  const match = /(1½|½|¼|⅛|¾|\d+(?:\.\d+)?)\s*(kg|g|gm|grams?|l|ltr|litres?|liters?|ml)\b/i.exec(text);
+  if (match) {
+    const amount = FRACTIONS[match[1]!] ?? Number(match[1]);
+    const word = match[2]!.toLowerCase();
+    const unit: ScaleUnit = word === 'kg' ? 'kg' : word.startsWith('g') ? 'g' : word === 'ml' ? 'ml' : 'l';
+    return convertScaleQuantity(Math.round(amount * 1000), unit, baseUnit);
+  }
+  for (const [pattern, grams] of NAMED_SIZES) {
+    if (pattern.test(text)) return convertScaleQuantity(grams * 1000, 'g', baseUnit);
+  }
+  return null;
+}
+
+export type ScaleProblem = 'BASE_QUANTITY_INVALID' | 'NO_SIZES' | 'SIZE_QUANTITY_INVALID' | 'SIZE_DUPLICATE';
+
+/** The first problem with an Auto Scale setup, or null. A size may be at most 100 × the base. */
+export function checkRecipeScale(scale: Pick<RecipeScale, 'baseQuantityMilli' | 'baseUnit' | 'sizes'>): { size: number | null; problem: ScaleProblem } | null {
+  if (!SCALE_UNITS.includes(scale.baseUnit) || !Number.isInteger(scale.baseQuantityMilli) || scale.baseQuantityMilli <= 0 || scale.baseQuantityMilli > 1_000_000 * MILLI) {
+    return { size: null, problem: 'BASE_QUANTITY_INVALID' };
+  }
+  if (!scale.sizes.some((s) => s.active)) return { size: null, problem: 'NO_SIZES' };
+  const seen = new Set<Uuid>();
+  for (const [index, size] of scale.sizes.entries()) {
+    if (seen.has(size.variantId)) return { size: index, problem: 'SIZE_DUPLICATE' };
+    seen.add(size.variantId);
+    if (!Number.isInteger(size.quantityMilli) || size.quantityMilli <= 0 || size.quantityMilli > scale.baseQuantityMilli * 100) return { size: index, problem: 'SIZE_QUANTITY_INVALID' };
+  }
+  return null;
+}
+
 // ── What the Recipes screens get ──────────────────────────────────────────────────────────────
 
 export interface MenuRecipeRow {
@@ -351,6 +464,9 @@ export interface RecipesView {
   /** Every ingredient (also Not in use, so old lines still show their name) and the batch recipes, for live costing */
   ingredients: Ingredient[];
   batches: { ingredientId: Uuid; lines: RecipeLine[]; yieldMilli: number | null }[];
+  /** Auto Scale setups and the base recipes (target variantId null) of items with sizes */
+  scales: RecipeScale[];
+  baseRecipes: Recipe[];
   tax: Pick<TaxSettings, 'rateBps' | 'pricesIncludeTax'>;
   /** Names of the people in the version history */
   staffNames: Record<Uuid, string>;
