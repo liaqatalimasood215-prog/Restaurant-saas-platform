@@ -290,6 +290,8 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
+**Edit Product built 2026-11-06 (DEMO), waiting for his review:** ✏️ on product cards (supplier screen and bill) → `ProductScreen` in `purchase-bill.tsx` (also Add New Product); ApiClient `updateSupplierProduct`, `removeSupplierProduct`.
+
 **New Purchase (Bill) + Add New Product built 2026-11-06 (DEMO), waiting for his review.** `screens/inventory/purchase-bill.tsx` (bill, product tiles, Add New Product, print); ApiClient `savePurchaseBill`, `get/save/deletePurchaseDraft`, `addSupplierProduct`; rules `billTotals`, `discountFromPercent`, `checkPurchaseBill`, `similarIngredients` in `packages/shared/src/suppliers.ts`; KhataEntry `billNo`, `discount`, `billId`; Supplier `rates`; `inventory.purchaseDrafts` (optional, no data version change). The supplier screen's product tiles open the bill; per-card Receive is gone (`receiveStock` stays in the API). Not built: unit switching on a bill line (bag ↔ kg), product photos (Phase 7), returns (S2).
 
 **Supplier full screen built 2026-11-06 (DEMO), waiting for his review:** the list is a card grid; a tap opens one supplier on the whole screen (← All suppliers) with his products as picture cards, a search, most delivered in 30 days first (`deliveriesPerProduct`, `sortByUse` in `packages/shared/src/suppliers.ts`; `deliveries30d` on each product row). Walkthroughs open a supplier through `backToList` first.

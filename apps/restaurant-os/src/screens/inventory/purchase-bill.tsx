@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Check, FileText, PackagePlus, Plus, Printer, Save, Search, ShoppingCart, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, FileText, PackagePlus, Pencil, Plus, Printer, Save, Search, ShoppingCart, Trash2 } from 'lucide-react';
 import {
   INGREDIENT_CATEGORIES,
   MILLI,
@@ -77,6 +77,8 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
   const [method, setMethod] = useState<SupplierPaymentMethod>(draft?.method ?? 'CASH');
   const [note, setNote] = useState(draft?.note ?? '');
   const [screen, setScreen] = useState<'bill' | 'new-product'>('bill');
+  /** Edit Product opened from a product card (the bill stays as it is) */
+  const [editing, setEditing] = useState<Ingredient | null>(null);
   const [extra, setExtra] = useState<Ingredient[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -164,11 +166,38 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
 
   if (printed) return <BillPrintDialog workspace={ws} purchase={printed.purchase} payment={printed.payment} ingredients={allIngredients} onClose={onClose} />;
 
-  if (screen === 'new-product') {
+  if (editing) {
+    const oldRate = paisaToInput(rateOf(editing.id));
     return (
-      <NewProductScreen
+      <ProductScreen
         workspace={ws}
         ingredients={allIngredients}
+        product={editing}
+        rate={rateOf(editing.id)}
+        backLabel={t('inventory.bill.newProduct.back')}
+        onCancel={() => setEditing(null)}
+        onSaved={(ingredient) => {
+          // A line still at the old price takes the corrected one; a price typed on the bill stays.
+          const newRate = paisaToInput(ingredient.purchasePrice);
+          setLines((all) => all.map((l) => (l.ingredientId === ingredient.id && l.rate === oldRate ? { ...l, rate: newRate } : l)));
+          setEditing(null);
+          toast.show({ tone: 'success', title: t('inventory.bill.editProduct.saved', { name: ingredient.name }) });
+        }}
+        onRemoved={(id) => {
+          setLines((all) => all.filter((l) => l.ingredientId !== id));
+          setEditing(null);
+          toast.show({ tone: 'success', title: t('inventory.bill.editProduct.removed', { name: editing.name, supplier: supplier.name }) });
+        }}
+      />
+    );
+  }
+
+  if (screen === 'new-product') {
+    return (
+      <ProductScreen
+        workspace={ws}
+        ingredients={allIngredients}
+        backLabel={t('inventory.bill.newProduct.back')}
         onCancel={() => setScreen('bill')}
         onSaved={(ingredient) => {
           setExtra((all) => [...all, ingredient]);
@@ -199,7 +228,7 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <ProductPicker workspace={ws} lines={lines} onPick={addLine} onNewProduct={() => setScreen('new-product')} />
+        <ProductPicker workspace={ws} lines={lines} onPick={addLine} onEdit={setEditing} onNewProduct={() => setScreen('new-product')} />
 
         <Card className="flex flex-col gap-3 self-start p-3 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto" aria-label={t('inventory.bill.billItems')} data-bill id="purchase-bill">
           <div className="grid grid-cols-2 gap-2">
@@ -380,7 +409,7 @@ function BillRow({ ingredient, line, amount, autoFocus, onChange, onRemove }: { 
 
 // ── Products to put on the bill ────────────────────────────────────────────────────────────────
 
-function ProductPicker({ workspace: ws, lines, onPick, onNewProduct }: { workspace: SupplierWorkspace; lines: BillLine[]; onPick: (i: Ingredient) => void; onNewProduct: () => void }) {
+function ProductPicker({ workspace: ws, lines, onPick, onEdit, onNewProduct }: { workspace: SupplierWorkspace; lines: BillLine[]; onPick: (i: Ingredient) => void; onEdit: (i: Ingredient) => void; onNewProduct: () => void }) {
   const [find, setFind] = useState('');
   const [category, setCategory] = useState<IngredientCategory | 'ALL'>('ALL');
   const his = ws.products.map((p) => p.ingredient);
@@ -415,7 +444,7 @@ function ProductPicker({ workspace: ws, lines, onPick, onNewProduct }: { workspa
       )}
       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4" data-product-grid>
         {shown.map((p) => (
-          <ProductTile key={p.ingredient.id} ingredient={p.ingredient} stock={stockText(p.ingredient, p.onHandMilli)} rate={p.lastRatePaisa} uses={p.deliveries30d} line={inBill(p.ingredient.id)} onPick={() => onPick(p.ingredient)} />
+          <ProductTile key={p.ingredient.id} ingredient={p.ingredient} stock={stockText(p.ingredient, p.onHandMilli)} rate={p.lastRatePaisa} uses={p.deliveries30d} line={inBill(p.ingredient.id)} onPick={() => onPick(p.ingredient)} onEdit={() => onEdit(p.ingredient)} />
         ))}
         {shown.length === 0 && <li className="col-span-full rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{his.length === 0 ? t('inventory.suppliers.noProducts') : t('inventory.suppliers.noProductMatch')}</li>}
       </ul>
@@ -424,7 +453,7 @@ function ProductPicker({ workspace: ws, lines, onPick, onNewProduct }: { workspa
           <h3 className="px-1 text-sm font-extrabold text-slate-700">{t('inventory.bill.otherProducts')}</h3>
           <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
             {others.map((i) => (
-              <ProductTile key={i.id} ingredient={i} stock={null} rate={i.purchasePrice} uses={0} line={inBill(i.id)} onPick={() => onPick(i)} />
+              <ProductTile key={i.id} ingredient={i} stock={null} rate={i.purchasePrice} uses={0} line={inBill(i.id)} onPick={() => onPick(i)} onEdit={() => onEdit(i)} />
             ))}
           </ul>
         </>
@@ -433,9 +462,10 @@ function ProductPicker({ workspace: ws, lines, onPick, onNewProduct }: { workspa
   );
 }
 
-function ProductTile({ ingredient, stock, rate, uses, line, onPick }: { ingredient: Ingredient; stock: string | null; rate: number; uses: number; line: BillLine | undefined; onPick: () => void }) {
+function ProductTile({ ingredient, stock, rate, uses, line, onPick, onEdit }: { ingredient: Ingredient; stock: string | null; rate: number; uses: number; line: BillLine | undefined; onPick: () => void; onEdit: () => void }) {
   return (
-    <li>
+    <li className="relative">
+      <EditProductButton name={ingredient.name} onClick={onEdit} />
       <button
         type="button"
         onClick={onPick}
@@ -448,7 +478,7 @@ function ProductTile({ ingredient, stock, rate, uses, line, onPick }: { ingredie
         </span>
         {uses > 0 && <span className="absolute left-3 top-3 rounded-full bg-white/90 px-1.5 text-[10px] font-bold text-brand ring-1 ring-brand/20">{t('inventory.suppliers.uses', { n: uses })}</span>}
         {line && (
-          <span className="absolute right-3 top-3 grid size-6 place-items-center rounded-full bg-brand text-white" data-in-bill aria-hidden>
+          <span className="absolute bottom-[calc(100%-4.5rem)] right-3 grid size-6 place-items-center rounded-full bg-brand text-white" data-in-bill aria-hidden>
             <Check className="size-4" />
           </span>
         )}
@@ -468,35 +498,88 @@ function ProductTile({ ingredient, stock, rate, uses, line, onPick }: { ingredie
   );
 }
 
-// ── Screen 2: Add New Product ──────────────────────────────────────────────────────────────────
+/** The ✏️ on a product card (a sibling of the card's own button, top right). */
+export function EditProductButton({ name, onClick }: { name: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={t('inventory.bill.editProduct.open', { name })} className="press absolute right-3 top-3 z-[1] grid size-8 place-items-center rounded-full bg-white/95 text-slate-600 shadow ring-1 ring-slate-200 hover:text-brand">
+      <Pencil className="size-4" aria-hidden />
+    </button>
+  );
+}
+
+// ── Screen 2: Add New Product / Edit Product ───────────────────────────────────────────────────
 
 const MEASURE_UNITS = ['kg', 'g', 'l', 'ml', 'piece'] as const;
 type MeasureUnit = (typeof MEASURE_UNITS)[number];
 const PACKINGS = ['bag', 'pack', 'box', 'carton'] as const;
 type Packing = (typeof PACKINGS)[number];
 const STOCK_UNIT: Record<MeasureUnit, StockUnit> = { kg: 'g', g: 'g', l: 'ml', ml: 'ml', piece: 'piece' };
+const isMeasure = (u: string): u is MeasureUnit => (MEASURE_UNITS as readonly string[]).includes(u);
+const isPacking = (u: string): u is Packing => (PACKINGS as readonly string[]).includes(u);
+
+/** How the form shows a saved product: measured in, packing and its size; null = units this form cannot show (bottles). */
+function unitsOf(product: Ingredient): { measure: MeasureUnit; packing: Packing | null; packSize: string } | null {
+  if (product.stockUnit !== 'g' && product.stockUnit !== 'ml' && product.stockUnit !== 'piece') return null;
+  const loose = isMeasure(product.purchaseUnit) ? product.purchaseUnit : null;
+  const packing = isPacking(product.purchaseUnit) ? product.purchaseUnit : null;
+  if (!loose && !packing) return null;
+  const measure: MeasureUnit = loose ?? (product.stockUnit === 'g' ? 'kg' : product.stockUnit === 'ml' ? 'l' : 'piece');
+  const factor = measure === 'kg' || measure === 'l' ? 1000 : 1;
+  const packSize = packing && product.packSizeMilli ? String(parseFloat((product.packSizeMilli / factor / MILLI).toFixed(3))) : '';
+  return { measure, packing, packSize };
+}
 
 /**
- * One new product for the shared list, on this supplier's list and the bill (owner's Option 2). Weight and volume are
- * counted in grams / ml, so recipes can use them; a packing (bag of 20 kg) needs its size. A name like one we already
- * have asks first ("use that one?"), and the exact same name is refused, so no product is made twice.
+ * Add New Product (owner's Option 2): one new product for the shared list, on this supplier's list and the bill.
+ * Edit Product (owner, 2026-11-06): the same form, filled in; the change is for every supplier and recipe, the price is
+ * also this supplier's own rate, and "Remove from his list" takes it off his list only (stock and history stay).
+ * Weight stays weight and volume stays volume once saved (the stock unit never changes after stock was recorded).
+ * A name like one we already have asks first ("use that one?"), and the exact same name is refused.
  */
-function NewProductScreen({ workspace: ws, ingredients, onCancel, onSaved }: { workspace: SupplierWorkspace; ingredients: Ingredient[]; onCancel: () => void; onSaved: (i: Ingredient) => void }) {
+export function ProductScreen({
+  workspace: ws,
+  ingredients,
+  product = null,
+  rate = null,
+  onCancel,
+  onSaved,
+  onRemoved,
+  backLabel,
+}: {
+  workspace: SupplierWorkspace;
+  ingredients: Ingredient[];
+  /** Edit this product; null = Add New Product */
+  product?: Ingredient | null;
+  /** His last rate for the product being edited (paisa) */
+  rate?: number | null;
+  onCancel: () => void;
+  onSaved: (i: Ingredient) => void;
+  onRemoved?: (id: string) => void;
+  backLabel: string;
+}) {
   const { allowed } = useSession();
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState<IngredientCategory>('OTHER');
-  const [measure, setMeasure] = useState<MeasureUnit>('kg');
-  const [packing, setPacking] = useState<Packing | null>(null);
-  const [packSize, setPackSize] = useState('');
-  const [price, setPrice] = useState('');
+  const start = product ? unitsOf(product) : null;
+  const unitsLocked = product !== null && start === null;
+  const [name, setName] = useState(product?.name ?? '');
+  const [category, setCategory] = useState<IngredientCategory>(product?.category ?? 'OTHER');
+  const [measure, setMeasure] = useState<MeasureUnit>(start?.measure ?? 'kg');
+  const [packing, setPacking] = useState<Packing | null>(start?.packing ?? null);
+  const [packSize, setPackSize] = useState(start?.packSize ?? '');
+  const [price, setPrice] = useState(product ? paisaToInput(rate ?? product.purchasePrice) : '');
   const [opening, setOpening] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const field = 'min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-base';
-  const purchaseUnit: PurchaseUnit = packing ?? measure;
-  const units = { purchaseUnit, stockUnit: STOCK_UNIT[measure] };
-  const like = name.trim().length >= 3 ? similarIngredients(name, ingredients.filter((i) => i.isActive && i.kind === 'BOUGHT')).slice(0, 4) : [];
+  const purchaseUnit: PurchaseUnit = unitsLocked ? product!.purchaseUnit : (packing ?? measure);
+  const stockUnit: StockUnit = unitsLocked ? product!.stockUnit : STOCK_UNIT[measure];
+  const units = { purchaseUnit, stockUnit };
+  // Editing: only units with the same stock unit (kg ↔ g, litre ↔ ml), so recorded stock keeps its meaning.
+  const measures = product ? MEASURE_UNITS.filter((u) => STOCK_UNIT[u] === product.stockUnit) : MEASURE_UNITS;
+  const others = ingredients.filter((i) => i.id !== product?.id);
+  const like = !product && name.trim().length >= 3 ? similarIngredients(name, others.filter((i) => i.isActive && i.kind === 'BOUGHT')).slice(0, 4) : [];
   const his = new Set(ws.supplier.productIds);
+  const key = product ? 'editProduct' : 'newProduct';
 
   const pickExisting = async (ingredient: Ingredient) => {
     if (!his.has(ingredient.id)) {
@@ -511,36 +594,51 @@ function NewProductScreen({ workspace: ws, ingredients, onCancel, onSaved }: { w
 
   const save = async () => {
     // Size of one packing in the measuring unit (a bag of 20 kg), kept in stock-unit thousandths.
-    const sizeMilli = packing ? parseQuantity(packSize, { allowZero: false }) : null;
-    if (packing && sizeMilli === null) return setError(t('inventory.bill.newProduct.sizeRequired', { packing: t(`inventory.unitOne.${packing}`) }));
+    const sizeMilli = !unitsLocked && packing ? parseQuantity(packSize, { allowZero: false }) : null;
+    if (!unitsLocked && packing && sizeMilli === null) return setError(t('inventory.bill.newProduct.sizeRequired', { packing: t(`inventory.unitOne.${packing}`) }));
     const factor = measure === 'kg' || measure === 'l' ? 1000 : 1;
-    const packSizeMilli = sizeMilli === null ? null : sizeMilli * factor;
+    const packSizeMilli = unitsLocked ? product!.packSizeMilli : sizeMilli === null ? null : sizeMilli * factor;
     const purchasePrice = parseRupees(price || '0');
     if (purchasePrice === null) return setError(t('inventory.bill.newProduct.priceInvalid'));
-    const openingDisplay = parseQuantity(opening || '0');
+    const openingDisplay = product ? 0 : parseQuantity(opening || '0');
     if (openingDisplay === null) return setError(t('inventory.bill.newProduct.openingInvalid'));
     const input = {
-      id: null,
+      // Editing keeps everything this form does not show (code, levels, storage place, batch, expiry).
+      id: product?.id ?? null,
       name,
-      code: suggestIngredientCode(name, ingredients.map((i) => i.code)),
+      code: product?.code ?? suggestIngredientCode(name, ingredients.map((i) => i.code)),
       category,
       purchaseUnit,
-      stockUnit: STOCK_UNIT[measure],
+      stockUnit,
       packSizeMilli,
-      minStockMilli: 0,
-      reorderQtyMilli: 0,
+      minStockMilli: product?.minStockMilli ?? 0,
+      reorderQtyMilli: product?.reorderQtyMilli ?? 0,
       purchasePrice,
-      preferredSupplierId: ws.supplier.id,
-      locationId: null,
-      batchNo: '',
-      expiryDate: null,
+      preferredSupplierId: product ? product.preferredSupplierId : ws.supplier.id,
+      locationId: product?.locationId ?? null,
+      batchNo: product?.batchNo ?? '',
+      expiryDate: product?.expiryDate ?? null,
       openingMilli: fromDisplayMilli(units, openingDisplay),
     };
-    const problem = checkIngredient(input, ingredients);
+    const problem = checkIngredient({ ...input, openingMilli: product ? null : input.openingMilli }, ingredients);
     if (problem) return setError(t(`inventory.errors.${problem.problem}`));
     setBusy(true);
     try {
-      onSaved(await getApi().addSupplierProduct(ws.supplier.id, input));
+      onSaved(product ? await getApi().updateSupplierProduct(ws.supplier.id, input) : await getApi().addSupplierProduct(ws.supplier.id, input));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('states.errorBody'));
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!product) return;
+    // A second tap removes: nothing goes by one slip of the finger.
+    if (!removing) return setRemoving(true);
+    setBusy(true);
+    try {
+      await getApi().removeSupplierProduct(ws.supplier.id, product.id);
+      onRemoved?.(product.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('states.errorBody'));
       setBusy(false);
@@ -549,18 +647,18 @@ function NewProductScreen({ workspace: ws, ingredients, onCancel, onSaved }: { w
 
   const chip = (on: boolean) => cn('press min-h-11 rounded-xl border px-4 text-sm font-bold', on ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white text-slate-700');
   return (
-    <div className="mx-auto max-w-2xl space-y-3" data-new-product>
+    <div className="mx-auto max-w-2xl space-y-3" data-new-product={product ? undefined : ''} data-edit-product={product ? product.name : undefined}>
       <button type="button" onClick={onCancel} className="press flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-bold text-slate-700 hover:bg-slate-100">
         <ArrowLeft className="size-4" aria-hidden />
-        {t('inventory.bill.newProduct.back')}
+        {backLabel}
       </button>
       <Card className="space-y-4 p-4 sm:p-5">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-black text-slate-900">
-            <PackagePlus className="size-6 text-brand" aria-hidden />
-            {t('inventory.bill.newProduct.title')}
+            {product ? <Pencil className="size-6 text-brand" aria-hidden /> : <PackagePlus className="size-6 text-brand" aria-hidden />}
+            {t(`inventory.bill.${key}.title`)}
           </h2>
-          <p className="text-sm text-slate-500">{t('inventory.bill.newProduct.hint', { name: ws.supplier.name })}</p>
+          <p className="text-sm text-slate-500">{t(`inventory.bill.${key}.hint`, { name: ws.supplier.name })}</p>
         </div>
         <label className="block">
           <span className="mb-1 block text-sm font-bold text-slate-800">{t('inventory.bill.newProduct.name')}</span>
@@ -592,36 +690,43 @@ function NewProductScreen({ workspace: ws, ingredients, onCancel, onSaved }: { w
             ))}
           </select>
         </label>
-        <fieldset>
-          <legend className="mb-1 text-sm font-bold text-slate-800">{t('inventory.bill.newProduct.measure')}</legend>
-          <div className="flex flex-wrap gap-2">
-            {MEASURE_UNITS.map((u) => (
-              <button key={u} type="button" aria-pressed={measure === u} onClick={() => (setMeasure(u), setError(null))} className={chip(measure === u)}>
-                {t(`inventory.bill.newProduct.measures.${u}`)}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend className="mb-1 text-sm font-bold text-slate-800">{t('inventory.bill.newProduct.packing')}</legend>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" aria-pressed={packing === null} onClick={() => setPacking(null)} className={chip(packing === null)}>
-              {t('inventory.bill.newProduct.loose')}
-            </button>
-            {PACKINGS.map((p) => (
-              <button key={p} type="button" aria-pressed={packing === p} onClick={() => (setPacking(p), setError(null))} className={chip(packing === p)}>
-                {t(`inventory.unitOne.${p}`)}
-              </button>
-            ))}
-          </div>
-          {packing && (
-            <label className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
-              {t('inventory.bill.newProduct.oneHolds', { packing: t(`inventory.unitOne.${packing}`) })}
-              <input value={packSize} onChange={(e) => (setPackSize(e.target.value), setError(null))} inputMode="decimal" placeholder="20" aria-label={t('inventory.bill.newProduct.packSize')} className="min-h-11 w-24 rounded-xl border border-slate-300 bg-white px-3 text-base tabular-nums" />
-              {t(`inventory.bill.newProduct.measures.${measure}`)}
-            </label>
-          )}
-        </fieldset>
+        {unitsLocked ? (
+          <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">{t('inventory.bill.editProduct.unitsInStock', { unit: unitLabel(purchaseUnit, MILLI) })}</p>
+        ) : (
+          <>
+            <fieldset>
+              <legend className="mb-1 text-sm font-bold text-slate-800">{t('inventory.bill.newProduct.measure')}</legend>
+              <div className="flex flex-wrap gap-2">
+                {measures.map((u) => (
+                  <button key={u} type="button" aria-pressed={measure === u} onClick={() => (setMeasure(u), setError(null))} className={chip(measure === u)}>
+                    {t(`inventory.bill.newProduct.measures.${u}`)}
+                  </button>
+                ))}
+              </div>
+              {product && <p className="mt-1 text-xs text-slate-500">{t('inventory.bill.editProduct.measureHint')}</p>}
+            </fieldset>
+            <fieldset>
+              <legend className="mb-1 text-sm font-bold text-slate-800">{t('inventory.bill.newProduct.packing')}</legend>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" aria-pressed={packing === null} onClick={() => setPacking(null)} className={chip(packing === null)}>
+                  {t('inventory.bill.newProduct.loose')}
+                </button>
+                {PACKINGS.map((p) => (
+                  <button key={p} type="button" aria-pressed={packing === p} onClick={() => (setPacking(p), setError(null))} className={chip(packing === p)}>
+                    {t(`inventory.unitOne.${p}`)}
+                  </button>
+                ))}
+              </div>
+              {packing && (
+                <label className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
+                  {t('inventory.bill.newProduct.oneHolds', { packing: t(`inventory.unitOne.${packing}`) })}
+                  <input value={packSize} onChange={(e) => (setPackSize(e.target.value), setError(null))} inputMode="decimal" placeholder="20" aria-label={t('inventory.bill.newProduct.packSize')} className="min-h-11 w-24 rounded-xl border border-slate-300 bg-white px-3 text-base tabular-nums" />
+                  {t(`inventory.bill.newProduct.measures.${measure}`)}
+                </label>
+              )}
+            </fieldset>
+          </>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-sm font-bold text-slate-800">{t('inventory.bill.newProduct.price', { unit: unitLabel(purchaseUnit, MILLI) })}</span>
@@ -630,28 +735,36 @@ function NewProductScreen({ workspace: ws, ingredients, onCancel, onSaved }: { w
               <input value={price} onChange={(e) => (setPrice(e.target.value), setError(null))} inputMode="decimal" placeholder="0" aria-label={t('inventory.bill.newProduct.price', { unit: unitLabel(purchaseUnit, MILLI) })} className={field} />
             </span>
           </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-bold text-slate-800">{t('inventory.bill.newProduct.opening', { unit: unitLabel(displayUnitOf(units), 2 * MILLI) })}</span>
-            <input value={opening} onChange={(e) => (setOpening(e.target.value), setError(null))} inputMode="decimal" placeholder="0" aria-label={t('inventory.bill.newProduct.openingLabel')} className={field} />
-            <span className="mt-0.5 block text-xs text-slate-500">{t('inventory.bill.newProduct.openingHint')}</span>
-          </label>
+          {!product && (
+            <label className="block">
+              <span className="mb-1 block text-sm font-bold text-slate-800">{t('inventory.bill.newProduct.opening', { unit: unitLabel(displayUnitOf(units), 2 * MILLI) })}</span>
+              <input value={opening} onChange={(e) => (setOpening(e.target.value), setError(null))} inputMode="decimal" placeholder="0" aria-label={t('inventory.bill.newProduct.openingLabel')} className={field} />
+              <span className="mt-0.5 block text-xs text-slate-500">{t('inventory.bill.newProduct.openingHint')}</span>
+            </label>
+          )}
         </div>
         <p className="flex items-start gap-2 rounded-xl bg-green-50 px-3 py-2 text-sm text-green-900">
           <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
-          {t('inventory.bill.newProduct.saveInInventory')}
+          {product ? t('inventory.bill.editProduct.forEveryone') : t('inventory.bill.newProduct.saveInInventory')}
         </p>
         {error && (
           <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
             {error}
           </p>
         )}
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {product && onRemoved && (
+            <Button variant={removing ? 'outline' : 'ghost'} className="mr-auto" disabled={busy} onClick={() => void remove()}>
+              <Trash2 className="size-4" aria-hidden />
+              {removing ? t('inventory.bill.editProduct.removeConfirm') : t('inventory.bill.editProduct.remove', { name: ws.supplier.name })}
+            </Button>
+          )}
           <Button variant="secondary" onClick={onCancel}>
             {t('inventory.form.cancel')}
           </Button>
           <Button disabled={busy || !allowed('inventory.manage')} onClick={() => void save()}>
             <Save className="size-4" aria-hidden />
-            {t('inventory.bill.newProduct.save')}
+            {t(`inventory.bill.${key}.save`)}
           </Button>
         </div>
       </Card>

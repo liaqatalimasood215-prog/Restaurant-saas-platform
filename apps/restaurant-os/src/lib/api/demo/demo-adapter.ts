@@ -3187,6 +3187,32 @@ export class DemoAdapter implements ApiClient, DemoControls {
     );
   }
 
+  updateSupplierProduct(supplierId: string, input: IngredientInput): Promise<Ingredient> {
+    return this.request(() =>
+      this.store.update((data) => {
+        if (!input.id) throw new ApiError('VALIDATION', 'Choose the product to edit.');
+        const supplier = data.inventory.suppliers.find((s) => s.id === supplierId);
+        if (!supplier) throw new ApiError('NOT_FOUND', 'Supplier not found.');
+        const ingredient = this.writeIngredient(data, input);
+        supplier.rates = { ...supplier.rates, [ingredient.id]: ingredient.purchasePrice };
+        if (!supplier.productIds.includes(ingredient.id)) supplier.productIds.push(ingredient.id);
+        return ingredient;
+      }),
+    );
+  }
+
+  removeSupplierProduct(supplierId: string, ingredientId: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'inventory.manage');
+        const supplier = data.inventory.suppliers.find((s) => s.id === supplierId);
+        if (!supplier) throw new ApiError('NOT_FOUND', 'Supplier not found.');
+        // Only his list changes: the shared product, its stock, bills and khata stay as they were.
+        supplier.productIds = supplier.productIds.filter((id) => id !== ingredientId);
+      }),
+    );
+  }
+
   // ── Notifications ──────────────────────────────────────────────────────────────────────────
 
   listNotifications(): Promise<StaffNotification[]> {

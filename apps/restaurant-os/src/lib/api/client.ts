@@ -668,6 +668,10 @@ export interface ApiClient {
   deletePurchaseDraft(supplierId: Uuid): Promise<void>;
   /** Add New Product from a bill: a new shared inventory product, put on this supplier's list in the same step. */
   addSupplierProduct(supplierId: Uuid, input: IngredientInput): Promise<Ingredient>;
+  /** Edit Product from his list or a bill: the shared product changes for everyone; the price is also his own last rate. */
+  updateSupplierProduct(supplierId: Uuid, input: IngredientInput): Promise<Ingredient>;
+  /** Takes a product off this supplier's list only; the product, its stock and history stay. */
+  removeSupplierProduct(supplierId: Uuid, ingredientId: Uuid): Promise<void>;
 
   /** Activation page (no login): who the link is for, or an error when it is used, revoked or expired. */
   getActivation(token: string): Promise<ActivationInfo>;

@@ -13,6 +13,7 @@ import {
   paisaToInput,
   parseRupees,
   supplierOrderAfterPicking,
+  type Ingredient,
   type KhataEntryRow,
   type KhataStatus,
   type Supplier,
@@ -32,7 +33,7 @@ import { getApi, type KhataPeriod } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { stockText, unitLabel } from './inventory-format';
-import { PurchaseBill } from './purchase-bill';
+import { EditProductButton, ProductScreen, PurchaseBill } from './purchase-bill';
 import { ingredientArt } from './recipes/recipe-lines';
 
 const STATUS_TONE: Record<KhataStatus, Tone> = { PAID: 'green', PARTLY_PAID: 'amber', UNPAID: 'red' };
@@ -237,6 +238,9 @@ function Workspace({ supplierId, canManage, onEdit, onNewBill }: { supplierId: s
   const [paying, setPaying] = useState(false);
   const [adding, setAdding] = useState('');
   const [find, setFind] = useState('');
+  const toast = useToast();
+  /** Edit Product from his list (owner, 2026-11-06) */
+  const [editing, setEditing] = useState<Ingredient | null>(null);
   if (query.loading && !query.data) return <LoadingState />;
   if (!query.data) return <ErrorState message={query.error?.message} onRetry={query.reload} />;
   const ws = query.data;
@@ -255,6 +259,27 @@ function Workspace({ supplierId, canManage, onEdit, onNewBill }: { supplierId: s
   const f = find.trim().toLowerCase();
   // Already in his most-delivered-first order from the server; the search keeps it.
   const shownProducts = f ? ws.products.filter((row) => row.ingredient.name.toLowerCase().includes(f) || row.ingredient.code.toLowerCase().includes(f)) : ws.products;
+
+  if (editing) {
+    return (
+      <ProductScreen
+        workspace={ws}
+        ingredients={ws.ingredients}
+        product={editing}
+        rate={ws.products.find((p) => p.ingredient.id === editing.id)?.lastRatePaisa ?? null}
+        backLabel={supplier.name}
+        onCancel={() => setEditing(null)}
+        onSaved={(ingredient) => {
+          setEditing(null);
+          toast.show({ tone: 'success', title: t('inventory.bill.editProduct.saved', { name: ingredient.name }) });
+        }}
+        onRemoved={() => {
+          setEditing(null);
+          toast.show({ tone: 'success', title: t('inventory.bill.editProduct.removed', { name: editing.name, supplier: supplier.name }) });
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4" data-supplier-workspace={supplier.name}>
@@ -332,7 +357,8 @@ function Workspace({ supplierId, canManage, onEdit, onNewBill }: { supplierId: s
         ) : (
           <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" data-product-grid>
             {shownProducts.map((row) => (
-              <li key={row.ingredient.id}>
+              <li key={row.ingredient.id} className="relative">
+                {canManage && <EditProductButton name={row.ingredient.name} onClick={() => setEditing(row.ingredient)} />}
                 <button
                   type="button"
                   disabled={!canManage}
