@@ -77,45 +77,45 @@ export function SuppliersTab({ canManage }: { canManage: boolean }) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)]" data-suppliers>
+      {picking && (
+        // One wide strip like the sections' Edit order (owner, 2026-11-06); it stays in view while he taps further down.
+        <div className="sticky top-20 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-brand/30 bg-brand-soft px-4 py-3 shadow-lg lg:col-span-2" data-supplier-order-editor>
+          <div className="min-w-48 flex-1">
+            <p className="text-sm font-semibold text-slate-800">{t('inventory.suppliers.order.hint')}</p>
+            {picking.length > 0 && (
+              <p className="mt-1 flex flex-wrap gap-1.5" data-order-chosen>
+                {picking.map((pid, index) => (
+                  <span key={pid} className="flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-800 ring-1 ring-brand/30">
+                    <span className="bg-brand-gradient grid size-5 place-items-center rounded-full text-[11px] font-black text-white">{index + 1}</span>
+                    {rows.find((r) => r.supplier.id === pid)?.supplier.name}
+                  </span>
+                ))}
+              </p>
+            )}
+          </div>
+          <Button variant="ghost" onClick={() => (setPicking(null), setOrderError(null))}>
+            {t('inventory.form.cancel')}
+          </Button>
+          <Button variant="secondary" onClick={() => void saveOrder([])}>
+            {t('inventory.suppliers.order.reset')}
+          </Button>
+          <Button disabled={picking.length === 0} onClick={() => void saveOrder(supplierOrderAfterPicking(rows.map((r) => r.supplier.id), picking))}>
+            <Check className="size-4" aria-hidden />
+            {t('inventory.suppliers.order.done')}
+          </Button>
+          {orderError && (
+            <p role="alert" className="w-full rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+              {orderError}
+            </p>
+          )}
+        </div>
+      )}
       <section className={cn('min-w-0 space-y-3', chosen && 'hidden lg:block')} aria-label={t('inventory.suppliers.listTitle')}>
         <div className="grid grid-cols-2 gap-2">
           <Total label={t('inventory.suppliers.todayBoughtAll')} value={formatPaisa(view.data.todayPurchases)} />
           <Total label={t('inventory.suppliers.dueAll')} value={formatPaisa(view.data.totalDue)} danger={view.data.totalDue > 0} />
         </div>
-        {picking ? (
-          // Stays in view while he taps suppliers further down the list.
-          <div className="sticky top-20 z-10 space-y-2 rounded-2xl border border-brand/30 bg-white p-3 shadow-lg" data-supplier-order-editor>
-            <p className="text-sm font-semibold text-slate-800">{t('inventory.suppliers.order.hint')}</p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" onClick={() => (setPicking(null), setOrderError(null))}>
-                {t('inventory.form.cancel')}
-              </Button>
-              <Button variant="secondary" onClick={() => void saveOrder([])}>
-                {t('inventory.suppliers.order.reset')}
-              </Button>
-              <Button
-                className="flex-1"
-                disabled={picking.length === 0}
-                onClick={() =>
-                  void saveOrder(
-                    supplierOrderAfterPicking(
-                      rows.map((r) => r.supplier.id),
-                      picking,
-                    ),
-                  )
-                }
-              >
-                <Check className="size-4" aria-hidden />
-                {t('inventory.suppliers.order.done')}
-              </Button>
-            </div>
-            {orderError && (
-              <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                {orderError}
-              </p>
-            )}
-          </div>
-        ) : (
+        {!picking && (
           <>
             <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
               <Search className="size-4 shrink-0 text-slate-400" aria-hidden />
