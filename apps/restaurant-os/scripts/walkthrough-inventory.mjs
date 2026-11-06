@@ -86,7 +86,7 @@ const owner = await openAs(USER.owner, '/inventory', DESKTOP);
 await openOverview(owner);
 await card(owner, 'Ingredients').waitFor();
 const upgraded = await saved(owner);
-assert.equal(upgraded.version, 19, 'brought up to the newest version');
+assert.equal(upgraded.version, 20, 'brought up to the newest version');
 assert.equal(upgraded.employeeCounter, 77, 'the old data was kept');
 assert.equal(upgraded.inventory.ingredients.filter((i) => i.kind === 'BOUGHT').length, 25);
 assert.ok(upgraded.rolePermissions.MANAGER.includes('inventory.view') && upgraded.rolePermissions.MANAGER.includes('menu.view'));

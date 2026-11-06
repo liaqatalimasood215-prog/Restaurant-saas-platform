@@ -5,7 +5,7 @@
 > mein sab se pehle likhein: **"PROGRESS.md aur CLAUDE.md padho, phir wahin se jaari rakho."**
 > Naya project mat banana, code mat badalna jab tak kaam na diya jaye.
 
-**Last updated:** 2026-11-05 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
+**Last updated:** 2026-11-06 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
 everything in very easy Roman Urdu, code and documents in English)
 
 ---
@@ -70,6 +70,7 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 | POS added-product tick (green tick on add, red ✓ quantity while in the bill) | **Approved** 2026-11-04 ("Approve"), display only |
 | Inventory & Suppliers plan (steps A–H) and its 6 decisions (owner's brief 2026-11-04) | **Approved** 2026-11-04. **Step A approved** 2026-11-04 ("Approve, Step B"); **Step B (Recipes & Food Cost) built** the same day (DEMO). His second brief the same day: **revised plan approved** (inventory phases 1–6, `PROJECT_RULES.md` §20); **phase 1 (tidy UI + Stock Movements) built** 2026-11-05 (DEMO; not reviewed separately). **Recipe Builder R1** built 2026-11-05; **R2 (Auto Scale, his second picture and brief) built and approved 2026-11-05 ("Approve")**; next: phase 2 (automatic stock use), only after his "shuru karo" |
 | Demo data "Lala Restaurant — DEMO" (owner's four answers 2026-11-05: desi menu yes, Roti/Naan + cold drink/water + raita/salad yes, name Lala Restaurant, keep what he added) | **Approved** 2026-11-05 ("Approve"), DEMO; POS / Waiter cards show the 1 kg price first |
+| Supplier list order, pictures and ranges (owner 2026-11-06) | **Built** 2026-11-06 (DEMO), waiting for his review |
 | Suppliers (owner's Smart Supplier brief 2026-11-05) | Phase 0 plan **approved** ("Approve, S1 karo"); **S1 built and approved** 2026-11-06 ("Approve"), DEMO, with the Edit order button; then S2, S3, S4 each after his "shuru karo" |
 | Phase 2 customer website (`apps/customer`) | **Approved** 2026-10-31 ("Approve, Phase C karo"): redesigned from the owner's six-screen picture, DEMO |
 | Online App / Website rework (owner's brief, steps A–H) | Steps A–D **approved** (D on 2026-11-01); steps E–H **paused** by the owner, not cancelled |
@@ -288,6 +289,8 @@ walkthrough scripts clear localStorage themselves; the POS bill panel remounts w
 changes (state that must survive, such as `payNow`, lives in the draft, `screens/pos/draft.ts`).
 
 ## 9. Pending tasks and next steps (in this order)
+
+**Supplier order, pictures and ranges built 2026-11-06 (DEMO), waiting for the owner's review** (his request, restated and confirmed: Edit order for suppliers, demo picture + Upload, whole range per supplier, easy UI). Supplier `sortOrder` and `photo` (256 px JPEG data URL, `isSupplierPhoto`, max 150,000 characters) in `packages/shared/src/inventory.ts` / `suppliers.ts`; `setSupplierOrder` in the ApiClient; data version 20 (`addSupplierRanges` in `lala-seed.ts`, Lala data only). `walkthrough:supplier-order`. Also 2026-11-06: the demo data's made-up 150–350 ms delay per call is gone (POS and Tables felt slow). The unfinished S2 rules of the earlier chat (returns, corrections, periods) are not in this branch: they are still uncommitted in the worktree `restaurant-software-setup-1ed6fb`; S2 waits for his "shuru karo".
 
 **Suppliers S1 built 2026-11-05 and approved 2026-11-06 ("Approve"), DEMO.** His brief (one supplier = one screen, milk 50 L in the morning, pay in the evening). Next after his approval: **S2** returns and corrections (new entries with a reason, never deletes), history filters Yesterday / Week / Month / date, printable daily statement; **S3** optional purchase orders (draft → approve → partly / fully received → cancelled; only what arrives goes into stock); **S4** expenses (no double counting of purchases); then inventory phase 2 (sales take stock by verified recipes). Open: advance payments to suppliers (refused in S1), supplier cash in the cash count (Phase 7), Cashier receiving stock (Role Permissions later).
 

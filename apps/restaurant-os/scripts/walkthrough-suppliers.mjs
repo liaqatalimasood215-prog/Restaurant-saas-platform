@@ -192,7 +192,7 @@ try {
   const order = await openAs(USER.owner, LAPTOP);
   assert.deepEqual(await tabsOf(order), ['Suppliers', 'Stock', 'Recipes', 'Overview', 'Reports']);
   assert.equal(await order.getByRole('tab', { name: 'Suppliers', exact: true }).getAttribute('aria-selected'), 'true', 'Inventory opens on the first section');
-  await order.getByRole('button', { name: 'Edit order' }).click();
+  await order.getByRole('button', { name: 'Edit order', exact: true }).click();
   for (const name of ['Suppliers', 'Recipes', 'Stock']) await order.getByRole('tab', { name: new RegExp(`^${name}`) }).click();
   assert.deepEqual(await order.locator('[data-order-number]').allInnerTexts(), ['1', '3', '2']);
   await shot(order, '09-laptop-edit-order');
@@ -200,7 +200,7 @@ try {
   assert.deepEqual(await tabsOf(order), ['Suppliers', 'Recipes', 'Stock', 'Overview', 'Reports']);
   await order.reload({ waitUntil: 'networkidle' });
   assert.deepEqual(await tabsOf(order), ['Suppliers', 'Recipes', 'Stock', 'Overview', 'Reports'], 'kept after a reload');
-  await order.getByRole('button', { name: 'Edit order' }).click();
+  await order.getByRole('button', { name: 'Edit order', exact: true }).click();
   await order.getByRole('button', { name: 'Reset' }).click();
   assert.deepEqual(await tabsOf(order), ['Suppliers', 'Stock', 'Recipes', 'Overview', 'Reports']);
   await order.close();

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkReceipt, checkSupplierPayment, khataBalances, khataSummary, lineAmount, receivedStockMilli, type KhataEntry } from './index';
+import { checkReceipt, checkSupplierPayment, isSupplierPhoto, khataBalances, khataSummary, lineAmount, receivedStockMilli, sortSuppliers, supplierOrderAfterPicking, type KhataEntry } from './index';
 
 const milk = { id: 'milk', isActive: true, kind: 'BOUGHT' as const, purchaseUnit: 'l' as const, stockUnit: 'ml' as const, packSizeMilli: null };
 const atta = { id: 'atta', isActive: true, kind: 'BOUGHT' as const, purchaseUnit: 'pack' as const, stockUnit: 'g' as const, packSizeMilli: 20_000_000 };
@@ -55,4 +55,24 @@ test('a payment: above zero, not more than due, a method, not a future date', ()
   assert.equal(checkSupplierPayment({ ...ok, method: 'CHEQUE' }, 1_540_000, '2026-11-05'), 'METHOD_INVALID');
   assert.equal(checkSupplierPayment({ ...ok, date: '2026-11-06' }, 1_540_000, '2026-11-05'), 'DATE_INVALID');
   assert.equal(checkSupplierPayment(ok, 0, '2026-11-05'), 'NOTHING_DUE');
+});
+
+test("Edit order: his taps first (Karyana, Sabzi, Chicken), the rest keep their place; never placed = by name after them", () => {
+  const list = [
+    { name: 'Koyla Depot', sortOrder: undefined },
+    { name: 'Chicken Point', sortOrder: 2 },
+    { name: 'City Packaging', sortOrder: undefined },
+    { name: 'Kiryana Store', sortOrder: 0 },
+    { name: 'Sabzi Mandi', sortOrder: 1 },
+  ];
+  assert.deepEqual(sortSuppliers(list).map((s) => s.name), ['Kiryana Store', 'Sabzi Mandi', 'Chicken Point', 'City Packaging', 'Koyla Depot']);
+  assert.deepEqual(supplierOrderAfterPicking(['a', 'b', 'c', 'd'], ['c', 'a']), ['c', 'a', 'b', 'd']);
+  assert.deepEqual(supplierOrderAfterPicking(['a', 'b'], ['b', 'b', 'x']), ['b', 'a'], 'a double tap or an unknown id counts once / not at all');
+});
+
+test('a supplier picture is a small image data URL, never a link or a huge photo', () => {
+  assert.equal(isSupplierPhoto('data:image/jpeg;base64,/9j/4AAQSkZJRg=='), true);
+  assert.equal(isSupplierPhoto('https://example.com/a.jpg'), false);
+  assert.equal(isSupplierPhoto('data:image/svg+xml;base64,PHN2Zz4='), false, 'no SVG (it can carry scripts)');
+  assert.equal(isSupplierPhoto(`data:image/png;base64,${'A'.repeat(200_000)}`), false);
 });

@@ -146,8 +146,10 @@ import {
   SUPPLIER_CATEGORIES,
   checkReceipt,
   checkSupplierPayment,
+  isSupplierPhoto,
   khataBalances,
   khataSummary,
+  sortSuppliers,
   lineAmount,
   receivedStockMilli,
   type KhataEntry,
@@ -2858,6 +2860,23 @@ export class DemoAdapter implements ApiClient, DemoControls {
     );
   }
 
+  setSupplierOrder(supplierIds: string[]): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'inventory.manage');
+        const active = data.inventory.suppliers.filter((s) => s.isActive);
+        if (supplierIds.length > 0 && (supplierIds.length !== active.length || new Set(supplierIds).size !== supplierIds.length || active.some((s) => !supplierIds.includes(s.id)))) {
+          throw new ApiError('CONFLICT', 'The supplier list changed. Open it again and try once more.');
+        }
+        for (const supplier of data.inventory.suppliers) {
+          const place = supplierIds.indexOf(supplier.id);
+          if (place >= 0) supplier.sortOrder = place;
+          else delete supplier.sortOrder;
+        }
+      }),
+    );
+  }
+
   // ── Suppliers and khata (DEMO, Suppliers S1) ───────────────────────────────────────────────
 
   private branchToday(data: DemoData): string {
@@ -2873,10 +2892,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const data = this.store.read();
       this.require(data, 'inventory.view');
       const today = this.branchToday(data);
-      const suppliers = data.inventory.suppliers
-        .filter((s) => s.isActive)
-        .map((supplier) => ({ supplier, summary: khataSummary(this.khataOf(data, supplier.id), today) }))
-        .sort((a, b) => a.supplier.name.localeCompare(b.supplier.name));
+      const suppliers = sortSuppliers(data.inventory.suppliers.filter((s) => s.isActive)).map((supplier) => ({ supplier, summary: khataSummary(this.khataOf(data, supplier.id), today) }));
       return {
         today,
         suppliers,
@@ -2937,7 +2953,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (!existing && (!Number.isInteger(input.openingBalance) || input.openingBalance < 0 || input.openingBalance > MAX_SUPPLIER_AMOUNT)) {
           throw new ApiError('VALIDATION', 'Type the old balance in rupees, or leave it at 0.');
         }
-        const fields = { name, phone, category: input.category, address: input.address.trim(), notes: input.notes.trim(), productIds };
+        if (input.photo !== undefined && input.photo !== null && !isSupplierPhoto(input.photo)) throw new ApiError('VALIDATION', 'Choose a JPEG, PNG or WebP picture.');
+        const fields = { name, phone, category: input.category, address: input.address.trim(), notes: input.notes.trim(), productIds, ...(input.photo !== undefined && { photo: input.photo }) };
         if (existing) return Object.assign(existing, fields);
         const supplier: Supplier = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, isActive: true, ...fields };
         inv.suppliers.push(supplier);

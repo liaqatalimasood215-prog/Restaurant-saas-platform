@@ -365,6 +365,26 @@ const ROWS: Row[] = [
   [59, 'Takeaway boxes (karahi)', 'TKB-001', 'PACKAGING', 'pack', 'piece', 50, 50, 4, 1500, SUPPLIER.packaging, LOCATION.mainStore, 100, null],
   [23, 'Paper carry bags', 'PCB-001', 'PACKAGING', 'pack', 'piece', 100, 100, 3, 900, SUPPLIER.packaging, LOCATION.mainStore, 90, null],
   [24, 'Dish wash liquid', 'DWL-001', 'CLEANING', 'l', 'ml', null, 2, 5, 450, SUPPLIER.kiryana, LOCATION.mainStore, 4, null],
+  // Owner, 2026-11-06: every demo supplier brings his whole range (karyana, sabzi, chicken, doodh). Added by the 19 → 20 upgrade.
+  [61, 'Basmati rice', 'RIC-001', 'GRAINS', 'kg', 'g', null, 5, 10, 380, SUPPLIER.kiryana, LOCATION.dry, 10, null],
+  [62, 'Haldi (200 g pack)', 'HLD-001', 'SAUCES_SPICES', 'pack', 'g', 200, 0.2, 3, 220, SUPPLIER.kiryana, LOCATION.dry, 0.6, null],
+  [63, 'Zeera (200 g pack)', 'ZRA-001', 'SAUCES_SPICES', 'pack', 'g', 200, 0.2, 3, 450, SUPPLIER.kiryana, LOCATION.dry, 0.4, null],
+  [64, 'Dhania powder (200 g pack)', 'DHP-001', 'SAUCES_SPICES', 'pack', 'g', 200, 0.2, 3, 200, SUPPLIER.kiryana, LOCATION.dry, 0.6, null],
+  [65, 'Garam masala (100 g pack)', 'GRM-001', 'SAUCES_SPICES', 'pack', 'g', 100, 0.2, 5, 250, SUPPLIER.kiryana, LOCATION.dry, 0.5, null],
+  [66, 'Elaichi (50 g pack)', 'ELC-001', 'SAUCES_SPICES', 'pack', 'g', 50, 0.05, 4, 600, SUPPLIER.kiryana, LOCATION.dry, 0.15, null],
+  [67, 'Sirka (vinegar)', 'VNG-001', 'SAUCES_SPICES', 'l', 'ml', null, 0.5, 2, 180, SUPPLIER.kiryana, LOCATION.dry, 1.5, null],
+  [68, 'Potatoes (aloo)', 'ALU-001', 'VEGETABLES', 'kg', 'g', null, 5, 20, 120, SUPPLIER.sabzi, LOCATION.dry, 20, null],
+  [69, 'Capsicum (shimla mirch)', 'CAP-001', 'VEGETABLES', 'kg', 'g', null, 1, 3, 350, SUPPLIER.sabzi, LOCATION.fridge, 2, 5],
+  [70, 'Cabbage (band gobhi)', 'CBG-001', 'VEGETABLES', 'kg', 'g', null, 1, 4, 120, SUPPLIER.sabzi, LOCATION.fridge, 3, 6],
+  [71, 'Peas (matar)', 'PEA-001', 'VEGETABLES', 'kg', 'g', null, 1, 3, 300, SUPPLIER.sabzi, LOCATION.fridge, 2, 4],
+  [72, 'Spinach (palak)', 'SPN-001', 'VEGETABLES', 'kg', 'g', null, 1, 4, 160, SUPPLIER.sabzi, LOCATION.fridge, 2, 2],
+  [73, 'Mint (podina)', 'MNT-001', 'VEGETABLES', 'kg', 'g', null, 0.2, 1, 400, SUPPLIER.sabzi, LOCATION.fridge, 0.3, 2],
+  [74, 'Carrots (gajar)', 'CRT-001', 'VEGETABLES', 'kg', 'g', null, 1, 4, 140, SUPPLIER.sabzi, LOCATION.fridge, 3, 7],
+  [75, 'Chicken leg piece', 'CHL-001', 'MEAT', 'kg', 'g', null, 3, 10, 600, SUPPLIER.chicken, LOCATION.freezer, 6, 3],
+  [76, 'Chicken wings', 'CHW-001', 'MEAT', 'kg', 'g', null, 2, 5, 480, SUPPLIER.chicken, LOCATION.freezer, 3, 3],
+  [77, 'Chicken breast (tikka cut)', 'CHT-001', 'MEAT', 'kg', 'g', null, 3, 10, 700, SUPPLIER.chicken, LOCATION.freezer, 5, 3],
+  [78, 'Paneer', 'PNR-001', 'DAIRY', 'kg', 'g', null, 0.5, 2, 1400, SUPPLIER.dairy, LOCATION.fridge, 1, 5],
+  [79, 'Khoya', 'KHY-001', 'DAIRY', 'kg', 'g', null, 0.5, 2, 1200, SUPPLIER.dairy, LOCATION.fridge, 0.5, 4],
 ];
 
 const ING = (n: number) => id(1300 + n);
@@ -937,4 +957,23 @@ export function upgradeToLala(data: DemoData, now = new Date()): DemoData {
     modifierGroups,
     inventory,
   };
+}
+
+// ── Upgrade 19 → 20: each demo supplier's whole range (owner, 2026-11-06) ─────────────────────
+
+/**
+ * Lala data only (the Aziz Pizza test data has none of these suppliers): adds the new karyana, sabzi, chicken and doodh
+ * products with their opening stock, and puts each on its demo supplier's list. Everything he made or changed stays.
+ */
+export function addSupplierRanges(data: DemoData, now = new Date()): DemoData {
+  const inventory = data.inventory;
+  if (!inventory.suppliers.some((s) => s.id === SUPPLIER.kiryana)) return data;
+  const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+  const ownerId = data.staff.find((s) => s.role === 'OWNER')?.id ?? id(101);
+  const { ingredients, movements } = ingredientsAndMovements(scope, ownerId, now, new Set([...inventory.ingredients.map((i) => i.id), NAAN_DOUGH]));
+  const suppliers = inventory.suppliers.map((s) => {
+    const more = ingredients.filter((i) => i.preferredSupplierId === s.id && !s.productIds.includes(i.id)).map((i) => i.id);
+    return more.length > 0 ? { ...s, productIds: [...s.productIds, ...more] } : s;
+  });
+  return { ...data, inventory: { ...inventory, suppliers, ingredients: [...inventory.ingredients, ...ingredients], movements: [...inventory.movements, ...movements] } };
 }

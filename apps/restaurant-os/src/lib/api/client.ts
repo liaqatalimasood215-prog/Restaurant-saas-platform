@@ -373,6 +373,8 @@ export interface SupplierProfileInput {
   productIds: Uuid[];
   /** New supplier only: what we already owe him from before (paisa); 0 = nothing */
   openingBalance: number;
+  /** His picture (small data URL), null = back to the category picture, missing = unchanged */
+  photo?: string | null;
 }
 
 /** One delivery: stock goes up and his khata grows, in one step and only once (idempotency key). */
@@ -612,6 +614,8 @@ export interface ApiClient {
   /** One supplier's screen: totals, his products with their stock, and his khata (today or everything). */
   getSupplierWorkspace(supplierId: Uuid, period: KhataPeriod): Promise<SupplierWorkspace>;
   saveSupplier(input: SupplierProfileInput): Promise<Supplier>;
+  /** Edit order: the suppliers in his order (every active supplier once); an empty list = back to A–Z. */
+  setSupplierOrder(supplierIds: Uuid[]): Promise<void>;
   /** Receive a delivery: PURCHASE stock movements + one khata entry; the rate becomes the product's purchase price. */
   receiveStock(input: ReceiveStockInput): Promise<KhataEntry>;
   paySupplier(input: SupplierPaymentInput): Promise<KhataEntry>;

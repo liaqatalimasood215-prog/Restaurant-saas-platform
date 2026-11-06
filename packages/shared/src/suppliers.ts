@@ -156,6 +156,44 @@ export function khataBalances(entries: readonly Pick<KhataEntry, 'id' | 'amount'
   return after;
 }
 
+// ── The list's order and pictures (owner, 2026-11-06) ─────────────────────────────────────────
+
+/** His order first (sortOrder 0, 1, 2 …), then the suppliers he never placed, by name. */
+export function sortSuppliers<T extends Pick<Supplier, 'name' | 'sortOrder'>>(suppliers: readonly T[]): T[] {
+  return [...suppliers].sort((a, b) => (a.sortOrder ?? Infinity) - (b.sortOrder ?? Infinity) || a.name.localeCompare(b.name));
+}
+
+/**
+ * Edit order: the suppliers he tapped come first in that order, the others follow in their old order. Returns every id
+ * once, so saving it gives each supplier a place. An empty tap list keeps the old order.
+ */
+export function supplierOrderAfterPicking(currentIds: readonly Uuid[], picked: readonly Uuid[]): Uuid[] {
+  const chosen = [...new Set(picked)].filter((id) => currentIds.includes(id));
+  return [...chosen, ...currentIds.filter((id) => !chosen.includes(id))];
+}
+
+/** About 110 KB of text: a 256 px JPEG is far smaller; a whole camera photo is refused. */
+export const MAX_SUPPLIER_PHOTO_CHARS = 150_000;
+
+/** A supplier picture: a small PNG / JPEG / WebP data URL. (DEMO; Phase 7 stores real photos in file storage.) */
+export function isSupplierPhoto(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= MAX_SUPPLIER_PHOTO_CHARS && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value);
+}
+
+/** The demo picture of a supplier without his own photo: what he brings. */
+export const SUPPLIER_CATEGORY_ART: Record<SupplierCategory, string> = {
+  DAIRY: '🥛',
+  CHICKEN: '🐔',
+  MEAT: '🥩',
+  FISH: '🐟',
+  VEGETABLES: '🥬',
+  GROCERY: '🛒',
+  DRINKS: '🥤',
+  PACKAGING: '📦',
+  FUEL: '🔥',
+  OTHER: '🏪',
+};
+
 // ── What the Suppliers screens get ────────────────────────────────────────────────────────────
 
 export interface SupplierRow {

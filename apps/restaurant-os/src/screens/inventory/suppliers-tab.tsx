@@ -1,18 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { ArrowLeft, Banknote, Check, ChevronRight, PackagePlus, Pencil, Phone, Plus, Search, Truck } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ArrowLeft, Banknote, Camera, Check, ChevronRight, ListOrdered, PackagePlus, Pencil, Phone, Plus, Search, Trash2, Truck } from 'lucide-react';
 import {
   MILLI,
   SUPPLIER_CATEGORIES,
+  SUPPLIER_CATEGORY_ART,
   SUPPLIER_PAYMENT_METHODS,
   checkReceipt,
   checkSupplierPayment,
   formatPaisa,
+  isSupplierPhoto,
   lineAmount,
   paisaToInput,
   parseQuantity,
   parseRupees,
+  supplierOrderAfterPicking,
   type KhataEntryRow,
   type KhataStatus,
   type Supplier,
@@ -44,17 +47,33 @@ const newKey = () => crypto.randomUUID();
  * in one step), Settle Payment and today's khata. Phones show the list first, then the supplier with a Back button.
  */
 export function SuppliersTab({ canManage }: { canManage: boolean }) {
+  const toast = useToast();
   const view = useApiQuery(() => getApi().getSuppliers(), []);
   const [chosen, setChosen] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Supplier | 'new' | null>(null);
+  /** Edit order (owner, 2026-11-06): the suppliers tapped so far, in that order */
+  const [picking, setPicking] = useState<string[] | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
   if (view.loading && !view.data) return <LoadingState />;
   if (!view.data) return <ErrorState message={view.error?.message} onRetry={view.reload} />;
   const rows = view.data.suppliers;
   const q = query.trim().toLowerCase();
-  const shown = rows.filter((r) => !q || r.supplier.name.toLowerCase().includes(q) || r.supplier.phone.includes(q) || t(`inventory.suppliers.categories.${r.supplier.category}`).toLowerCase().includes(q));
+  const shown = picking ? rows : rows.filter((r) => !q || r.supplier.name.toLowerCase().includes(q) || r.supplier.phone.includes(q) || t(`inventory.suppliers.categories.${r.supplier.category}`).toLowerCase().includes(q));
   // Wide screens always show a supplier: the chosen one, else the first.
   const selectedId = chosen ?? rows[0]?.supplier.id ?? null;
+
+  const saveOrder = async (ids: string[]) => {
+    try {
+      await getApi().setSupplierOrder(ids);
+      setPicking(null);
+      setOrderError(null);
+      toast.show({ tone: 'success', title: t('inventory.suppliers.order.saved') });
+    } catch (err) {
+      setOrderError(err instanceof Error ? err.message : t('states.errorBody'));
+    }
+  };
+  const tap = (id: string) => setPicking((list) => (list ? (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]) : list));
 
   return (
     <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)]" data-suppliers>
@@ -63,19 +82,65 @@ export function SuppliersTab({ canManage }: { canManage: boolean }) {
           <Total label={t('inventory.suppliers.todayBoughtAll')} value={formatPaisa(view.data.todayPurchases)} />
           <Total label={t('inventory.suppliers.dueAll')} value={formatPaisa(view.data.totalDue)} danger={view.data.totalDue > 0} />
         </div>
-        <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
-          <Search className="size-4 text-slate-400" aria-hidden />
-          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('inventory.suppliers.search')} aria-label={t('inventory.suppliers.search')} className="w-full bg-transparent text-sm" />
-        </label>
+        {picking ? (
+          // Stays in view while he taps suppliers further down the list.
+          <div className="sticky top-20 z-10 space-y-2 rounded-2xl border border-brand/30 bg-white p-3 shadow-lg" data-supplier-order-editor>
+            <p className="text-sm font-semibold text-slate-800">{t('inventory.suppliers.order.hint')}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={() => (setPicking(null), setOrderError(null))}>
+                {t('inventory.form.cancel')}
+              </Button>
+              <Button variant="secondary" onClick={() => void saveOrder([])}>
+                {t('inventory.suppliers.order.reset')}
+              </Button>
+              <Button
+                className="flex-1"
+                disabled={picking.length === 0}
+                onClick={() =>
+                  void saveOrder(
+                    supplierOrderAfterPicking(
+                      rows.map((r) => r.supplier.id),
+                      picking,
+                    ),
+                  )
+                }
+              >
+                <Check className="size-4" aria-hidden />
+                {t('inventory.suppliers.order.done')}
+              </Button>
+            </div>
+            {orderError && (
+              <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                {orderError}
+              </p>
+            )}
+          </div>
+        ) : (
+          <>
+            <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
+              <Search className="size-4 shrink-0 text-slate-400" aria-hidden />
+              <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('inventory.suppliers.search')} aria-label={t('inventory.suppliers.search')} className="w-full min-w-0 bg-transparent text-sm" />
+            </label>
+            <div className="flex items-center justify-between gap-2 px-1">
+              <h2 className="text-sm font-extrabold text-slate-700">{t('inventory.suppliers.count', { n: rows.length })}</h2>
+              {canManage && rows.length > 1 && (
+                <button type="button" onClick={() => (setQuery(''), setPicking([]))} aria-label={t('inventory.suppliers.order.editLabel')} className="press flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-2 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-brand">
+                  <ListOrdered className="size-4" aria-hidden />
+                  {t('inventory.suppliers.order.edit')}
+                </button>
+              )}
+            </div>
+          </>
+        )}
         <ul className="space-y-2">
           {shown.map((row) => (
             <li key={row.supplier.id}>
-              <SupplierCard row={row} selected={row.supplier.id === selectedId} onOpen={() => setChosen(row.supplier.id)} />
+              <SupplierCard row={row} selected={!picking && row.supplier.id === selectedId} place={picking ? picking.indexOf(row.supplier.id) + 1 : null} onOpen={() => (picking ? tap(row.supplier.id) : setChosen(row.supplier.id))} />
             </li>
           ))}
           {shown.length === 0 && <li className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{t('inventory.suppliers.noMatch')}</li>}
         </ul>
-        {canManage && (
+        {canManage && !picking && (
           <Button variant="outline" className="w-full" onClick={() => setEditing('new')}>
             <Plus className="size-4" aria-hidden />
             {t('inventory.suppliers.add')}
@@ -116,18 +181,34 @@ function Total({ label, value, danger = false }: { label: string; value: string;
   );
 }
 
-function SupplierCard({ row, selected, onOpen }: { row: SupplierRow; selected: boolean; onOpen: () => void }) {
+/** His photo, else the demo picture of what he brings (🥛 dairy, 🐔 chicken, 🥬 sabzi, 🛒 karyana …). */
+function SupplierAvatar({ supplier, big = false }: { supplier: Pick<Supplier, 'name' | 'category' | 'photo'>; big?: boolean }) {
+  const size = big ? 'size-16 rounded-2xl text-4xl' : 'size-12 rounded-xl text-2xl';
+  return supplier.photo ? (
+    // A data URL from this browser: next/image adds nothing here.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={supplier.photo} alt={t('inventory.suppliers.photo.alt', { name: supplier.name })} className={cn(size, 'shrink-0 object-cover ring-1 ring-slate-200')} data-supplier-photo />
+  ) : (
+    <span className={cn(size, 'grid shrink-0 place-items-center bg-brand-soft')} aria-hidden data-supplier-art>
+      {SUPPLIER_CATEGORY_ART[supplier.category]}
+    </span>
+  );
+}
+
+function SupplierCard({ row, selected, place, onOpen }: { row: SupplierRow; selected: boolean; place: number | null; onOpen: () => void }) {
   const { supplier, summary } = row;
   return (
     <button
       type="button"
       onClick={onOpen}
       aria-current={selected ? 'true' : undefined}
+      aria-pressed={place === null ? undefined : place > 0}
       data-supplier-card={supplier.name}
-      className={cn('press flex w-full items-center gap-3 rounded-2xl border bg-white p-3 text-left transition', selected ? 'border-brand bg-brand-soft/60 shadow-[inset_4px_0_0_var(--color-brand)]' : 'border-slate-200 hover:border-brand/40')}
+      className={cn('press flex w-full items-center gap-3 rounded-2xl border bg-white p-3 text-left transition', selected || (place ?? 0) > 0 ? 'border-brand bg-brand-soft/60 shadow-[inset_4px_0_0_var(--color-brand)]' : 'border-slate-200 hover:border-brand/40')}
     >
+      <SupplierAvatar supplier={supplier} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-extrabold text-slate-900">{supplier.name}</span>
+        <span className="line-clamp-2 font-extrabold leading-snug text-slate-900">{supplier.name}</span>
         <span className="block text-xs text-slate-500">
           {t(`inventory.suppliers.categories.${supplier.category}`)}
           {summary.todayPurchases > 0 && ` · ${t('inventory.suppliers.todayShort', { amount: formatPaisa(summary.todayPurchases) })}`}
@@ -137,7 +218,15 @@ function SupplierCard({ row, selected, onOpen }: { row: SupplierRow; selected: b
           <Badge tone={STATUS_TONE[summary.status]}>{t(`inventory.suppliers.status.${summary.status}`)}</Badge>
         </span>
       </span>
-      <ChevronRight className="size-4 shrink-0 text-slate-400" aria-hidden />
+      {place === null ? (
+        <ChevronRight className="size-4 shrink-0 text-slate-400" aria-hidden />
+      ) : place > 0 ? (
+        <span className="bg-brand-gradient grid size-8 shrink-0 place-items-center rounded-full text-sm font-black text-white" data-order-number>
+          {place}
+        </span>
+      ) : (
+        <span className="size-8 shrink-0 rounded-full border-2 border-dashed border-slate-300" aria-hidden />
+      )}
     </button>
   );
 }
@@ -222,18 +311,21 @@ function Workspace({ supplierId, canManage, onEdit }: { supplierId: string; canM
   return (
     <div className="space-y-4" data-supplier-workspace={supplier.name}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-2xl font-black text-slate-900">{supplier.name}</h2>
-          <p className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-            {supplier.phone && (
-              <a href={`tel:${supplier.phone}`} className="flex items-center gap-1 font-semibold text-slate-700 hover:text-brand">
-                <Phone className="size-4" aria-hidden />
-                {supplier.phone}
-              </a>
-            )}
-            <Badge tone="grey">{t(`inventory.suppliers.categories.${supplier.category}`)}</Badge>
-            <Badge tone={STATUS_TONE[summary.status]}>{t(`inventory.suppliers.status.${summary.status}`)}</Badge>
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          <SupplierAvatar supplier={supplier} big />
+          <div className="min-w-0">
+            <h2 className="text-2xl font-black text-slate-900">{supplier.name}</h2>
+            <p className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+              {supplier.phone && (
+                <a href={`tel:${supplier.phone}`} className="flex items-center gap-1 font-semibold text-slate-700 hover:text-brand">
+                  <Phone className="size-4" aria-hidden />
+                  {supplier.phone}
+                </a>
+              )}
+              <Badge tone="grey">{t(`inventory.suppliers.categories.${supplier.category}`)}</Badge>
+              <Badge tone={STATUS_TONE[summary.status]}>{t(`inventory.suppliers.status.${summary.status}`)}</Badge>
+            </p>
+          </div>
         </div>
         {canManage && (
           <div className="flex flex-wrap gap-2">
@@ -523,6 +615,8 @@ function SupplierDialog({ supplier, onClose, onSaved }: { supplier: Supplier | n
   const [address, setAddress] = useState(supplier?.address ?? '');
   const [notes, setNotes] = useState(supplier?.notes ?? '');
   const [productIds, setProductIds] = useState<string[]>(supplier?.productIds ?? []);
+  const [photo, setPhoto] = useState<string | null>(supplier?.photo ?? null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [opening, setOpening] = useState('');
   const [find, setFind] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -537,7 +631,7 @@ function SupplierDialog({ supplier, onClose, onSaved }: { supplier: Supplier | n
     if (openingBalance === null) return setError(t('inventory.suppliers.openingInvalid'));
     setBusy(true);
     try {
-      const saved = await getApi().saveSupplier({ id: supplier?.id ?? null, name, phone, category, address, notes, productIds, openingBalance });
+      const saved = await getApi().saveSupplier({ id: supplier?.id ?? null, name, phone, category, address, notes, productIds, openingBalance, photo });
       onSaved(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('states.errorBody'));
@@ -563,6 +657,40 @@ function SupplierDialog({ supplier, onClose, onSaved }: { supplier: Supplier | n
       }
     >
       <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-slate-50 p-3 sm:col-span-2" data-photo-field>
+          <SupplierAvatar supplier={{ name: name || t('inventory.suppliers.add'), category, photo }} big />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-slate-800">{t('inventory.suppliers.photo.title')}</p>
+            <p className="text-xs text-slate-500">{t('inventory.suppliers.photo.hint')}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => fileRef.current?.click()}>
+                <Camera className="size-4" aria-hidden />
+                {photo ? t('inventory.suppliers.photo.change') : t('inventory.suppliers.photo.upload')}
+              </Button>
+              {photo && (
+                <Button variant="ghost" onClick={() => setPhoto(null)}>
+                  <Trash2 className="size-4" aria-hidden />
+                  {t('inventory.suppliers.photo.remove')}
+                </Button>
+              )}
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              hidden
+              aria-label={t('inventory.suppliers.photo.upload')}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                shrinkPhoto(file)
+                  .then((small) => (setPhoto(small), setError(null)))
+                  .catch(() => setError(t('inventory.suppliers.photo.invalid')));
+              }}
+            />
+          </div>
+        </div>
         <label className="block sm:col-span-2">
           <span className="mb-1 block text-sm font-bold text-slate-800">{t('inventory.suppliers.name')}</span>
           <input value={name} onChange={(e) => (setName(e.target.value), setError(null))} maxLength={60} placeholder={t('inventory.suppliers.namePlaceholder')} className={field} aria-label={t('inventory.suppliers.name')} />
@@ -621,4 +749,28 @@ function SupplierDialog({ supplier, onClose, onSaved }: { supplier: Supplier | n
       )}
     </Dialog>
   );
+}
+
+/** Square 256 px JPEG from the centre of the chosen photo (a few KB, so it fits the DEMO browser storage). */
+const PHOTO_SIZE = 256;
+
+async function shrinkPhoto(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const canvas = document.createElement('canvas');
+    canvas.width = PHOTO_SIZE;
+    canvas.height = PHOTO_SIZE;
+    const context = canvas.getContext('2d');
+    if (!context || side === 0) throw new Error('No picture');
+    context.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
+    const small = canvas.toDataURL('image/jpeg', 0.82);
+    if (!isSupplierPhoto(small)) throw new Error('Too big');
+    return small;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }

@@ -154,6 +154,10 @@ export interface Supplier extends BranchScoped {
   notes: string;
   /** The products he usually brings (shared ingredients; one product may have several suppliers) */
   productIds: Uuid[];
+  /** The owner's order of the supplier list (Edit order, 2026-11-06): 0 = first; missing = after them, by name */
+  sortOrder?: number;
+  /** His picture as a small JPEG data URL (DEMO: kept in this browser; real photo storage is Phase 7); missing = category picture */
+  photo?: string | null;
 }
 
 /** BOUGHT from a supplier, or PREPARED in the kitchen from a batch recipe such as pizza dough (Step B). */
