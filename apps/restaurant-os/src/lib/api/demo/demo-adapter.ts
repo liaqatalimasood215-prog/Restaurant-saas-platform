@@ -215,9 +215,12 @@ import {
 import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
 
-/** A short random delay so loading states are visible, like a real network. */
-const MIN_DELAY_MS = 150;
-const MAX_DELAY_MS = 350;
+/**
+ * No made-up network delay (owner, 2026-11-06: POS and Tables felt slow; every call waited 150–350 ms, a screen
+ * with two calls almost half a second). The answer still comes asynchronously, like a real server's.
+ */
+const MIN_DELAY_MS = 0;
+const MAX_DELAY_MS = 0;
 
 const OPEN_DINE_IN: readonly OrderStatus[] = ['OPEN', 'BILL_REQUESTED'];
 /** Orders whose tickets are still on the kitchen screens (delivery tickets leave once the rider has it). */
