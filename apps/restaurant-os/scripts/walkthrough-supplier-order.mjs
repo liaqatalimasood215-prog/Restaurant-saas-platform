@@ -184,7 +184,7 @@ try {
     return canvas.toDataURL('image/png').split(',')[1];
   });
   await openSupplier(owner, KIRYANA);
-  await workspace(owner).getByRole('button', { name: 'Edit' }).click();
+  await workspace(owner).getByRole('button', { name: 'Edit', exact: true }).click();
   const dialog = owner.getByRole('dialog');
   await dialog.locator('[data-photo-field] [data-supplier-art]').waitFor();
   await dialog.locator('input[type=file]').setInputFiles({ name: 'shop.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
@@ -206,7 +206,7 @@ try {
   await card(owner, KIRYANA).locator('[data-supplier-photo]').waitFor();
   await shot(owner, '05-laptop-picture-saved');
   await openSupplier(owner, KIRYANA);
-  await workspace(owner).getByRole('button', { name: 'Edit' }).click();
+  await workspace(owner).getByRole('button', { name: 'Edit', exact: true }).click();
   await dialog.locator('input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('not a picture') });
   await dialog.getByText('This file cannot be opened as a picture').waitFor();
   await dialog.getByRole('button', { name: 'Remove picture' }).click();
