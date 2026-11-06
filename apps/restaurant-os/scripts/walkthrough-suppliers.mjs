@@ -52,7 +52,14 @@ async function openSuppliers(page) {
   await page.getByRole('tab', { name: 'Suppliers', exact: true }).click();
   await page.locator('main [data-suppliers]').waitFor();
 }
+/** One supplier fills the screen (owner, 2026-11-06): back to the list first when one is open. */
+async function backToList(page) {
+  const back = page.getByRole('button', { name: 'All suppliers' });
+  if (await back.isVisible()) await back.click();
+  await page.locator('main [data-supplier-card]').first().waitFor();
+}
 async function openSupplier(page, name) {
+  await backToList(page);
   await page.locator(`main [data-supplier-card="${name}"]`).click();
   await page.locator(`main [data-supplier-workspace="${name}"]`).waitFor();
 }
@@ -125,7 +132,7 @@ try {
   await product(owner, 'Butter (makhan)').getByRole('textbox', { name: 'Quantity of Butter (makhan) received' }).fill('1');
   await product(owner, 'Butter (makhan)').getByRole('textbox', { name: 'Rate of Butter (makhan)' }).fill('2000');
   await workspace(owner).getByRole('button', { name: 'Receive all 2 · Rs. 3,300' }).click();
-  await owner.getByText('Received: Yogurt (dahi) 5 kg, Butter (makhan) 1 kg · Rs. 3,300 added to the khata').waitFor();
+  await owner.getByText('Received: Butter (makhan) 1 kg, Yogurt (dahi) 5 kg · Rs. 3,300 added to the khata').waitFor();
   await metricIs(owner, 'Total due', 'Rs. 8,700');
   data = await saved(owner);
   const delivery = data.inventory.khata.at(-1);

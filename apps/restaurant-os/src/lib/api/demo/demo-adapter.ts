@@ -146,9 +146,11 @@ import {
   SUPPLIER_CATEGORIES,
   checkReceipt,
   checkSupplierPayment,
+  deliveriesPerProduct,
   isSupplierPhoto,
   khataBalances,
   khataSummary,
+  sortByUse,
   sortSuppliers,
   lineAmount,
   receivedStockMilli,
@@ -2914,10 +2916,16 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const after = khataBalances(khata);
       const lastReceived = (ingredientId: string) =>
         inv.movements.filter((m) => m.type === 'PURCHASE' && m.ingredientId === ingredientId).reduce<string | null>((latest, m) => (!latest || m.createdAt > latest ? m.createdAt : latest), null);
-      const products = supplier.productIds.flatMap((productId) => {
-        const ingredient = inv.ingredients.find((i) => i.id === productId && i.isActive);
-        return ingredient ? [{ ingredient, onHandMilli: onHandOf(ingredient.id, inv.movements), lastRatePaisa: ingredient.purchasePrice, lastReceivedAt: lastReceived(ingredient.id) }] : [];
-      });
+      // What he brings most often first (owner, 2026-11-06).
+      const uses = deliveriesPerProduct(khata, today);
+      const his = supplier.productIds.flatMap((productId) => inv.ingredients.filter((i) => i.id === productId && i.isActive));
+      const products = sortByUse(his, uses).map((ingredient) => ({
+        ingredient,
+        onHandMilli: onHandOf(ingredient.id, inv.movements),
+        lastRatePaisa: ingredient.purchasePrice,
+        lastReceivedAt: lastReceived(ingredient.id),
+        deliveries30d: uses.get(ingredient.id) ?? 0,
+      }));
       const entries = khata
         .filter((e) => period === 'ALL' || e.businessDate === today)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))

@@ -60,8 +60,6 @@ export function SuppliersTab({ canManage }: { canManage: boolean }) {
   const rows = view.data.suppliers;
   const q = query.trim().toLowerCase();
   const shown = picking ? rows : rows.filter((r) => !q || r.supplier.name.toLowerCase().includes(q) || r.supplier.phone.includes(q) || t(`inventory.suppliers.categories.${r.supplier.category}`).toLowerCase().includes(q));
-  // Wide screens always show a supplier: the chosen one, else the first.
-  const selectedId = chosen ?? rows[0]?.supplier.id ?? null;
 
   const saveOrder = async (ids: string[]) => {
     try {
@@ -76,87 +74,86 @@ export function SuppliersTab({ canManage }: { canManage: boolean }) {
   const tap = (id: string) => setPicking((list) => (list ? (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]) : list));
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)]" data-suppliers>
-      {picking && (
-        // One wide strip like the sections' Edit order (owner, 2026-11-06); it stays in view while he taps further down.
-        <div className="sticky top-20 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-brand/30 bg-brand-soft px-4 py-3 shadow-lg lg:col-span-2" data-supplier-order-editor>
-          <div className="min-w-48 flex-1">
-            <p className="text-sm font-semibold text-slate-800">{t('inventory.suppliers.order.hint')}</p>
-            {picking.length > 0 && (
-              <p className="mt-1 flex flex-wrap gap-1.5" data-order-chosen>
-                {picking.map((pid, index) => (
-                  <span key={pid} className="flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-800 ring-1 ring-brand/30">
-                    <span className="bg-brand-gradient grid size-5 place-items-center rounded-full text-[11px] font-black text-white">{index + 1}</span>
-                    {rows.find((r) => r.supplier.id === pid)?.supplier.name}
-                  </span>
-                ))}
-              </p>
-            )}
-          </div>
-          <Button variant="ghost" onClick={() => (setPicking(null), setOrderError(null))}>
-            {t('inventory.form.cancel')}
-          </Button>
-          <Button variant="secondary" onClick={() => void saveOrder([])}>
-            {t('inventory.suppliers.order.reset')}
-          </Button>
-          <Button disabled={picking.length === 0} onClick={() => void saveOrder(supplierOrderAfterPicking(rows.map((r) => r.supplier.id), picking))}>
-            <Check className="size-4" aria-hidden />
-            {t('inventory.suppliers.order.done')}
-          </Button>
-          {orderError && (
-            <p role="alert" className="w-full rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-              {orderError}
-            </p>
-          )}
-        </div>
-      )}
-      <section className={cn('min-w-0 space-y-3', chosen && 'hidden lg:block')} aria-label={t('inventory.suppliers.listTitle')}>
-        <div className="grid grid-cols-2 gap-2">
-          <Total label={t('inventory.suppliers.todayBoughtAll')} value={formatPaisa(view.data.todayPurchases)} />
-          <Total label={t('inventory.suppliers.dueAll')} value={formatPaisa(view.data.totalDue)} danger={view.data.totalDue > 0} />
-        </div>
-        {!picking && (
-          <>
-            <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
-              <Search className="size-4 shrink-0 text-slate-400" aria-hidden />
-              <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('inventory.suppliers.search')} aria-label={t('inventory.suppliers.search')} className="w-full min-w-0 bg-transparent text-sm" />
-            </label>
-            <div className="flex items-center justify-between gap-2 px-1">
-              <h2 className="text-sm font-extrabold text-slate-700">{t('inventory.suppliers.count', { n: rows.length })}</h2>
-              {canManage && rows.length > 1 && (
-                <button type="button" onClick={() => (setQuery(''), setPicking([]))} aria-label={t('inventory.suppliers.order.editLabel')} className="press flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-2 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-brand">
-                  <ListOrdered className="size-4" aria-hidden />
-                  {t('inventory.suppliers.order.edit')}
-                </button>
-              )}
-            </div>
-          </>
-        )}
-        <ul className="space-y-2">
-          {shown.map((row) => (
-            <li key={row.supplier.id}>
-              <SupplierCard row={row} selected={!picking && row.supplier.id === selectedId} place={picking ? picking.indexOf(row.supplier.id) + 1 : null} onOpen={() => (picking ? tap(row.supplier.id) : setChosen(row.supplier.id))} />
-            </li>
-          ))}
-          {shown.length === 0 && <li className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{t('inventory.suppliers.noMatch')}</li>}
-        </ul>
-        {canManage && !picking && (
-          <Button variant="outline" className="w-full" onClick={() => setEditing('new')}>
-            <Plus className="size-4" aria-hidden />
-            {t('inventory.suppliers.add')}
-          </Button>
-        )}
-      </section>
-
-      <section className={cn('min-w-0', !chosen && 'hidden lg:block')}>
-        {chosen && (
-          <button type="button" onClick={() => setChosen(null)} className="press mb-3 flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-bold text-slate-700 hover:bg-slate-100 lg:hidden">
+    <div className="space-y-4" data-suppliers>
+      {chosen ? (
+        // One supplier takes the whole screen (owner, 2026-11-06), on every screen size.
+        <section className="min-w-0">
+          <button type="button" onClick={() => setChosen(null)} className="press mb-3 flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-bold text-slate-700 hover:bg-slate-100">
             <ArrowLeft className="size-4" aria-hidden />
             {t('inventory.suppliers.allSuppliers')}
           </button>
-        )}
-        {selectedId ? <Workspace key={selectedId} supplierId={selectedId} canManage={canManage} onEdit={setEditing} /> : <Card className="p-6 text-center text-sm text-slate-600">{t('inventory.suppliers.none')}</Card>}
-      </section>
+          <Workspace key={chosen} supplierId={chosen} canManage={canManage} onEdit={setEditing} />
+        </section>
+      ) : (
+        <section className="min-w-0 space-y-3" aria-label={t('inventory.suppliers.listTitle')}>
+          {picking && (
+            // One wide strip like the sections' Edit order (owner, 2026-11-06); it stays in view while he taps further down.
+            <div className="sticky top-20 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-brand/30 bg-brand-soft px-4 py-3 shadow-lg" data-supplier-order-editor>
+              <div className="min-w-48 flex-1">
+                <p className="text-sm font-semibold text-slate-800">{t('inventory.suppliers.order.hint')}</p>
+                {picking.length > 0 && (
+                  <p className="mt-1 flex flex-wrap gap-1.5" data-order-chosen>
+                    {picking.map((pid, index) => (
+                      <span key={pid} className="flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs font-bold text-slate-800 ring-1 ring-brand/30">
+                        <span className="bg-brand-gradient grid size-5 place-items-center rounded-full text-[11px] font-black text-white">{index + 1}</span>
+                        {rows.find((r) => r.supplier.id === pid)?.supplier.name}
+                      </span>
+                    ))}
+                  </p>
+                )}
+              </div>
+              <Button variant="ghost" onClick={() => (setPicking(null), setOrderError(null))}>
+                {t('inventory.form.cancel')}
+              </Button>
+              <Button variant="secondary" onClick={() => void saveOrder([])}>
+                {t('inventory.suppliers.order.reset')}
+              </Button>
+              <Button disabled={picking.length === 0} onClick={() => void saveOrder(supplierOrderAfterPicking(rows.map((r) => r.supplier.id), picking))}>
+                <Check className="size-4" aria-hidden />
+                {t('inventory.suppliers.order.done')}
+              </Button>
+              {orderError && (
+                <p role="alert" className="w-full rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                  {orderError}
+                </p>
+              )}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Total label={t('inventory.suppliers.todayBoughtAll')} value={formatPaisa(view.data.todayPurchases)} />
+            <Total label={t('inventory.suppliers.dueAll')} value={formatPaisa(view.data.totalDue)} danger={view.data.totalDue > 0} />
+            {!picking && (
+              <label className="flex min-h-11 min-w-56 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
+                <Search className="size-4 shrink-0 text-slate-400" aria-hidden />
+                <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('inventory.suppliers.search')} aria-label={t('inventory.suppliers.search')} className="w-full min-w-0 bg-transparent text-sm" />
+              </label>
+            )}
+            {canManage && !picking && (
+              <Button variant="outline" onClick={() => setEditing('new')}>
+                <Plus className="size-4" aria-hidden />
+                {t('inventory.suppliers.add')}
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2 px-1">
+            <h2 className="text-sm font-extrabold text-slate-700">{t('inventory.suppliers.count', { n: rows.length })}</h2>
+            {canManage && rows.length > 1 && !picking && (
+              <button type="button" onClick={() => (setQuery(''), setPicking([]))} aria-label={t('inventory.suppliers.order.editLabel')} className="press flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-2 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-brand">
+                <ListOrdered className="size-4" aria-hidden />
+                {t('inventory.suppliers.order.edit')}
+              </button>
+            )}
+          </div>
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {shown.map((row) => (
+              <li key={row.supplier.id}>
+                <SupplierCard row={row} place={picking ? picking.indexOf(row.supplier.id) + 1 : null} onOpen={() => (picking ? tap(row.supplier.id) : setChosen(row.supplier.id))} />
+              </li>
+            ))}
+            {shown.length === 0 && <li className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 sm:col-span-2 xl:col-span-3">{rows.length === 0 ? t('inventory.suppliers.none') : t('inventory.suppliers.noMatch')}</li>}
+          </ul>
+        </section>
+      )}
 
       {editing && (
         <SupplierDialog
@@ -195,16 +192,15 @@ function SupplierAvatar({ supplier, big = false }: { supplier: Pick<Supplier, 'n
   );
 }
 
-function SupplierCard({ row, selected, place, onOpen }: { row: SupplierRow; selected: boolean; place: number | null; onOpen: () => void }) {
+function SupplierCard({ row, place, onOpen }: { row: SupplierRow; place: number | null; onOpen: () => void }) {
   const { supplier, summary } = row;
   return (
     <button
       type="button"
       onClick={onOpen}
-      aria-current={selected ? 'true' : undefined}
       aria-pressed={place === null ? undefined : place > 0}
       data-supplier-card={supplier.name}
-      className={cn('press flex w-full items-center gap-3 rounded-2xl border bg-white p-3 text-left transition', selected || (place ?? 0) > 0 ? 'border-brand bg-brand-soft/60 shadow-[inset_4px_0_0_var(--color-brand)]' : 'border-slate-200 hover:border-brand/40')}
+      className={cn('press flex w-full items-center gap-3 rounded-2xl border bg-white p-3 text-left transition', (place ?? 0) > 0 ? 'border-brand bg-brand-soft/60 shadow-[inset_4px_0_0_var(--color-brand)]' : 'border-slate-200 hover:border-brand/40')}
     >
       <SupplierAvatar supplier={supplier} />
       <span className="min-w-0 flex-1">
@@ -250,6 +246,7 @@ function Workspace({ supplierId, canManage, onEdit }: { supplierId: string; canM
   const [receiveKey, setReceiveKey] = useState(newKey);
   const [paying, setPaying] = useState(false);
   const [adding, setAdding] = useState('');
+  const [find, setFind] = useState('');
   if (query.loading && !query.data) return <LoadingState />;
   if (!query.data) return <ErrorState message={query.error?.message} onRetry={query.reload} />;
   const ws = query.data;
@@ -307,6 +304,9 @@ function Workspace({ supplierId, canManage, onEdit }: { supplierId: string; canM
     }
   };
   const notHis = ws.ingredients.filter((i) => i.isActive && !supplier.productIds.includes(i.id));
+  const f = find.trim().toLowerCase();
+  // Already in his most-delivered-first order from the server; the search keeps it.
+  const shownProducts = f ? ws.products.filter((row) => row.ingredient.name.toLowerCase().includes(f) || row.ingredient.code.toLowerCase().includes(f)) : ws.products;
 
   return (
     <div className="space-y-4" data-supplier-workspace={supplier.name}>
@@ -341,7 +341,7 @@ function Workspace({ supplierId, canManage, onEdit }: { supplierId: string; canM
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4" data-khata-summary>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-khata-summary>
         <Metric label={t('inventory.suppliers.previousDue')} value={formatPaisa(summary.previousDue)} />
         <Metric label={t('inventory.suppliers.todayBought')} value={formatPaisa(summary.todayPurchases)} />
         <Metric label={t('inventory.suppliers.todayPaid')} value={formatPaisa(summary.todayPayments)} tone="green" />
@@ -349,14 +349,21 @@ function Workspace({ supplierId, canManage, onEdit }: { supplierId: string; canM
       </div>
 
       <Card className="p-4" aria-label={t('inventory.suppliers.productsTitle')}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="min-w-56 flex-1">
             <h3 className="flex items-center gap-2 text-lg font-extrabold text-slate-900">
               <Truck className="size-5 text-brand" aria-hidden />
               {t('inventory.suppliers.productsTitle')}
+              <span className="text-sm font-bold text-slate-500">· {ws.products.length}</span>
             </h3>
             <p className="text-sm text-slate-500">{t('inventory.suppliers.productsHint')}</p>
           </div>
+          {ws.products.length > 0 && (
+            <label className="flex min-h-11 min-w-56 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15 md:max-w-sm">
+              <Search className="size-4 shrink-0 text-slate-400" aria-hidden />
+              <input type="search" value={find} onChange={(e) => setFind(e.target.value)} placeholder={t('inventory.suppliers.findHisProduct')} aria-label={t('inventory.suppliers.findHisProduct')} className="w-full min-w-0 bg-transparent text-sm" />
+            </label>
+          )}
           {canManage && notHis.length > 0 && (
             <select value={adding} onChange={(e) => void addProduct(e.target.value)} aria-label={t('inventory.suppliers.addProduct')} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold">
               <option value="">+ {t('inventory.suppliers.addProduct')}</option>
@@ -371,54 +378,64 @@ function Workspace({ supplierId, canManage, onEdit }: { supplierId: string; canM
         {ws.products.length === 0 ? (
           <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{t('inventory.suppliers.noProducts')}</p>
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {ws.products.map((row) => {
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" data-product-grid>
+            {shownProducts.map((row) => {
               const input = inputOf(row);
               const amount = amountOf(row);
               const unit = row.ingredient.purchaseUnit;
+              const typed = input.quantity.trim() !== '';
               return (
-                <li key={row.ingredient.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-3 md:grid-cols-[minmax(0,1fr)_7rem_7.5rem_6.5rem]" data-product-row={row.ingredient.name}>
-                  <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-1">
-                    <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-soft text-2xl" aria-hidden>
-                      {ingredientArt(row.ingredient)}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-extrabold text-slate-900">{row.ingredient.name}</span>
-                      <span className="block text-xs text-slate-600">
+                <li key={row.ingredient.id} className={cn('flex flex-col overflow-hidden rounded-2xl border bg-white transition', typed ? 'border-brand ring-2 ring-brand/20' : 'border-slate-200')} data-product-row={row.ingredient.name}>
+                  <div className="relative grid h-24 place-items-center bg-gradient-to-b from-brand-soft to-white text-5xl" aria-hidden>
+                    {ingredientArt(row.ingredient)}
+                    {row.deliveries30d > 0 && (
+                      <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-brand ring-1 ring-brand/20" data-uses>
+                        {t('inventory.suppliers.uses', { n: row.deliveries30d })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2 p-3">
+                    <div>
+                      <p className="line-clamp-2 font-extrabold leading-snug text-slate-900">{row.ingredient.name}</p>
+                      <p className="text-xs text-slate-600">
                         {t('inventory.suppliers.stockNow')}: <strong className="text-slate-900" data-stock-now>{stockText(row.ingredient, row.onHandMilli)}</strong>
                         {' · '}
                         {t('inventory.suppliers.lastRate', { price: formatPaisa(row.lastRatePaisa), unit: unitLabel(unit, MILLI) })}
-                      </span>
-                    </span>
+                      </p>
+                    </div>
+                    {canManage && (
+                      <>
+                        <div className="mt-auto grid grid-cols-2 gap-2">
+                          <label className="flex items-center gap-1.5">
+                            <input value={input.quantity} onChange={(e) => setInput(row.ingredient.id, { quantity: e.target.value }, row)} inputMode="decimal" placeholder="0" aria-label={t('inventory.suppliers.quantityOf', { name: row.ingredient.name })} className="min-h-11 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-base tabular-nums" />
+                            <span className="text-xs font-semibold text-slate-600">{unitLabel(unit, 2 * MILLI)}</span>
+                          </label>
+                          <label className="flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-slate-500">Rs.</span>
+                            <input value={input.rate} onChange={(e) => setInput(row.ingredient.id, { rate: e.target.value }, row)} inputMode="decimal" aria-label={t('inventory.suppliers.rateOf', { name: row.ingredient.name })} className="min-h-11 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-base tabular-nums" />
+                          </label>
+                        </div>
+                        {amount !== null && (
+                          <p className="text-sm font-semibold text-slate-700" data-line-amount>
+                            {t('inventory.suppliers.linePreview', { qty: input.quantity, unit: unitLabel(unit, lineOf(row).quantityMilli ?? 0), rate: formatPaisa(lineOf(row).ratePaisa ?? 0), amount: formatPaisa(amount) })}
+                          </p>
+                        )}
+                        <Button disabled={busy || !typed} onClick={() => void receive([row])}>
+                          <PackagePlus className="size-4" aria-hidden />
+                          {t('inventory.suppliers.receive')}
+                        </Button>
+                      </>
+                    )}
                   </div>
-                  {canManage ? (
-                    <>
-                      <label className="flex items-center gap-1.5">
-                        <input value={input.quantity} onChange={(e) => setInput(row.ingredient.id, { quantity: e.target.value }, row)} inputMode="decimal" placeholder="0" aria-label={t('inventory.suppliers.quantityOf', { name: row.ingredient.name })} className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base tabular-nums" />
-                        <span className="text-xs font-semibold text-slate-600">{unitLabel(unit, 2 * MILLI)}</span>
-                      </label>
-                      <label className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-slate-500">Rs.</span>
-                        <input value={input.rate} onChange={(e) => setInput(row.ingredient.id, { rate: e.target.value }, row)} inputMode="decimal" aria-label={t('inventory.suppliers.rateOf', { name: row.ingredient.name })} className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base tabular-nums" />
-                      </label>
-                      <Button className="col-span-2 md:col-span-1" disabled={busy || input.quantity.trim() === ''} onClick={() => void receive([row])}>
-                        <PackagePlus className="size-4" aria-hidden />
-                        {t('inventory.suppliers.receive')}
-                      </Button>
-                      {amount !== null && (
-                        <p className="col-span-2 text-sm font-semibold text-slate-700 md:col-span-4" data-line-amount>
-                          {t('inventory.suppliers.linePreview', { qty: input.quantity, unit: unitLabel(unit, lineOf(row).quantityMilli ?? 0), rate: formatPaisa(lineOf(row).ratePaisa ?? 0), amount: formatPaisa(amount) })}
-                        </p>
-                      )}
-                    </>
-                  ) : null}
                 </li>
               );
             })}
+            {shownProducts.length === 0 && <li className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 sm:col-span-2 lg:col-span-3 2xl:col-span-4">{t('inventory.suppliers.noProductMatch')}</li>}
           </ul>
         )}
         {canManage && ws.products.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          // Stays at the bottom of the screen while he fills several products of one delivery.
+          <div className={cn('mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3', filled.length > 0 && 'sticky bottom-2 z-10 rounded-2xl border border-brand/30 bg-white p-3 shadow-lg')} data-receive-bar>
             <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={t('inventory.suppliers.notePlaceholder')} aria-label={t('inventory.suppliers.note')} className="min-h-11 min-w-48 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm" />
             {filled.length > 1 && (
               <Button disabled={busy} onClick={() => void receive(filled)}>

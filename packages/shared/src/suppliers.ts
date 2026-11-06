@@ -172,6 +172,30 @@ export function supplierOrderAfterPicking(currentIds: readonly Uuid[], picked: r
   return [...chosen, ...currentIds.filter((id) => !chosen.includes(id))];
 }
 
+/** "Daily use" window of a supplier's products (owner, 2026-11-06: what comes most often shows first). */
+export const PRODUCT_USE_DAYS = 30;
+
+/**
+ * How many deliveries of this supplier brought each product in the last 30 business days (today included). Counted, not
+ * set by hand (owner's choice): the products that come most often show first.
+ */
+export function deliveriesPerProduct(entries: readonly Pick<KhataEntry, 'kind' | 'lines' | 'businessDate'>[], today: string): Map<Uuid, number> {
+  const from = new Date(`${today}T00:00:00Z`);
+  from.setUTCDate(from.getUTCDate() - (PRODUCT_USE_DAYS - 1));
+  const since = from.toISOString().slice(0, 10);
+  const counts = new Map<Uuid, number>();
+  for (const entry of entries) {
+    if (entry.kind !== 'PURCHASE' || entry.businessDate < since || entry.businessDate > today) continue;
+    for (const id of new Set(entry.lines.map((l) => l.ingredientId))) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Most deliveries first; equal ones by name. */
+export function sortByUse<T extends { name: string; id: Uuid }>(products: readonly T[], counts: ReadonlyMap<Uuid, number>): T[] {
+  return [...products].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0) || a.name.localeCompare(b.name));
+}
+
 /** About 110 KB of text: a 256 px JPEG is far smaller; a whole camera photo is refused. */
 export const MAX_SUPPLIER_PHOTO_CHARS = 150_000;
 
@@ -207,6 +231,8 @@ export interface SupplierProductRow {
   /** Rate of the last purchase (the ingredient's purchase price per purchase unit) */
   lastRatePaisa: Paisa;
   lastReceivedAt: IsoDateTime | null;
+  /** His deliveries with this product in the last 30 days (the list shows the most first) */
+  deliveries30d: number;
 }
 
 export interface KhataEntryRow {

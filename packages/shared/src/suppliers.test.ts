@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkReceipt, checkSupplierPayment, isSupplierPhoto, khataBalances, khataSummary, lineAmount, receivedStockMilli, sortSuppliers, supplierOrderAfterPicking, type KhataEntry } from './index';
+import { checkReceipt, checkSupplierPayment, deliveriesPerProduct, isSupplierPhoto, sortByUse, khataBalances, khataSummary, lineAmount, receivedStockMilli, sortSuppliers, supplierOrderAfterPicking, type KhataEntry } from './index';
 
 const milk = { id: 'milk', isActive: true, kind: 'BOUGHT' as const, purchaseUnit: 'l' as const, stockUnit: 'ml' as const, packSizeMilli: null };
 const atta = { id: 'atta', isActive: true, kind: 'BOUGHT' as const, purchaseUnit: 'pack' as const, stockUnit: 'g' as const, packSizeMilli: 20_000_000 };
@@ -75,4 +75,21 @@ test('a supplier picture is a small image data URL, never a link or a huge photo
   assert.equal(isSupplierPhoto('https://example.com/a.jpg'), false);
   assert.equal(isSupplierPhoto('data:image/svg+xml;base64,PHN2Zz4='), false, 'no SVG (it can carry scripts)');
   assert.equal(isSupplierPhoto(`data:image/png;base64,${'A'.repeat(200_000)}`), false);
+});
+
+test('daily products first: counted from the last 30 days of his deliveries, a delivery counts once per product', () => {
+  const line = (ingredientId: string) => ({ ingredientId, quantityMilli: 1_000, ratePaisa: 100, amount: 100, stockMilli: 1_000, movementId: 'm' });
+  const delivery = (date: string, ...ids: string[]) => ({ kind: 'PURCHASE' as const, lines: ids.map(line), businessDate: date });
+  const entries = [
+    delivery('2026-11-06', 'oil', 'atta'),
+    delivery('2026-11-05', 'oil', 'oil'),
+    delivery('2026-11-01', 'oil', 'sugar'),
+    delivery('2026-10-07', 'salt'),
+    delivery('2026-10-08', 'sugar'),
+    { kind: 'PAYMENT' as const, lines: [], businessDate: '2026-11-06' },
+  ];
+  const counts = deliveriesPerProduct(entries, '2026-11-06');
+  assert.deepEqual(Object.fromEntries(counts), { oil: 3, atta: 1, sugar: 2 }, '7 Oct is day 31: not counted; 8 Oct is day 30');
+  const products = ['atta', 'salt', 'oil', 'sugar', 'besan'].map((id) => ({ id, name: id }));
+  assert.deepEqual(sortByUse(products, counts).map((p) => p.id), ['oil', 'sugar', 'atta', 'besan', 'salt']);
 });

@@ -56,7 +56,14 @@ async function openSuppliers(page) {
   await page.getByRole('tab', { name: 'Suppliers', exact: true }).click();
   await page.locator('main [data-suppliers]').waitFor();
 }
+/** One supplier fills the screen (owner, 2026-11-06): back to the list first when one is open. */
+async function backToList(page) {
+  const back = page.getByRole('button', { name: 'All suppliers' });
+  if (await back.isVisible()) await back.click();
+  await page.locator('main [data-supplier-card]').first().waitFor();
+}
 async function openSupplier(page, name) {
+  await backToList(page);
   await card(page, name).click();
   await page.locator(`main [data-supplier-workspace="${name}"]`).waitFor();
 }
@@ -87,10 +94,41 @@ try {
   }
   assert.equal(await product(owner, 'Khoya').locator('[data-stock-now]').innerText(), '0.5 kg');
   await openSupplier(owner, KIRYANA);
+  assert.equal(await cards(owner).count(), 0, 'one supplier takes the whole screen: the list is closed');
   await shot(owner, '01-laptop-kiryana-range');
   ok('demo pictures 🛒 🥬 🐔 🥛; karyana 11+, sabzi 9, chicken 5, doodh 5 products each with stock');
 
+  console.log('\n1b. Full screen: picture cards, search, most delivered first');
+  const names = () => workspace(owner).locator('[data-product-row]').evaluateAll((list) => list.map((r) => r.getAttribute('data-product-row')));
+  const first = await names();
+  assert.deepEqual(first, [...first].sort((a, b) => a.localeCompare(b)), 'nothing delivered yet: A–Z');
+  await workspace(owner).getByRole('searchbox', { name: 'Search his products' }).fill('masala');
+  assert.deepEqual(await names(), ['BBQ masala (100 g pack)', 'Garam masala (100 g pack)', 'Karahi masala (100 g pack)']);
+  await workspace(owner).getByRole('searchbox', { name: 'Search his products' }).fill('zzz');
+  await workspace(owner).getByText('No product matches.').waitFor();
+  await workspace(owner).getByRole('searchbox', { name: 'Search his products' }).fill('');
+  for (const qty of ['2', '1']) {
+    await product(owner, 'Sugar').getByRole('textbox', { name: 'Quantity of Sugar received' }).fill(qty);
+    await product(owner, 'Sugar').getByRole('button', { name: 'Receive' }).click();
+    await owner.getByText(/Received: Sugar/).last().waitFor();
+    await owner.waitForTimeout(200);
+  }
+  await product(owner, 'Cooking oil').getByRole('textbox', { name: 'Quantity of Cooking oil received' }).fill('5');
+  await product(owner, 'Cooking oil').getByRole('button', { name: 'Receive' }).click();
+  await owner.waitForFunction(() => document.querySelectorAll('main [data-product-row]')[1]?.getAttribute('data-product-row') === 'Cooking oil');
+  assert.deepEqual((await names()).slice(0, 2), ['Sugar', 'Cooking oil'], 'Sugar came twice, oil once: they lead');
+  assert.equal(await product(owner, 'Sugar').locator('[data-uses]').innerText(), '2× in 30 days');
+  await product(owner, 'Atta (20 kg bag)').getByRole('textbox', { name: 'Quantity of Atta (20 kg bag) received' }).fill('2');
+  await product(owner, 'Basmati rice').getByRole('textbox', { name: 'Quantity of Basmati rice received' }).fill('10');
+  await workspace(owner).locator('[data-receive-bar]').getByRole('button', { name: /Receive all 2/ }).waitFor();
+  await shot(owner, '01b-laptop-kiryana-cards');
+  await workspace(owner).locator('[data-receive-bar]').getByRole('button', { name: /Receive all 2/ }).click();
+  await owner.getByText(/Received: Atta \(20 kg bag\) 2 packs, Basmati rice 10 kg/).waitFor();
+  await noSidewaysScroll(owner, 'laptop supplier');
+  ok('picture cards; search "masala" finds 3; most delivered first (Sugar 2×, oil 1×); Receive all 2 from the bottom bar');
+
   console.log('\n2. Edit order: Karyana first, Sabzi second, Chicken third');
+  await backToList(owner);
   const before = await cardNames(owner);
   assert.equal(before[0], 'City Packaging — DEMO', 'A–Z before any order');
   await owner.getByRole('button', { name: 'Edit order of suppliers' }).click();
@@ -114,7 +152,7 @@ try {
   await owner.reload({ waitUntil: 'networkidle' });
   await openSuppliers(owner);
   assert.deepEqual(await cardNames(owner), order, 'kept after a reload');
-  assert.equal(await workspace(owner).getAttribute('data-supplier-workspace'), KIRYANA, 'the first supplier opens');
+  assert.equal(await workspace(owner).count(), 0, 'Suppliers opens on the list');
   await shot(owner, '03-laptop-after-order');
   ok('tap 1, 2, 3 (a second tap takes one out) → Done → Karyana, Chicken, Sabzi first, the rest after; kept after a reload');
 
@@ -132,6 +170,7 @@ try {
     c.fill();
     return canvas.toDataURL('image/png').split(',')[1];
   });
+  await openSupplier(owner, KIRYANA);
   await workspace(owner).getByRole('button', { name: 'Edit' }).click();
   const dialog = owner.getByRole('dialog');
   await dialog.locator('[data-photo-field] [data-supplier-art]').waitFor();
@@ -141,8 +180,9 @@ try {
   await shot(owner, '04-laptop-upload-picture');
   await dialog.getByRole('button', { name: 'Save supplier' }).click();
   await dialog.waitFor({ state: 'hidden' });
-  await card(owner, KIRYANA).locator('[data-supplier-photo]').waitFor();
   await workspace(owner).locator('[data-supplier-photo]').waitFor();
+  await backToList(owner);
+  await card(owner, KIRYANA).locator('[data-supplier-photo]').waitFor();
   const photo = (await saved(owner)).inventory.suppliers.find((s) => s.name === KIRYANA).photo;
   assert.match(photo, /^data:image\/jpeg;base64,/);
   assert.ok(photo.length < 40_000, `a small picture (${photo.length} characters)`);
@@ -152,7 +192,7 @@ try {
   await openSuppliers(owner);
   await card(owner, KIRYANA).locator('[data-supplier-photo]').waitFor();
   await shot(owner, '05-laptop-picture-saved');
-  await dialog.locator('input[type=file]').waitFor({ state: 'detached' });
+  await openSupplier(owner, KIRYANA);
   await workspace(owner).getByRole('button', { name: 'Edit' }).click();
   await dialog.locator('input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('not a picture') });
   await dialog.getByText('This file cannot be opened as a picture').waitFor();
@@ -160,6 +200,7 @@ try {
   await dialog.locator('[data-photo-field] [data-supplier-art]').waitFor();
   await dialog.getByRole('button', { name: 'Save supplier' }).click();
   await dialog.waitFor({ state: 'hidden' });
+  await backToList(owner);
   await card(owner, KIRYANA).locator('[data-supplier-art]').waitFor();
   ok('Upload picture → 256 px square, small, on the card and the header, kept after a reload; a text file is refused; Remove → 🛒 again');
 
