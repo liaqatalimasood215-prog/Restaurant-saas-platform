@@ -46,6 +46,7 @@ import type {
   StaffUser,
   InviteKind,
   TicketStatus,
+  IsoDateTime,
   Uuid,
   AdjustReason,
   Ingredient,
@@ -386,6 +387,46 @@ export interface ReceiveStockInput {
   idempotencyKey: string;
 }
 
+/**
+ * New Purchase (Bill), 2026-11-06: one delivery as a bill. Saving raises stock and his khata once (one PURCHASE entry,
+ * the lines minus the discount) and records what was paid at once as a PAYMENT linked to the bill.
+ */
+export interface PurchaseBillInput {
+  supplierId: Uuid;
+  /** The supplier's bill number, optional */
+  billNo: string;
+  /** Business date of the bill (YYYY-MM-DD), not in the future */
+  date: string;
+  /** Quantity in the purchase unit (thousandths) and the rate per purchase unit (paisa) */
+  lines: { ingredientId: Uuid; quantityMilli: number; ratePaisa: number }[];
+  /** Paisa off the subtotal */
+  discount: number;
+  /** Paid at once (paisa), up to this bill's total; 0 = nothing yet */
+  paid: number;
+  method: SupplierPaymentMethod | null;
+  note: string;
+  idempotencyKey: string;
+}
+
+export interface PurchaseBillResult {
+  purchase: KhataEntry;
+  payment: KhataEntry | null;
+}
+
+/** An unfinished bill as he typed it (DEMO: kept with the demo data in this browser). Never touches stock or the khata. */
+export interface PurchaseDraft {
+  supplierId: Uuid;
+  billNo: string;
+  date: string;
+  lines: { ingredientId: Uuid; quantity: string; rate: string }[];
+  discount: string;
+  discountMode: 'RS' | 'PERCENT';
+  paid: string;
+  method: SupplierPaymentMethod;
+  note: string;
+  savedAt: IsoDateTime;
+}
+
 /** A payment to a supplier: lowers his khata, never changes stock. */
 export interface SupplierPaymentInput {
   supplierId: Uuid;
@@ -619,6 +660,14 @@ export interface ApiClient {
   /** Receive a delivery: PURCHASE stock movements + one khata entry; the rate becomes the product's purchase price. */
   receiveStock(input: ReceiveStockInput): Promise<KhataEntry>;
   paySupplier(input: SupplierPaymentInput): Promise<KhataEntry>;
+  /** Save a purchase bill: stock and khata once, plus the payment made with it. Removes his draft. */
+  savePurchaseBill(input: PurchaseBillInput): Promise<PurchaseBillResult>;
+  getPurchaseDraft(supplierId: Uuid): Promise<PurchaseDraft | null>;
+  /** Keeps one unfinished bill per supplier (a new save replaces it). */
+  savePurchaseDraft(draft: Omit<PurchaseDraft, 'savedAt'>): Promise<void>;
+  deletePurchaseDraft(supplierId: Uuid): Promise<void>;
+  /** Add New Product from a bill: a new shared inventory product, put on this supplier's list in the same step. */
+  addSupplierProduct(supplierId: Uuid, input: IngredientInput): Promise<Ingredient>;
 
   /** Activation page (no login): who the link is for, or an error when it is used, revoked or expired. */
   getActivation(token: string): Promise<ActivationInfo>;

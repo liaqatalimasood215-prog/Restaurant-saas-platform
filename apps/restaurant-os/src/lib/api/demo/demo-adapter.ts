@@ -147,7 +147,11 @@ import {
   checkReceipt,
   checkSupplierPayment,
   deliveriesPerProduct,
+  billTotals,
+  checkPurchaseBill,
   isSupplierPhoto,
+  MAX_RECEIPT_LINES,
+  type PurchaseBillProblem,
   khataBalances,
   khataSummary,
   sortByUse,
@@ -212,6 +216,9 @@ import {
   type ScaledRecipeInput,
   type SupplierInput,
   type KhataPeriod,
+  type PurchaseBillInput,
+  type PurchaseBillResult,
+  type PurchaseDraft,
   type ReceiveStockInput,
   type SupplierPaymentInput,
   type SupplierProfileInput,
@@ -309,6 +316,23 @@ const SETTINGS_MESSAGES = {
 } as const;
 
 /** Menu setup mistakes; `where` is the category name for items, or 'category' / 'group'. */
+const PURCHASE_BILL_MESSAGES: Record<PurchaseBillProblem, string> = {
+  NO_LINES: 'Add at least one product to the bill.',
+  TOO_MANY_LINES: 'A bill can have up to 30 products.',
+  PRODUCT_REQUIRED: 'Choose products from the list.',
+  DUPLICATE_PRODUCT: 'A product is on the bill twice.',
+  QUANTITY_INVALID: 'Type the quantity of every product.',
+  RATE_INVALID: 'Type the price of every product.',
+  UNITS_INVALID: 'A product has no package size. Set it in Stock first.',
+  NOTE_TOO_LONG: 'Keep the note to 200 characters.',
+  DISCOUNT_INVALID: 'The discount cannot be more than the subtotal.',
+  PAID_INVALID: 'Type the paid amount in rupees, or 0.',
+  PAID_MORE_THAN_BILL: 'Paid now cannot be more than this bill. Pay older dues with Settle Payment.',
+  METHOD_REQUIRED: 'Choose how it was paid.',
+  DATE_INVALID: 'The bill date cannot be in the future.',
+  BILL_NO_TOO_LONG: 'Keep the bill number to 30 characters.',
+};
+
 const PAYMENT_MESSAGES: Record<PaymentProblem, string> = {
   AMOUNT_INVALID: 'Type the amount paid.',
   MORE_THAN_DUE: 'That is more than what we owe this supplier.',
@@ -2467,60 +2491,61 @@ export class DemoAdapter implements ApiClient, DemoControls {
   }
 
   saveIngredient(input: IngredientInput): Promise<Ingredient> {
-    return this.request(() =>
-      this.store.update((data) => {
-        const user = this.require(data, 'inventory.manage');
-        const inv = data.inventory;
-        const existing = input.id ? inv.ingredients.find((i) => i.id === input.id) : undefined;
-        if (input.id && !existing) throw new ApiError('NOT_FOUND', 'This ingredient was not found.');
-        const problem = checkIngredient({ ...input, openingMilli: existing ? null : input.openingMilli }, inv.ingredients);
-        if (problem) throw new ApiError('VALIDATION', 'Please check the ingredient details.');
-        if (input.preferredSupplierId && !inv.suppliers.some((s) => s.id === input.preferredSupplierId)) throw new ApiError('VALIDATION', 'Choose a supplier from the list.');
-        if (input.locationId && !inv.locations.some((l) => l.id === input.locationId)) throw new ApiError('VALIDATION', 'Choose a storage place from the list.');
-        const now = nowIso();
-        const fields = {
-          name: cleanIngredientName(input.name),
-          code: input.code.trim().toUpperCase(),
-          category: input.category,
-          purchaseUnit: input.purchaseUnit,
-          stockUnit: input.stockUnit,
-          packSizeMilli: input.packSizeMilli,
-          minStockMilli: input.minStockMilli,
-          reorderQtyMilli: input.reorderQtyMilli,
-          purchasePrice: input.purchasePrice,
-          preferredSupplierId: input.preferredSupplierId,
-          locationId: input.locationId,
-          batchNo: input.batchNo.trim(),
-          expiryDate: input.expiryDate,
-          updatedAt: now,
-        };
-        if (existing) {
-          // The stock unit gives every movement its meaning: it never changes once stock was written.
-          if (existing.stockUnit !== input.stockUnit && inv.movements.some((m) => m.ingredientId === existing.id)) {
-            throw new ApiError('CONFLICT', 'The stock unit cannot change after stock was recorded.');
-          }
-          Object.assign(existing, fields);
-          return existing;
-        }
-        const ingredient: Ingredient = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, kind: input.kind ?? 'BOUGHT', ...fields, isActive: true, createdAt: now };
-        inv.ingredients.push(ingredient);
-        if (input.openingMilli > 0) {
-          inv.movements.push({
-            id: newId(),
-            restaurantId: data.restaurant.id,
-            branchId: data.branch.id,
-            ingredientId: ingredient.id,
-            type: 'OPENING',
-            quantityMilli: input.openingMilli,
-            reason: null,
-            note: '',
-            createdBy: user.id,
-            createdAt: now,
-          });
-        }
-        return ingredient;
-      }),
-    );
+    return this.request(() => this.store.update((data) => this.writeIngredient(data, input)));
+  }
+
+  /** Add or edit one ingredient inside a change (also used by Add New Product on a purchase bill). */
+  private writeIngredient(data: DemoData, input: IngredientInput): Ingredient {
+    const user = this.require(data, 'inventory.manage');
+    const inv = data.inventory;
+    const existing = input.id ? inv.ingredients.find((i) => i.id === input.id) : undefined;
+    if (input.id && !existing) throw new ApiError('NOT_FOUND', 'This ingredient was not found.');
+    const problem = checkIngredient({ ...input, openingMilli: existing ? null : input.openingMilli }, inv.ingredients);
+    if (problem) throw new ApiError('VALIDATION', 'Please check the ingredient details.');
+    if (input.preferredSupplierId && !inv.suppliers.some((s) => s.id === input.preferredSupplierId)) throw new ApiError('VALIDATION', 'Choose a supplier from the list.');
+    if (input.locationId && !inv.locations.some((l) => l.id === input.locationId)) throw new ApiError('VALIDATION', 'Choose a storage place from the list.');
+    const now = nowIso();
+    const fields = {
+      name: cleanIngredientName(input.name),
+      code: input.code.trim().toUpperCase(),
+      category: input.category,
+      purchaseUnit: input.purchaseUnit,
+      stockUnit: input.stockUnit,
+      packSizeMilli: input.packSizeMilli,
+      minStockMilli: input.minStockMilli,
+      reorderQtyMilli: input.reorderQtyMilli,
+      purchasePrice: input.purchasePrice,
+      preferredSupplierId: input.preferredSupplierId,
+      locationId: input.locationId,
+      batchNo: input.batchNo.trim(),
+      expiryDate: input.expiryDate,
+      updatedAt: now,
+    };
+    if (existing) {
+      // The stock unit gives every movement its meaning: it never changes once stock was written.
+      if (existing.stockUnit !== input.stockUnit && inv.movements.some((m) => m.ingredientId === existing.id)) {
+        throw new ApiError('CONFLICT', 'The stock unit cannot change after stock was recorded.');
+      }
+      Object.assign(existing, fields);
+      return existing;
+    }
+    const ingredient: Ingredient = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, kind: input.kind ?? 'BOUGHT', ...fields, isActive: true, createdAt: now };
+    inv.ingredients.push(ingredient);
+    if (input.openingMilli > 0) {
+      inv.movements.push({
+        id: newId(),
+        restaurantId: data.restaurant.id,
+        branchId: data.branch.id,
+        ingredientId: ingredient.id,
+        type: 'OPENING',
+        quantityMilli: input.openingMilli,
+        reason: null,
+        note: '',
+        createdBy: user.id,
+        createdAt: now,
+      });
+    }
+    return ingredient;
   }
 
   setIngredientActive(ingredientId: string, active: boolean): Promise<void> {
@@ -2894,7 +2919,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const data = this.store.read();
       this.require(data, 'inventory.view');
       const today = this.branchToday(data);
-      const suppliers = sortSuppliers(data.inventory.suppliers.filter((s) => s.isActive)).map((supplier) => ({ supplier, summary: khataSummary(this.khataOf(data, supplier.id), today) }));
+      const suppliers = sortSuppliers(data.inventory.suppliers.filter((s) => s.isActive)).map((supplier) => ({ supplier, summary: khataSummary(this.khataOf(data, supplier.id), today), hasDraft: (data.inventory.purchaseDrafts ?? []).some((d) => d.supplierId === supplier.id) }));
       return {
         today,
         suppliers,
@@ -2922,7 +2947,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const products = sortByUse(his, uses).map((ingredient) => ({
         ingredient,
         onHandMilli: onHandOf(ingredient.id, inv.movements),
-        lastRatePaisa: ingredient.purchasePrice,
+        // His own last rate when he has one; else the product's purchase price.
+        lastRatePaisa: supplier.rates?.[ingredient.id] ?? ingredient.purchasePrice,
         lastReceivedAt: lastReceived(ingredient.id),
         deliveries30d: uses.get(ingredient.id) ?? 0,
       }));
@@ -3010,6 +3036,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           // The rate paid becomes the product's purchase price, so recipe costs follow real prices (owner, 2026-11-05).
           Object.assign(ingredient, { purchasePrice: line.ratePaisa, updatedAt: now });
           if (!supplier.productIds.includes(ingredient.id)) supplier.productIds.push(ingredient.id);
+          supplier.rates = { ...supplier.rates, [ingredient.id]: line.ratePaisa };
           return { ingredientId: ingredient.id, quantityMilli: line.quantityMilli, ratePaisa: line.ratePaisa, amount: lineAmount(line.quantityMilli, line.ratePaisa), stockMilli, movementId };
         });
         const entry: KhataEntry = {
@@ -3063,6 +3090,99 @@ export class DemoAdapter implements ApiClient, DemoControls {
         inv.khata.push(entry);
         data.idempotency[key] = entry.id;
         return entry;
+      }),
+    );
+  }
+
+  savePurchaseBill(input: PurchaseBillInput): Promise<PurchaseBillResult> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        // A double tap or retry with the same key returns the first save: stock and khata go up once.
+        const key = 'purchase-bill:' + input.idempotencyKey;
+        const done = data.idempotency[key];
+        if (done) {
+          const purchase = inv.khata.find((e) => e.id === done)!;
+          return { purchase, payment: inv.khata.find((e) => e.billId === purchase.id) ?? null };
+        }
+        const supplier = inv.suppliers.find((s) => s.id === input.supplierId && s.isActive);
+        if (!supplier) throw new ApiError('NOT_FOUND', 'Supplier not found.');
+        const today = this.branchToday(data);
+        const problem = checkPurchaseBill(input, inv.ingredients, today);
+        if (problem) throw new ApiError('VALIDATION', PURCHASE_BILL_MESSAGES[problem.problem]);
+        const now = nowIso();
+        const entryId = newId();
+        const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+        const billNo = input.billNo.trim();
+        const note = input.note.trim();
+        const lines = input.lines.map((line) => {
+          const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId)!;
+          const stockMilli = receivedStockMilli(line.quantityMilli, ingredient)!;
+          const movementId = newId();
+          inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: 'PURCHASE', quantityMilli: stockMilli, reason: null, note: billNo ? `Bill ${billNo}` : note, createdBy: user.id, createdAt: now, supplierId: supplier.id, khataEntryId: entryId });
+          // The rate paid becomes the product's purchase price (recipe costs follow) and his own last rate.
+          Object.assign(ingredient, { purchasePrice: line.ratePaisa, updatedAt: now });
+          supplier.rates = { ...supplier.rates, [ingredient.id]: line.ratePaisa };
+          if (!supplier.productIds.includes(ingredient.id)) supplier.productIds.push(ingredient.id);
+          return { ingredientId: ingredient.id, quantityMilli: line.quantityMilli, ratePaisa: line.ratePaisa, amount: lineAmount(line.quantityMilli, line.ratePaisa), stockMilli, movementId };
+        });
+        const { total } = billTotals(lines, input.discount);
+        const purchase: KhataEntry = { id: entryId, ...scope, supplierId: supplier.id, kind: 'PURCHASE', amount: total, lines, method: null, businessDate: input.date, note, createdBy: user.id, createdAt: now, billNo, discount: input.discount };
+        inv.khata.push(purchase);
+        let payment: KhataEntry | null = null;
+        if (input.paid > 0) {
+          payment = { id: newId(), ...scope, supplierId: supplier.id, kind: 'PAYMENT', amount: -input.paid, lines: [], method: input.method, businessDate: input.date, note: '', createdBy: user.id, createdAt: now, billId: entryId, billNo };
+          inv.khata.push(payment);
+        }
+        inv.purchaseDrafts = (inv.purchaseDrafts ?? []).filter((d) => d.supplierId !== supplier.id);
+        data.idempotency[key] = entryId;
+        return { purchase, payment };
+      }),
+    );
+  }
+
+  getPurchaseDraft(supplierId: string): Promise<PurchaseDraft | null> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.manage');
+      return (data.inventory.purchaseDrafts ?? []).find((d) => d.supplierId === supplierId) ?? null;
+    });
+  }
+
+  savePurchaseDraft(draft: Omit<PurchaseDraft, 'savedAt'>): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        if (!inv.suppliers.some((s) => s.id === draft.supplierId)) throw new ApiError('NOT_FOUND', 'Supplier not found.');
+        if (draft.lines.length > MAX_RECEIPT_LINES || draft.lines.some((l) => !inv.ingredients.some((i) => i.id === l.ingredientId))) throw new ApiError('VALIDATION', 'Please check the products of the bill.');
+        // A draft never touches stock or the khata: it only keeps what was typed.
+        inv.purchaseDrafts = [...(inv.purchaseDrafts ?? []).filter((d) => d.supplierId !== draft.supplierId), { ...draft, savedAt: nowIso() }];
+      }),
+    );
+  }
+
+  deletePurchaseDraft(supplierId: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'inventory.manage');
+        data.inventory.purchaseDrafts = (data.inventory.purchaseDrafts ?? []).filter((d) => d.supplierId !== supplierId);
+      }),
+    );
+  }
+
+  addSupplierProduct(supplierId: string, input: IngredientInput): Promise<Ingredient> {
+    return this.request(() =>
+      this.store.update((data) => {
+        if (input.id) throw new ApiError('VALIDATION', 'Add New Product makes a new product.');
+        const supplier = data.inventory.suppliers.find((s) => s.id === supplierId && s.isActive);
+        if (!supplier) throw new ApiError('NOT_FOUND', 'Supplier not found.');
+        // One shared product list: the same product is never added twice, whoever brings it.
+        const ingredient = this.writeIngredient(data, { ...input, preferredSupplierId: input.preferredSupplierId ?? supplier.id });
+        supplier.productIds.push(ingredient.id);
+        supplier.rates = { ...supplier.rates, [ingredient.id]: ingredient.purchasePrice };
+        return ingredient;
       }),
     );
   }

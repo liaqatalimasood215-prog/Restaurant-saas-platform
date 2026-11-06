@@ -1,19 +1,16 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { ArrowLeft, Banknote, Camera, Check, ChevronRight, ListOrdered, PackagePlus, Pencil, Phone, Plus, Search, Trash2, Truck } from 'lucide-react';
+import { ArrowLeft, Banknote, Camera, Check, ChevronRight, ListOrdered, Pencil, Phone, Plus, Search, ShoppingCart, Trash2, Truck } from 'lucide-react';
 import {
   MILLI,
   SUPPLIER_CATEGORIES,
   SUPPLIER_CATEGORY_ART,
   SUPPLIER_PAYMENT_METHODS,
-  checkReceipt,
   checkSupplierPayment,
   formatPaisa,
   isSupplierPhoto,
-  lineAmount,
   paisaToInput,
-  parseQuantity,
   parseRupees,
   supplierOrderAfterPicking,
   type KhataEntryRow,
@@ -21,7 +18,6 @@ import {
   type Supplier,
   type SupplierCategory,
   type SupplierPaymentMethod,
-  type SupplierProductRow,
   type SupplierRow,
   type SupplierWorkspace,
 } from '@restaurant-saas/shared';
@@ -36,6 +32,7 @@ import { getApi, type KhataPeriod } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { stockText, unitLabel } from './inventory-format';
+import { PurchaseBill } from './purchase-bill';
 import { ingredientArt } from './recipes/recipe-lines';
 
 const STATUS_TONE: Record<KhataStatus, Tone> = { PAID: 'green', PARTLY_PAID: 'amber', UNPAID: 'red' };
@@ -50,6 +47,8 @@ export function SuppliersTab({ canManage }: { canManage: boolean }) {
   const toast = useToast();
   const view = useApiQuery(() => getApi().getSuppliers(), []);
   const [chosen, setChosen] = useState<string | null>(null);
+  /** New Purchase (Bill) of the open supplier; productId = the product tapped to start it */
+  const [bill, setBill] = useState<{ productId: string | null } | null>(null);
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Supplier | 'new' | null>(null);
   /** Edit order (owner, 2026-11-06): the suppliers tapped so far, in that order */
@@ -78,11 +77,11 @@ export function SuppliersTab({ canManage }: { canManage: boolean }) {
       {chosen ? (
         // One supplier takes the whole screen (owner, 2026-11-06), on every screen size.
         <section className="min-w-0">
-          <button type="button" onClick={() => setChosen(null)} className="press mb-3 flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-bold text-slate-700 hover:bg-slate-100">
+          <button type="button" hidden={bill !== null} onClick={() => setChosen(null)} className="press mb-3 flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-bold text-slate-700 hover:bg-slate-100">
             <ArrowLeft className="size-4" aria-hidden />
             {t('inventory.suppliers.allSuppliers')}
           </button>
-          <Workspace key={chosen} supplierId={chosen} canManage={canManage} onEdit={setEditing} />
+          {bill ? <PurchaseBill key={chosen} supplierId={chosen} firstProductId={bill.productId} onClose={() => setBill(null)} /> : <Workspace key={chosen} supplierId={chosen} canManage={canManage} onEdit={setEditing} onNewBill={(productId) => setBill({ productId })} />}
         </section>
       ) : (
         <section className="min-w-0 space-y-3" aria-label={t('inventory.suppliers.listTitle')}>
@@ -147,7 +146,7 @@ export function SuppliersTab({ canManage }: { canManage: boolean }) {
           <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {shown.map((row) => (
               <li key={row.supplier.id}>
-                <SupplierCard row={row} place={picking ? picking.indexOf(row.supplier.id) + 1 : null} onOpen={() => (picking ? tap(row.supplier.id) : setChosen(row.supplier.id))} />
+                <SupplierCard row={row} place={picking ? picking.indexOf(row.supplier.id) + 1 : null} onOpen={() => (picking ? tap(row.supplier.id) : (setBill(null), setChosen(row.supplier.id)))} />
               </li>
             ))}
             {shown.length === 0 && <li className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 sm:col-span-2 xl:col-span-3">{rows.length === 0 ? t('inventory.suppliers.none') : t('inventory.suppliers.noMatch')}</li>}
@@ -212,6 +211,7 @@ function SupplierCard({ row, place, onOpen }: { row: SupplierRow; place: number 
         <span className="mt-1 flex flex-wrap items-center gap-1.5">
           <span className={cn('text-sm font-black tabular-nums', summary.totalDue > 0 ? 'text-red-700' : 'text-green-700')}>{summary.totalDue > 0 ? t('inventory.suppliers.dueShort', { amount: formatPaisa(summary.totalDue) }) : formatPaisa(0)}</span>
           <Badge tone={STATUS_TONE[summary.status]}>{t(`inventory.suppliers.status.${summary.status}`)}</Badge>
+          {row.hasDraft && <Badge tone="amber">{t('inventory.bill.draftBadge')}</Badge>}
         </span>
       </span>
       {place === null ? (
@@ -229,21 +229,11 @@ function SupplierCard({ row, place, onOpen }: { row: SupplierRow; place: number 
 
 // ── One supplier ──────────────────────────────────────────────────────────────────────────────
 
-interface LineInput {
-  quantity: string;
-  rate: string;
-}
-
-function Workspace({ supplierId, canManage, onEdit }: { supplierId: string; canManage: boolean; onEdit: (s: Supplier) => void }) {
-  const toast = useToast();
+function Workspace({ supplierId, canManage, onEdit, onNewBill }: { supplierId: string; canManage: boolean; onEdit: (s: Supplier) => void; onNewBill: (productId: string | null) => void }) {
   const [period, setPeriod] = useState<KhataPeriod>('TODAY');
   const query = useApiQuery(() => getApi().getSupplierWorkspace(supplierId, period), [supplierId, period]);
-  const [inputs, setInputs] = useState<Record<string, LineInput>>({});
-  const [note, setNote] = useState('');
+  const draft = useApiQuery(() => (canManage ? getApi().getPurchaseDraft(supplierId) : Promise.resolve(null)), [supplierId, canManage]);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  // One key per delivery: a double tap or a retry receives it once.
-  const [receiveKey, setReceiveKey] = useState(newKey);
   const [paying, setPaying] = useState(false);
   const [adding, setAdding] = useState('');
   const [find, setFind] = useState('');
@@ -251,48 +241,6 @@ function Workspace({ supplierId, canManage, onEdit }: { supplierId: string; canM
   if (!query.data) return <ErrorState message={query.error?.message} onRetry={query.reload} />;
   const ws = query.data;
   const { supplier, summary } = ws;
-
-  const inputOf = (row: SupplierProductRow): LineInput => inputs[row.ingredient.id] ?? { quantity: '', rate: paisaToInput(row.lastRatePaisa) };
-  const setInput = (id: string, patch: Partial<LineInput>, row: SupplierProductRow) => {
-    setInputs((all) => ({ ...all, [id]: { ...inputOf(row), ...patch } }));
-    setError(null);
-  };
-  const lineOf = (row: SupplierProductRow) => {
-    const input = inputOf(row);
-    return { ingredientId: row.ingredient.id, quantityMilli: parseQuantity(input.quantity, { allowZero: false }), ratePaisa: parseRupees(input.rate) };
-  };
-  const filled = ws.products.filter((row) => inputOf(row).quantity.trim() !== '');
-  const amountOf = (row: SupplierProductRow) => {
-    const line = lineOf(row);
-    return line.quantityMilli !== null && line.ratePaisa ? lineAmount(line.quantityMilli, line.ratePaisa) : null;
-  };
-  const filledTotal = filled.reduce((sum, row) => sum + (amountOf(row) ?? 0), 0);
-
-  const receive = async (rows: SupplierProductRow[]) => {
-    const lines = rows.map(lineOf);
-    const problem = checkReceipt({ lines, note }, ws.ingredients);
-    if (problem) {
-      const row = problem.line === null ? null : rows[problem.line];
-      return setError(`${row ? `${row.ingredient.name}: ` : ''}${t(`inventory.suppliers.errors.${problem.problem}`)}`);
-    }
-    setBusy(true);
-    try {
-      const entry = await getApi().receiveStock({ supplierId, lines: lines.map((l) => ({ ingredientId: l.ingredientId, quantityMilli: l.quantityMilli!, ratePaisa: l.ratePaisa! })), note, idempotencyKey: receiveKey });
-      setInputs((all) => {
-        const next = { ...all };
-        for (const row of rows) delete next[row.ingredient.id];
-        return next;
-      });
-      setNote('');
-      setReceiveKey(newKey());
-      const what = rows.map((row) => `${row.ingredient.name} ${inputOf(row).quantity} ${unitLabel(row.ingredient.purchaseUnit, lineOf(row).quantityMilli ?? 0)}`).join(', ');
-      toast.show({ tone: 'success', title: t('inventory.suppliers.received', { what, amount: formatPaisa(entry.amount) }) });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('states.errorBody'));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const addProduct = async (ingredientId: string) => {
     setAdding('');
@@ -333,9 +281,13 @@ function Workspace({ supplierId, canManage, onEdit }: { supplierId: string; canM
               <Pencil className="size-4" aria-hidden />
               {t('inventory.suppliers.edit')}
             </Button>
-            <Button onClick={() => setPaying(true)} disabled={summary.totalDue <= 0}>
+            <Button variant="outline" onClick={() => setPaying(true)} disabled={summary.totalDue <= 0}>
               <Banknote className="size-4" aria-hidden />
               {t('inventory.suppliers.settle')}
+            </Button>
+            <Button onClick={() => onNewBill(null)} data-new-bill>
+              <ShoppingCart className="size-4" aria-hidden />
+              {draft.data ? t('inventory.bill.continueDraft') : t('inventory.bill.open')}
             </Button>
           </div>
         )}
@@ -378,72 +330,35 @@ function Workspace({ supplierId, canManage, onEdit }: { supplierId: string; canM
         {ws.products.length === 0 ? (
           <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{t('inventory.suppliers.noProducts')}</p>
         ) : (
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" data-product-grid>
-            {shownProducts.map((row) => {
-              const input = inputOf(row);
-              const amount = amountOf(row);
-              const unit = row.ingredient.purchaseUnit;
-              const typed = input.quantity.trim() !== '';
-              return (
-                <li key={row.ingredient.id} className={cn('flex flex-col overflow-hidden rounded-2xl border bg-white transition', typed ? 'border-brand ring-2 ring-brand/20' : 'border-slate-200')} data-product-row={row.ingredient.name}>
-                  <div className="relative grid h-24 place-items-center bg-gradient-to-b from-brand-soft to-white text-5xl" aria-hidden>
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" data-product-grid>
+            {shownProducts.map((row) => (
+              <li key={row.ingredient.id}>
+                <button
+                  type="button"
+                  disabled={!canManage}
+                  onClick={() => onNewBill(row.ingredient.id)}
+                  aria-label={t('inventory.bill.addToBill', { name: row.ingredient.name })}
+                  data-product-row={row.ingredient.name}
+                  className="press relative flex h-full w-full flex-col rounded-2xl border border-slate-200 bg-white p-2 text-left transition enabled:hover:border-brand/50 enabled:hover:shadow-md"
+                >
+                  <span className="grid h-16 place-items-center rounded-xl bg-gradient-to-b from-brand-soft to-white text-4xl" aria-hidden>
                     {ingredientArt(row.ingredient)}
-                    {row.deliveries30d > 0 && (
-                      <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-brand ring-1 ring-brand/20" data-uses>
-                        {t('inventory.suppliers.uses', { n: row.deliveries30d })}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-1 flex-col gap-2 p-3">
-                    <div>
-                      <p className="line-clamp-2 font-extrabold leading-snug text-slate-900">{row.ingredient.name}</p>
-                      <p className="text-xs text-slate-600">
-                        {t('inventory.suppliers.stockNow')}: <strong className="text-slate-900" data-stock-now>{stockText(row.ingredient, row.onHandMilli)}</strong>
-                        {' · '}
-                        {t('inventory.suppliers.lastRate', { price: formatPaisa(row.lastRatePaisa), unit: unitLabel(unit, MILLI) })}
-                      </p>
-                    </div>
-                    {canManage && (
-                      <>
-                        <div className="mt-auto grid grid-cols-2 gap-2">
-                          <label className="flex items-center gap-1.5">
-                            <input value={input.quantity} onChange={(e) => setInput(row.ingredient.id, { quantity: e.target.value }, row)} inputMode="decimal" placeholder="0" aria-label={t('inventory.suppliers.quantityOf', { name: row.ingredient.name })} className="min-h-11 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-base tabular-nums" />
-                            <span className="text-xs font-semibold text-slate-600">{unitLabel(unit, 2 * MILLI)}</span>
-                          </label>
-                          <label className="flex items-center gap-1.5">
-                            <span className="text-xs font-semibold text-slate-500">Rs.</span>
-                            <input value={input.rate} onChange={(e) => setInput(row.ingredient.id, { rate: e.target.value }, row)} inputMode="decimal" aria-label={t('inventory.suppliers.rateOf', { name: row.ingredient.name })} className="min-h-11 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-base tabular-nums" />
-                          </label>
-                        </div>
-                        {amount !== null && (
-                          <p className="text-sm font-semibold text-slate-700" data-line-amount>
-                            {t('inventory.suppliers.linePreview', { qty: input.quantity, unit: unitLabel(unit, lineOf(row).quantityMilli ?? 0), rate: formatPaisa(lineOf(row).ratePaisa ?? 0), amount: formatPaisa(amount) })}
-                          </p>
-                        )}
-                        <Button disabled={busy || !typed} onClick={() => void receive([row])}>
-                          <PackagePlus className="size-4" aria-hidden />
-                          {t('inventory.suppliers.receive')}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-            {shownProducts.length === 0 && <li className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 sm:col-span-2 lg:col-span-3 2xl:col-span-4">{t('inventory.suppliers.noProductMatch')}</li>}
+                  </span>
+                  {row.deliveries30d > 0 && (
+                    <span className="absolute left-3 top-3 rounded-full bg-white/90 px-1.5 text-[10px] font-bold text-brand ring-1 ring-brand/20" data-uses>
+                      {t('inventory.suppliers.uses', { n: row.deliveries30d })}
+                    </span>
+                  )}
+                  <span className="mt-1.5 line-clamp-2 text-sm font-extrabold leading-snug text-slate-900">{row.ingredient.name}</span>
+                  <span className="text-[11px] text-slate-600">
+                    {t('inventory.suppliers.stockNow')}: <strong className="text-slate-900" data-stock-now>{stockText(row.ingredient, row.onHandMilli)}</strong>
+                  </span>
+                  <span className="mt-auto pt-1 text-xs font-bold text-slate-700">{t('inventory.suppliers.lastRate', { price: formatPaisa(row.lastRatePaisa), unit: unitLabel(row.ingredient.purchaseUnit, MILLI) })}</span>
+                </button>
+              </li>
+            ))}
+            {shownProducts.length === 0 && <li className="col-span-full rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{t('inventory.suppliers.noProductMatch')}</li>}
           </ul>
-        )}
-        {canManage && ws.products.length > 0 && (
-          // Stays at the bottom of the screen while he fills several products of one delivery.
-          <div className={cn('mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3', filled.length > 0 && 'sticky bottom-2 z-10 rounded-2xl border border-brand/30 bg-white p-3 shadow-lg')} data-receive-bar>
-            <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={t('inventory.suppliers.notePlaceholder')} aria-label={t('inventory.suppliers.note')} className="min-h-11 min-w-48 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm" />
-            {filled.length > 1 && (
-              <Button disabled={busy} onClick={() => void receive(filled)}>
-                <Check className="size-4" aria-hidden />
-                {t('inventory.suppliers.receiveAll', { n: filled.length, amount: formatPaisa(filledTotal) })}
-              </Button>
-            )}
-          </div>
         )}
         {error && (
           <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
@@ -490,14 +405,18 @@ function KhataList({ rows, workspace, showDate }: { rows: KhataEntryRow[]; works
         const time = when.toLocaleTimeString('en-PK', { hour: 'numeric', minute: '2-digit', hour12: true });
         const what =
           entry.kind === 'PURCHASE'
-            ? entry.lines
+            ? (entry.billNo ? `${t('inventory.bill.khataBill', { no: entry.billNo })}: ` : '') +
+              entry.lines
                 .map((l) => {
                   const i = nameOf(l.ingredientId);
                   return `${i?.name ?? '—'} ${parseFloat((l.quantityMilli / MILLI).toFixed(3))} ${i ? unitLabel(i.purchaseUnit, l.quantityMilli) : ''} × ${formatPaisa(l.ratePaisa)}`;
                 })
-                .join(', ')
+                .join(', ') +
+              (entry.discount ? ` · ${t('inventory.bill.khataDiscount', { amount: formatPaisa(entry.discount) })}` : '')
             : entry.kind === 'PAYMENT'
-              ? t('inventory.suppliers.paidBy', { method: t(`inventory.suppliers.methods.${entry.method ?? 'OTHER'}`) })
+              ? entry.billId
+                ? t('inventory.bill.paidWithBill', { no: entry.billNo || '—', method: t(`inventory.suppliers.methods.${entry.method ?? 'OTHER'}`) })
+                : t('inventory.suppliers.paidBy', { method: t(`inventory.suppliers.methods.${entry.method ?? 'OTHER'}`) })
               : t('inventory.suppliers.openingBalance');
         return (
           <li key={entry.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 py-2.5 text-sm md:grid-cols-[6.5rem_minmax(0,1fr)_7.5rem_7.5rem]" data-khata-row={entry.kind}>

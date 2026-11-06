@@ -107,25 +107,38 @@ try {
   await workspace(owner).getByRole('searchbox', { name: 'Search his products' }).fill('zzz');
   await workspace(owner).getByText('No product matches.').waitFor();
   await workspace(owner).getByRole('searchbox', { name: 'Search his products' }).fill('');
-  for (const qty of ['2', '1']) {
-    await product(owner, 'Sugar').getByRole('textbox', { name: 'Quantity of Sugar received' }).fill(qty);
-    await product(owner, 'Sugar').getByRole('button', { name: 'Receive' }).click();
-    await owner.getByText(/Received: Sugar/).last().waitFor();
+  const bill = owner.locator('main [data-purchase-bill]');
+  const line = (name) => bill.locator(`[data-bill-line="${name}"]`);
+  const buy = async (items) => {
+    // Tap the first product on his screen: New Purchase (Bill) opens with it; tap the others on the bill screen.
+    await product(owner, items[0][0]).click();
+    for (const [name] of items.slice(1)) await bill.getByRole('button', { name: `Add ${name} to the bill` }).click();
+    for (const [name, qty] of items) await line(name).getByRole('textbox', { name: `Quantity of ${name} received` }).fill(qty);
+    await bill.getByRole('button', { name: 'Save Purchase' }).click();
+    await workspace(owner).waitFor();
     await owner.waitForTimeout(200);
-  }
-  await product(owner, 'Cooking oil').getByRole('textbox', { name: 'Quantity of Cooking oil received' }).fill('5');
-  await product(owner, 'Cooking oil').getByRole('button', { name: 'Receive' }).click();
+  };
+  await buy([['Sugar', '2']]);
+  await buy([['Sugar', '1']]);
+  await buy([['Cooking oil', '5']]);
   await owner.waitForFunction(() => document.querySelectorAll('main [data-product-row]')[1]?.getAttribute('data-product-row') === 'Cooking oil');
   assert.deepEqual((await names()).slice(0, 2), ['Sugar', 'Cooking oil'], 'Sugar came twice, oil once: they lead');
   assert.equal(await product(owner, 'Sugar').locator('[data-uses]').innerText(), '2× in 30 days');
-  await product(owner, 'Atta (20 kg bag)').getByRole('textbox', { name: 'Quantity of Atta (20 kg bag) received' }).fill('2');
-  await product(owner, 'Basmati rice').getByRole('textbox', { name: 'Quantity of Basmati rice received' }).fill('10');
-  await workspace(owner).locator('[data-receive-bar]').getByRole('button', { name: /Receive all 2/ }).waitFor();
-  await shot(owner, '01b-laptop-kiryana-cards');
-  await workspace(owner).locator('[data-receive-bar]').getByRole('button', { name: /Receive all 2/ }).click();
-  await owner.getByText(/Received: Atta \(20 kg bag\) 2 packs, Basmati rice 10 kg/).waitFor();
-  await noSidewaysScroll(owner, 'laptop supplier');
-  ok('picture cards; search "masala" finds 3; most delivered first (Sugar 2×, oil 1×); Receive all 2 from the bottom bar');
+  await product(owner, 'Atta (20 kg bag)').click();
+  await bill.getByRole('searchbox', { name: 'Search product (e.g. Atta, Sugar, Oil …)' }).fill('rice');
+  await bill.getByRole('button', { name: 'Add Basmati rice to the bill' }).click();
+  await bill.getByRole('searchbox', { name: 'Search product (e.g. Atta, Sugar, Oil …)' }).fill('');
+  await line('Atta (20 kg bag)').getByRole('textbox', { name: 'Quantity of Atta (20 kg bag) received' }).fill('2');
+  await line('Basmati rice').getByRole('textbox', { name: 'Quantity of Basmati rice received' }).fill('10');
+  await bill.locator('[data-in-bill]').first().waitFor();
+  await bill.getByRole('group', { name: 'Product categories' }).getByRole('button', { name: 'Sauces & Spices' }).click();
+  assert.ok((await bill.locator('[data-product-tile]').count()) >= 5, 'spices only');
+  await bill.getByRole('group', { name: 'Product categories' }).getByRole('button', { name: 'All' }).click();
+  await shot(owner, '01b-laptop-kiryana-bill');
+  await noSidewaysScroll(owner, 'laptop bill');
+  await bill.getByRole('button', { name: 'Save Purchase' }).click();
+  await owner.getByText(/Purchase saved: Rs\. 9,000 added to the khata/).waitFor();
+  ok('picture cards; search "masala" finds 3; most delivered first (Sugar 2×, oil 1×); one bill with Atta 2 bags + Basmati 10 kg = Rs. 9,000, category chips');
 
   console.log('\n2. Edit order: Karyana first, Sabzi second, Chicken third');
   await backToList(owner);

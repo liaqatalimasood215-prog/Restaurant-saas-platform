@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkReceipt, checkSupplierPayment, deliveriesPerProduct, isSupplierPhoto, sortByUse, khataBalances, khataSummary, lineAmount, receivedStockMilli, sortSuppliers, supplierOrderAfterPicking, type KhataEntry } from './index';
+import { billTotals, checkPurchaseBill, checkReceipt, checkSupplierPayment, deliveriesPerProduct, discountFromPercent, similarIngredients, isSupplierPhoto, sortByUse, khataBalances, khataSummary, lineAmount, receivedStockMilli, sortSuppliers, supplierOrderAfterPicking, type KhataEntry } from './index';
 
 const milk = { id: 'milk', isActive: true, kind: 'BOUGHT' as const, purchaseUnit: 'l' as const, stockUnit: 'ml' as const, packSizeMilli: null };
 const atta = { id: 'atta', isActive: true, kind: 'BOUGHT' as const, purchaseUnit: 'pack' as const, stockUnit: 'g' as const, packSizeMilli: 20_000_000 };
@@ -92,4 +92,33 @@ test('daily products first: counted from the last 30 days of his deliveries, a d
   assert.deepEqual(Object.fromEntries(counts), { oil: 3, atta: 1, sugar: 2 }, '7 Oct is day 31: not counted; 8 Oct is day 30');
   const products = ['atta', 'salt', 'oil', 'sugar', 'besan'].map((id) => ({ id, name: id }));
   assert.deepEqual(sortByUse(products, counts).map((p) => p.id), ['oil', 'sugar', 'atta', 'besan', 'salt']);
+});
+
+test("purchase bill: the owner's example, 16,300 bought, 10,000 paid → this bill owes 6,300; discount and paid limits", () => {
+  const lines = [
+    { ingredientId: 'atta', quantityMilli: 2_000, ratePaisa: 650_000 },
+    { ingredientId: 'sugar', quantityMilli: 15_000, ratePaisa: 20_000 },
+  ];
+  assert.deepEqual(billTotals(lines, 0), { subtotal: 1_600_000, discount: 0, total: 1_600_000 });
+  const withOil = [...lines, { ingredientId: 'oil', quantityMilli: 5_000, ratePaisa: 6_000 }];
+  assert.deepEqual(billTotals(withOil, 0), { subtotal: 1_630_000, discount: 0, total: 1_630_000 }, 'Rs. 16,300');
+  assert.equal(billTotals(withOil, 0).total - 1_000_000, 630_000, 'paid Rs. 10,000 → Rs. 6,300 due on this bill');
+  assert.equal(discountFromPercent(1_540_000, 1_000), 154_000, '10 % of Rs. 15,400');
+  const products = ['atta', 'sugar', 'oil'].map((id) => ({ id, isActive: true, kind: 'BOUGHT' as const, purchaseUnit: 'kg' as const, stockUnit: 'g' as const, packSizeMilli: null }));
+  const bill = { lines: withOil, note: '', discount: 30_000, paid: 1_000_000, method: 'CASH', date: '2026-11-06', billNo: 'SKS-1024' };
+  assert.equal(checkPurchaseBill(bill, products, '2026-11-06'), null);
+  assert.deepEqual(checkPurchaseBill({ ...bill, discount: 2_000_000 }, products, '2026-11-06'), { line: null, problem: 'DISCOUNT_INVALID' });
+  assert.deepEqual(checkPurchaseBill({ ...bill, paid: 1_600_001 }, products, '2026-11-06'), { line: null, problem: 'PAID_MORE_THAN_BILL' }, 'old debt is paid with Settle Payment');
+  assert.deepEqual(checkPurchaseBill({ ...bill, method: null }, products, '2026-11-06'), { line: null, problem: 'METHOD_REQUIRED' });
+  assert.equal(checkPurchaseBill({ ...bill, paid: 0, method: null }, products, '2026-11-06'), null, 'nothing paid now: no method needed');
+  assert.deepEqual(checkPurchaseBill({ ...bill, date: '2026-11-07' }, products, '2026-11-06'), { line: null, problem: 'DATE_INVALID' });
+  assert.deepEqual(checkPurchaseBill({ ...bill, lines: [] }, products, '2026-11-06'), { line: null, problem: 'NO_LINES' });
+});
+
+test('a new product with a name like one we have is flagged (Chini ↔ Chini (Sugar), Aloo ↔ Potatoes (aloo)), units ignored', () => {
+  const list = [{ name: 'Chini (Sugar)' }, { name: 'Potatoes (aloo)' }, { name: 'Atta (20 kg bag)' }, { name: 'Red chilli powder (500 g pack)' }];
+  assert.deepEqual(similarIngredients('chini', list).map((i) => i.name), ['Chini (Sugar)']);
+  assert.deepEqual(similarIngredients('Aloo', list).map((i) => i.name), ['Potatoes (aloo)']);
+  assert.deepEqual(similarIngredients('Maida 20 kg bag', list), [], 'bag and kg are not names');
+  assert.deepEqual(similarIngredients('', list), []);
 });

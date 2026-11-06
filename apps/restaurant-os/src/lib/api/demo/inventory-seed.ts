@@ -16,6 +16,7 @@ import {
   type Supplier,
   type SupplierCategory,
 } from '@restaurant-saas/shared';
+import type { PurchaseDraft } from '../client';
 import { createRecipeSeed } from './recipe-seed';
 
 /**
@@ -35,6 +36,8 @@ export interface DemoInventory {
   recipeScales: RecipeScale[];
   /** Suppliers S1: every delivery, payment and opening balance of every supplier (never edited or deleted) */
   khata: KhataEntry[];
+  /** New Purchase (Bill): one unfinished bill per supplier, as typed (missing in data from before 2026-11-06) */
+  purchaseDrafts?: PurchaseDraft[];
   expiringSoonDays: number;
 }
 

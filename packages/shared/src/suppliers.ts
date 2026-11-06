@@ -46,6 +46,11 @@ export interface KhataEntry extends BranchScoped {
   method: SupplierPaymentMethod | null;
   /** The business day it counts for (a payment may be dated earlier) */
   businessDate: string;
+  /** Purchase bill: the supplier's bill number (optional) and the discount taken off the lines (paisa) */
+  billNo?: string;
+  discount?: Paisa;
+  /** A payment made with a bill: that bill's PURCHASE entry */
+  billId?: Uuid;
   note: string;
   createdBy: Uuid;
   createdAt: IsoDateTime;
@@ -104,6 +109,73 @@ export function checkSupplierPayment(input: { amount: number | null; method: str
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || input.date > today) return 'DATE_INVALID';
   if (input.note.trim().length > MAX_SUPPLIER_NOTE) return 'NOTE_TOO_LONG';
   return null;
+}
+
+// ── Purchase bill (owner's New Purchase (Bill) brief, 2026-11-06) ─────────────────────────────
+
+/**
+ * One bill = one PURCHASE khata entry (lines at their rates, minus a discount) and, when he pays at once, one PAYMENT
+ * entry linked to it by billId. Paid at once is never more than this bill: older debt is paid with Settle Payment,
+ * so the old and the new debt stay apart. Stock goes up only when the bill is saved, once (idempotency key).
+ */
+export const MAX_BILL_NO = 30;
+
+export interface PurchaseBillTotals {
+  subtotal: Paisa;
+  discount: Paisa;
+  total: Paisa;
+}
+
+export function billTotals(lines: readonly { quantityMilli: number | null; ratePaisa: number | null }[], discount: Paisa): PurchaseBillTotals {
+  const subtotal = lines.reduce((sum, l) => sum + (l.quantityMilli !== null && l.ratePaisa !== null ? lineAmount(l.quantityMilli, l.ratePaisa) : 0), 0);
+  return { subtotal, discount, total: subtotal - discount };
+}
+
+/** A percentage discount in paisa (10 % of Rs. 15,400 = Rs. 1,540); basis points, 10 % = 1,000. */
+export function discountFromPercent(subtotal: Paisa, basisPoints: number): Paisa {
+  return mulDivRound(subtotal, basisPoints, 10_000);
+}
+
+export type PurchaseBillProblem = ReceiptProblem | 'DISCOUNT_INVALID' | 'PAID_INVALID' | 'PAID_MORE_THAN_BILL' | 'METHOD_REQUIRED' | 'DATE_INVALID' | 'BILL_NO_TOO_LONG';
+
+/** The first problem with a bill, or null: the delivery lines, a discount up to the subtotal, paid up to the total. */
+export function checkPurchaseBill(
+  input: {
+    lines: readonly { ingredientId: Uuid; quantityMilli: number | null; ratePaisa: number | null }[];
+    note: string;
+    discount: number | null;
+    paid: number | null;
+    method: string | null;
+    date: string;
+    billNo: string;
+  },
+  ingredients: Parameters<typeof checkReceipt>[1],
+  today: string,
+): { line: number | null; problem: PurchaseBillProblem } | null {
+  const receipt = checkReceipt(input, ingredients);
+  if (receipt) return receipt;
+  const { subtotal } = billTotals(input.lines, 0);
+  if (input.discount === null || !Number.isInteger(input.discount) || input.discount < 0 || input.discount > subtotal) return { line: null, problem: 'DISCOUNT_INVALID' };
+  if (input.paid === null || !Number.isInteger(input.paid) || input.paid < 0) return { line: null, problem: 'PAID_INVALID' };
+  if (input.paid > subtotal - input.discount) return { line: null, problem: 'PAID_MORE_THAN_BILL' };
+  if (input.paid > 0 && (!input.method || !(SUPPLIER_PAYMENT_METHODS as readonly string[]).includes(input.method))) return { line: null, problem: 'METHOD_REQUIRED' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || input.date > today) return { line: null, problem: 'DATE_INVALID' };
+  if (input.billNo.trim().length > MAX_BILL_NO) return { line: null, problem: 'BILL_NO_TOO_LONG' };
+  return null;
+}
+
+const NOT_A_NAME = new Set(['pack', 'packs', 'bag', 'box', 'carton', 'kg', 'gram', 'litre', 'liter', 'bottle', 'jar', 'fresh', 'with', 'the', 'and']);
+const nameWords = (name: string) => name.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !NOT_A_NAME.has(w));
+
+/**
+ * Products with a name like the one being added ("Chini" ↔ "Chini (Sugar)", "Aloo" ↔ "Potatoes (aloo)"): one word
+ * of three letters or more in common, units and packing words left out. A hint before adding a second copy; an exact
+ * same name is refused by checkIngredient.
+ */
+export function similarIngredients<T extends Pick<Ingredient, 'name'>>(name: string, ingredients: readonly T[]): T[] {
+  const words = new Set(nameWords(name));
+  if (words.size === 0) return [];
+  return ingredients.filter((i) => nameWords(i.name).some((w) => words.has(w)));
 }
 
 export type KhataStatus = 'PAID' | 'PARTLY_PAID' | 'UNPAID';
@@ -223,6 +295,8 @@ export const SUPPLIER_CATEGORY_ART: Record<SupplierCategory, string> = {
 export interface SupplierRow {
   supplier: Supplier;
   summary: KhataSummary;
+  /** An unfinished purchase bill is saved as a draft */
+  hasDraft: boolean;
 }
 
 export interface SupplierProductRow {

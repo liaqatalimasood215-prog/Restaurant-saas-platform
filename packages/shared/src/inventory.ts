@@ -20,7 +20,7 @@ export const STOCK_UNITS = ['g', 'ml', 'piece', 'bottle', 'portion'] as const;
 export type StockUnit = (typeof STOCK_UNITS)[number];
 
 /** The unit an ingredient is bought in. */
-export const PURCHASE_UNITS = ['kg', 'g', 'l', 'ml', 'piece', 'bottle', 'portion', 'pack', 'box', 'carton'] as const;
+export const PURCHASE_UNITS = ['kg', 'g', 'l', 'ml', 'piece', 'bottle', 'portion', 'pack', 'bag', 'box', 'carton'] as const;
 export type PurchaseUnit = (typeof PURCHASE_UNITS)[number];
 
 /** Weight and volume units convert by fixed numbers; the others are counted things or packages. */
@@ -156,6 +156,8 @@ export interface Supplier extends BranchScoped {
   productIds: Uuid[];
   /** The owner's order of the supplier list (Edit order, 2026-11-06): 0 = first; missing = after them, by name */
   sortOrder?: number;
+  /** His own last rate per product (paisa per purchase unit): one shared product, a price per supplier */
+  rates?: Record<Uuid, Paisa>;
   /** His picture as a small JPEG data URL (DEMO: kept in this browser; real photo storage is Phase 7); missing = category picture */
   photo?: string | null;
 }

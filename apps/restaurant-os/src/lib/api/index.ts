@@ -12,6 +12,8 @@ export type {
   DemoControls,
   HeldBillInput,
   KhataPeriod,
+  PurchaseBillInput,
+  PurchaseDraft,
   OrderFilter,
   RecordPaymentInput,
   SendRoundInput,

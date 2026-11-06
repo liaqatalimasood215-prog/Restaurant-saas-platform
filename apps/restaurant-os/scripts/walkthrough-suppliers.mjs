@@ -63,10 +63,26 @@ async function openSupplier(page, name) {
   await page.locator(`main [data-supplier-card="${name}"]`).click();
   await page.locator(`main [data-supplier-workspace="${name}"]`).waitFor();
 }
+const bill = (page) => page.locator('main [data-purchase-bill]');
+const billLine = (page, name) => bill(page).locator(`[data-bill-line="${name}"]`);
+/** Tap a product of the supplier: New Purchase (Bill) opens with it on the bill. */
+async function openBillWith(page, name) {
+  await product(page, name).click();
+  await billLine(page, name).waitFor();
+}
+async function fillLine(page, name, qty, rate) {
+  await billLine(page, name).getByRole('textbox', { name: `Quantity of ${name} received` }).fill(qty);
+  if (rate) await billLine(page, name).getByRole('textbox', { name: `Rate of ${name}` }).fill(rate);
+}
+async function savePurchase(page) {
+  await bill(page).getByRole('button', { name: 'Save Purchase' }).click();
+  await workspace(page).waitFor();
+}
+/** One product, one bill, nothing paid now. */
 async function receive(page, name, qty, rate) {
-  await product(page, name).getByRole('textbox', { name: `Quantity of ${name} received` }).fill(qty);
-  if (rate) await product(page, name).getByRole('textbox', { name: `Rate of ${name}` }).fill(rate);
-  await product(page, name).getByRole('button', { name: 'Receive' }).click();
+  await openBillWith(page, name);
+  await fillLine(page, name, qty, rate);
+  await savePurchase(page);
 }
 async function noSidewaysScroll(page, label) {
   const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -85,23 +101,29 @@ try {
   await shot(owner, '01-laptop-dairy-before');
   ok('9 desi suppliers; the dairy supplier shows his products (milk, yogurt, cream, butter); milk stock 20 litres; nothing due');
 
-  console.log('\n2. Morning: 50 L milk at Rs. 220');
-  await product(owner, 'Fresh milk').getByRole('textbox', { name: 'Quantity of Fresh milk received' }).fill('50');
-  await product(owner, 'Fresh milk').getByRole('textbox', { name: 'Rate of Fresh milk' }).fill('220');
-  assert.equal(await product(owner, 'Fresh milk').locator('[data-line-amount]').innerText(), '50 litres × Rs. 220 = Rs. 11,000');
-  await product(owner, 'Fresh milk').getByRole('button', { name: 'Receive' }).click();
-  await owner.getByText('Received: Fresh milk 50 litres · Rs. 11,000 added to the khata').waitFor();
+  console.log('\n2. Morning: 50 L milk at Rs. 220, as a bill');
+  await openBillWith(owner, 'Fresh milk');
+  assert.equal(await owner.locator('main [data-supplier-workspace]').count(), 0, 'the bill replaces the supplier screen');
+  await fillLine(owner, 'Fresh milk', '50', '220');
+  assert.equal(await billLine(owner, 'Fresh milk').locator('[data-line-amount]').innerText(), 'Rs. 11,000');
+  assert.equal(await bill(owner).locator('[data-bill-total]').innerText(), 'Rs. 11,000');
+  assert.equal(await bill(owner).locator('[data-bill-due]').innerText(), 'Rs. 11,000', 'nothing paid now');
+  let data = await saved(owner);
+  assert.equal(data?.inventory.khata.length ?? 0, 0, 'a bill being typed changes nothing');
+  await shot(owner, '02a-laptop-bill-milk');
+  await savePurchase(owner);
+  await owner.getByText(`Purchase saved: Rs. 11,000 added to the khata of ${DAIRY}`).waitFor();
   await product(owner, 'Fresh milk').locator('[data-stock-now]').getByText('70 litres', { exact: true }).waitFor();
   await metricIs(owner, 'Bought today', 'Rs. 11,000');
   await metricIs(owner, 'Total due', 'Rs. 11,000');
   await workspace(owner).getByText('Unpaid').first().waitFor();
-  let data = await saved(owner);
+  data = await saved(owner);
   assert.equal(data.inventory.khata.length, 1);
   const purchase = data.inventory.movements.filter((m) => m.type === 'PURCHASE');
   assert.equal(purchase.length, 1);
   assert.equal(purchase[0].ingredientId, MILK);
   assert.equal(purchase[0].quantityMilli, 50_000_000, '50 L = 50,000 ml');
-  ok('50 L × Rs. 220 = Rs. 11,000: stock 20 → 70 litres, one PURCHASE movement, khata Rs. 11,000, Unpaid');
+  ok('tap milk → bill; 50 L × Rs. 220 = Rs. 11,000; nothing written while typing; Save Purchase: stock 20 → 70 litres, one PURCHASE movement, khata Rs. 11,000, Unpaid');
 
   console.log('\n3. Afternoon: 20 L more; evening: pay Rs. 10,000');
   await receive(owner, 'Fresh milk', '20');
@@ -127,26 +149,48 @@ try {
   await shot(owner, '03-laptop-dairy-after', true);
   ok('20 L more → 90 litres, Rs. 15,400 today; paying Rs. 20,000 refused; Rs. 10,000 cash → Rs. 5,400 due, Partly paid; khata payment, purchase, purchase');
 
-  console.log('\n4. One delivery with two products, and a new rate');
-  await product(owner, 'Yogurt (dahi)').getByRole('textbox', { name: 'Quantity of Yogurt (dahi) received' }).fill('5');
-  await product(owner, 'Butter (makhan)').getByRole('textbox', { name: 'Quantity of Butter (makhan) received' }).fill('1');
-  await product(owner, 'Butter (makhan)').getByRole('textbox', { name: 'Rate of Butter (makhan)' }).fill('2000');
-  await workspace(owner).getByRole('button', { name: 'Receive all 2 · Rs. 3,300' }).click();
-  await owner.getByText('Received: Butter (makhan) 1 kg, Yogurt (dahi) 5 kg · Rs. 3,300 added to the khata').waitFor();
-  await metricIs(owner, 'Total due', 'Rs. 8,700');
+  console.log('\n4. One bill with two products, a new rate, a discount and part paid at once');
+  await workspace(owner).getByRole('button', { name: 'New Purchase (Bill)' }).click();
+  await bill(owner).waitFor();
+  await bill(owner).getByRole('textbox', { name: 'Bill No. (optional)' }).fill('FDD-77');
+  await bill(owner).getByRole('button', { name: 'Add Yogurt (dahi) to the bill' }).click();
+  await bill(owner).getByRole('button', { name: 'Add Butter (makhan) to the bill' }).click();
+  assert.equal(await bill(owner).locator('[data-bill-count]').innerText(), '2 items');
+  await fillLine(owner, 'Yogurt (dahi)', '5');
+  await fillLine(owner, 'Butter (makhan)', '1', '2000');
+  assert.equal(await bill(owner).locator('[data-bill-total]').innerText(), 'Rs. 3,300');
+  await bill(owner).getByRole('textbox', { name: 'Discount', exact: true }).fill('300');
+  assert.equal(await bill(owner).locator('[data-bill-total]').innerText(), 'Rs. 3,000');
+  await bill(owner).getByRole('textbox', { name: 'Paid now' }).fill('5000');
+  await bill(owner).getByRole('button', { name: 'Save Purchase' }).click();
+  await bill(owner).getByText('Paid now cannot be more than this bill. Pay older dues with Settle Payment.').waitFor();
+  await bill(owner).getByRole('textbox', { name: 'Paid now' }).fill('1000');
+  assert.equal(await bill(owner).locator('[data-bill-due]').innerText(), 'Rs. 2,000');
+  assert.equal(await bill(owner).locator('[data-bill-row="after"] dd').innerText(), 'Rs. 7,400', 'old Rs. 5,400 + this bill Rs. 2,000');
+  await shot(owner, '04a-laptop-bill-two-products');
+  await savePurchase(owner);
+  await metricIs(owner, 'Total due', 'Rs. 7,400');
   data = await saved(owner);
-  const delivery = data.inventory.khata.at(-1);
+  const delivery = data.inventory.khata.findLast((e) => e.kind === 'PURCHASE');
   assert.equal(delivery.lines.length, 2);
+  assert.equal(delivery.amount, 300_000, 'Rs. 3,300 − Rs. 300 discount');
+  assert.equal(delivery.billNo, 'FDD-77');
+  const paidWith = data.inventory.khata.at(-1);
+  assert.equal(paidWith.kind, 'PAYMENT');
+  assert.equal(paidWith.amount, -100_000);
+  assert.equal(paidWith.billId, delivery.id, 'the payment belongs to this bill; the old due stays apart');
   assert.equal(data.inventory.ingredients.find((i) => i.name === 'Butter (makhan)').purchasePrice, 200_000, 'the rate paid becomes the price');
-  ok('Yogurt 5 kg × Rs. 260 + Butter 1 kg × Rs. 2,000 = Rs. 3,300 in one khata entry; butter now costs Rs. 2,000 / kg; due Rs. 8,700');
+  await workspace(owner).locator('[data-khata-row="PURCHASE"]').first().getByText(/Bill FDD-77: .* discount Rs\. 300/).waitFor();
+  await workspace(owner).getByText('Paid with bill FDD-77 · Cash').waitFor();
+  ok('New Purchase (Bill), bill FDD-77: Yogurt 5 kg × Rs. 260 + Butter 1 kg × Rs. 2,000 = Rs. 3,300 − Rs. 300 = Rs. 3,000; paying Rs. 5,000 now refused; Rs. 1,000 cash → bill due Rs. 2,000, total owed Rs. 7,400; butter now Rs. 2,000 / kg');
 
   console.log('\n5. Stock Movements, Overview, a new supplier with an old balance');
   await owner.getByRole('tab', { name: 'Stock', exact: true }).click();
   await owner.getByRole('tab', { name: /^Stock Movements/ }).click();
   await owner.locator('main [data-ledger-row]').filter({ hasText: 'Received from supplier' }).first().waitFor();
   await owner.getByRole('tab', { name: 'Overview', exact: true }).click();
-  await owner.locator('main').getByText('Rs. 18,700').first().waitFor();
-  await owner.locator('main').getByText('Rs. 8,700').first().waitFor();
+  await owner.locator('main').getByText('Rs. 18,400').first().waitFor();
+  await owner.locator('main').getByText('Rs. 7,400').first().waitFor();
   await openSuppliers(owner);
   await owner.getByRole('button', { name: 'Add supplier' }).click();
   const form = owner.getByRole('dialog', { name: 'Add supplier' });
@@ -160,7 +204,66 @@ try {
   await owner.locator('main [data-supplier-workspace="Ali Milk Supplier"]').waitFor();
   await metricIs(owner, 'Previous due', 'Rs. 2,000');
   await product(owner, 'Fresh milk').locator('[data-stock-now]').getByText('90 litres', { exact: true }).waitFor();
-  ok('Stock Movements shows "Received from supplier"; Overview: bought today Rs. 18,700, owed Rs. 8,700; Ali Milk Supplier added with Rs. 2,000 old balance and the same milk stock (90 litres, shared)');
+  ok('Stock Movements shows "Received from supplier"; Overview: bought today Rs. 18,400, owed Rs. 7,400; Ali Milk Supplier added with Rs. 2,000 old balance and the same milk stock (90 litres, shared)');
+
+  console.log('\n5b. Draft, Add New Product and Save & Print');
+  await openSupplier(owner, DAIRY);
+  await openBillWith(owner, 'Paneer');
+  await fillLine(owner, 'Paneer', '2');
+  await bill(owner).getByRole('button', { name: 'Add New Product' }).click();
+  const np = owner.locator('main [data-new-product]');
+  await np.waitFor();
+  assert.equal(await bill(owner).count(), 0, 'one screen at a time: the bill is hidden');
+  await np.getByRole('textbox', { name: 'Product name' }).fill('khoya');
+  await np.locator('[data-similar]').getByText('Khoya', { exact: true }).waitFor();
+  await np.getByRole('button', { name: 'Save Product & Add to Bill' }).click();
+  await np.getByText('An ingredient with this name already exists.').or(np.getByRole('alert')).first().waitFor();
+  await np.getByRole('textbox', { name: 'Product name' }).fill('Desi Lassi');
+  await np.getByRole('combobox', { name: 'Category' }).selectOption({ label: 'Dairy & Cheese' });
+  await np.getByRole('button', { name: 'litre', exact: true }).click();
+  await np.getByRole('button', { name: 'bag', exact: true }).click();
+  await np.getByRole('button', { name: 'Save Product & Add to Bill' }).click();
+  await np.getByText('Type how much one bag holds.').waitFor();
+  await np.getByRole('button', { name: 'Loose' }).click();
+  await np.getByRole('textbox', { name: 'Purchase price per litre' }).fill('150');
+  await shot(owner, '05b-laptop-add-new-product');
+  await np.getByRole('button', { name: 'Save Product & Add to Bill' }).click();
+  await billLine(owner, 'Desi Lassi').waitFor();
+  assert.equal(await billLine(owner, 'Paneer').getByRole('textbox', { name: 'Quantity of Paneer received' }).inputValue(), '2', 'the unfinished bill was kept');
+  assert.equal(await billLine(owner, 'Desi Lassi').getByRole('textbox', { name: 'Rate of Desi Lassi' }).inputValue(), '150');
+  data = await saved(owner);
+  const lassi = data.inventory.ingredients.find((i) => i.name === 'Desi Lassi');
+  assert.ok(lassi, 'saved in the shared product list');
+  assert.equal(lassi.stockUnit, 'ml');
+  assert.ok(data.inventory.suppliers.find((s) => s.name === DAIRY).productIds.includes(lassi.id), 'on his product list');
+  assert.equal(data.inventory.movements.filter((m) => m.ingredientId === lassi.id).length, 0, 'no opening stock typed: no movement');
+  const khataBefore = data.inventory.khata.length;
+  await bill(owner).getByRole('button', { name: 'Save Draft' }).click();
+  await owner.getByText('Draft saved. Nothing added to stock yet.').waitFor();
+  await bill(owner).getByRole('button', { name: DAIRY }).click();
+  await workspace(owner).getByRole('button', { name: 'Continue draft bill' }).waitFor();
+  data = await saved(owner);
+  assert.equal(data.inventory.khata.length, khataBefore, 'a draft never touches the khata');
+  await backToList(owner);
+  await owner.locator(`main [data-supplier-card="${DAIRY}"]`).getByText('Draft bill').waitFor();
+  await openSupplier(owner, DAIRY);
+  await workspace(owner).getByRole('button', { name: 'Continue draft bill' }).click();
+  await billLine(owner, 'Desi Lassi').waitFor();
+  assert.equal(await billLine(owner, 'Paneer').getByRole('textbox', { name: 'Quantity of Paneer received' }).inputValue(), '2');
+  await fillLine(owner, 'Desi Lassi', '10');
+  assert.equal(await bill(owner).locator('[data-bill-total]').innerText(), 'Rs. 4,300', 'Paneer 2 × Rs. 1,400 + Lassi 10 × Rs. 150');
+  await bill(owner).getByRole('button', { name: 'Save & Print' }).click();
+  const printed = owner.getByRole('dialog', { name: 'Print purchase bill' });
+  await printed.locator('[data-printable-bill]').getByText('PURCHASE BILL').waitFor();
+  await printed.locator('[data-printable-bill]').getByText('Desi Lassi').waitFor();
+  await shot(owner, '05c-laptop-print-bill');
+  await printed.getByRole('button', { name: 'Close' }).last().click();
+  await workspace(owner).getByRole('button', { name: 'New Purchase (Bill)' }).waitFor();
+  await metricIs(owner, 'Total due', 'Rs. 11,700');
+  data = await saved(owner);
+  assert.equal((data.inventory.purchaseDrafts ?? []).length, 0, 'saving the bill removes the draft');
+  assert.equal(data.inventory.movements.filter((m) => m.ingredientId === lassi.id).length, 1, 'stock goes up once, on save');
+  ok('bill keeps Paneer 2 while Add New Product is open; "khoya" shows the Khoya we have and is refused; bag needs its size; Desi Lassi (litre, Rs. 150) saved in the shared list, on his list and on the bill; Save Draft changes nothing, Draft bill badge, Continue draft; Save & Print → printable bill, Rs. 4,300, due Rs. 11,700, stock once');
 
   console.log('\n6. Manager, Cashier, desktop, tablet and phone');
   await owner.setViewportSize(DESKTOP);
