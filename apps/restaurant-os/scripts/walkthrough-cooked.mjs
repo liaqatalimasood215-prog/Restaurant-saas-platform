@@ -88,17 +88,64 @@ try {
   await adjust.waitFor({ state: 'detached' });
   await openPrepared(owner);
   for (const name of COOKED) await card(owner, name).locator('[data-cooked-card]').waitFor();
+  // Owner, 2026-11-08: Prepared items opens on the whole screen; "← Recipes" goes back to the overview
+  assert.equal(await owner.getByRole('heading', { name: 'Inventory & Suppliers' }).count(), 0, 'the Inventory title steps aside');
+  assert.equal(await owner.locator('main [data-recipe-summary]').count(), 0, 'the four food-cost cards step aside');
+  await owner.getByRole('button', { name: 'Recipes', exact: true }).click();
+  await owner.locator('main [data-recipe-summary]').first().waitFor();
+  await owner.getByRole('heading', { name: 'Inventory & Suppliers' }).waitFor();
+  await owner.getByRole('tab', { name: 'Prepared items' }).click();
+  await card(owner, 'Naan dough').waitFor();
   const daal = card(owner, 'Cooked Daal Mash');
-  await daal.getByText('Recipe for 1 kg Daal mash').waitFor();
+  await daal.locator('[data-dish-state="OUT"]').getByText('Out of Stock').waitFor();
   await daal.locator('[data-raw-stock="out"]').getByText('Out of Stock').waitFor();
-  await daal.getByText('Cost of the saved recipe (1 kg):').waitFor();
-  const oneKg = rupees(await daal.locator('strong').innerText());
-  await card(owner, 'Cooked Chicken Biryani').getByText('Recipe for 5 kg Basmati rice').waitFor();
-  assert.equal(await card(owner, 'Cooked Chicken Biryani').locator('[data-raw-stock]').innerText(), '10 kg', 'rice in stock');
-  await card(owner, 'Cooked Chicken Biryani').locator('[data-shared]').getByText('Same Basmati rice as Cooked Rice (zeera)').waitFor();
+  await daal.getByText('(saved recipe, 1 kg)').waitFor();
+  const oneKg = rupees(await daal.locator('[data-cooked-cost]').innerText());
+  // What the recipe is for shows with its ingredients (the chevron opens them too)
+  await daal.getByRole('button', { name: 'Open Cooked Daal Mash' }).click();
+  await daal.locator('[data-main-line]').getByText('Recipe for 1 kg Daal mash, worked out for 1 kg:').waitFor();
+  await daal.getByRole('button', { name: 'Open Cooked Daal Mash' }).click();
+  const biryani = card(owner, 'Cooked Chicken Biryani');
+  assert.equal(await biryani.locator('[data-raw-stock]').innerText(), '10 kg*', 'rice in stock, shared');
+  await biryani.locator('[data-shared]').getByText('Basmati rice (Shared)').waitFor();
+  assert.ok((await biryani.locator('p[title*="Cooked Rice (zeera)"]').count()) === 1, 'the shared line names the other dish');
+  await owner.locator('main [data-shared-note]').getByText('counted once', { exact: false }).waitFor();
+  await biryani.getByRole('button', { name: 'Show ingredients for 10 kg' }).click();
+  await biryani.locator('[data-main-line]').getByText('Recipe for 5 kg Basmati rice', { exact: false }).waitFor();
+  await biryani.getByRole('button', { name: 'Hide ingredients' }).click();
   assert.equal(await card(owner, 'Naan dough').locator('[data-cooked-card]').count(), 0, 'naan dough (no main ingredient) stays as it was');
   assert.equal(await owner.locator('main').getByText(/full plates/).count(), 0, 'no plates for now (owner: later)');
+  // The four summary cards of his picture, from the real data
+  const stat = (key) => owner.locator(`main [data-stat="${key}"]`).innerText();
+  assert.deepEqual([await stat('ALL'), await stat('OK'), await stat('SHORT'), await stat('OUT')], ['9', '7', '0', '1']);
   await shot(owner, '01-desktop-out-of-stock');
+  // Filter chips: cooked food by its stock state, and the other prepared items
+  const filters = owner.locator('main [data-prepared-filters]');
+  const shown = () => owner.locator('main [data-prepared-item]').evaluateAll((list) => list.map((li) => li.getAttribute('data-prepared-item')));
+  assert.equal(await filters.getByRole('button', { name: /^All/ }).getAttribute('aria-pressed'), 'true');
+  await filters.getByRole('button', { name: /^Out of Stock/ }).click();
+  assert.deepEqual(await shown(), ['Cooked Daal Mash']);
+  await shot(owner, '01b-desktop-filter-out-of-stock');
+  await filters.getByRole('button', { name: /^Dough & sauces/ }).click();
+  assert.deepEqual(await shown(), ['Naan dough']);
+  await filters.getByRole('button', { name: /^All/ }).click();
+  assert.equal((await shown()).length, 9);
+  // Search by the dish or its main raw ingredient
+  const searchBox = owner.getByRole('searchbox', { name: 'Search recipe' });
+  await searchBox.fill('qeema');
+  assert.deepEqual(await shown(), ['Cooked Qeema']);
+  await searchBox.fill('basmati');
+  assert.deepEqual((await shown()).sort(), ['Cooked Chicken Biryani', 'Cooked Rice (zeera)']);
+  await searchBox.fill('pizza');
+  await owner.getByText('No prepared item matches "pizza".').waitFor();
+  await searchBox.fill('');
+  // Cards or a list
+  await owner.getByRole('button', { name: 'Show as a list' }).click();
+  assert.equal(await owner.locator('main [data-prepared-layout]').getAttribute('data-prepared-layout'), 'list');
+  assert.equal((await shown()).length, 9);
+  await shot(owner, '01c-desktop-list-view');
+  await owner.getByRole('button', { name: 'Show as cards' }).click();
+  ok('summary 9 / 7 / 0 / 1; filters: Out of Stock → Daal Mash, Dough & sauces → Naan dough, All → 9; search qeema / basmati / pizza; list and cards');
   ok(`Daal Mash: Out of Stock, "Recipe for 1 kg Daal mash" stays (Rs. ${oneKg}); Biryani for 5 kg rice, 10 kg in stock, rice shared with Zeera Rice; no plates`);
 
   console.log('\n2. Supplier bill: 5 kg daal mash → the recipe for 5 kg');
@@ -117,6 +164,7 @@ try {
   await owner.getByText('Recipes updated: Cooked Daal Mash now for 7 kg (was 5 kg)').waitFor();
   await openPrepared(owner);
   assert.equal(await daal.locator('[data-raw-stock]').innerText(), '7 kg');
+  await daal.locator('[data-dish-state="OK"]').getByText('In Stock').waitFor();
   const seven = rupees(await daal.locator('[data-cooked-cost]').innerText());
   assert.ok(Math.abs(seven - 7 * oneKg) <= 1, `7 kg costs 7 × 1 kg (${seven} vs ${7 * oneKg})`);
   await owner.locator('main [data-latest-dish="Cooked Daal Mash"]').getByText('recipe now for 7 kg (was 5 kg)').waitFor();
@@ -163,7 +211,7 @@ try {
   console.log('\n5. A new cooked dish, written once for 2 kg, follows the daal chana stock');
   await builder(owner).getByRole('button', { name: 'Recipes' }).first().click();
   await card(owner, 'Naan dough').waitFor();
-  await owner.getByRole('button', { name: 'Add prepared item' }).click();
+  await owner.getByRole('button', { name: 'Add Recipe' }).click();
   await builder(owner).getByLabel('Name', { exact: true }).fill('Cooked Chana Pulao');
   await builder(owner).getByLabel('Category').selectOption('GRAINS');
   await builder(owner).getByLabel('Ingredient 1').selectOption({ label: 'Daal chana' });
@@ -181,9 +229,12 @@ try {
   await cook(owner).locator('[data-scaled-lines] li', { hasText: 'Cooking oil' }).getByText('1.5 litres').waitFor();
   await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
   await builder(owner).waitFor({ state: 'detached' });
-  await card(owner, 'Cooked Chana Pulao').getByText('Recipe for 2 kg Daal chana').waitFor();
-  assert.equal(await card(owner, 'Cooked Chana Pulao').locator('[data-raw-stock]').innerText(), '10 kg');
-  await card(owner, 'Cooked Chana Pulao').locator('[data-shared]').getByText('Same Daal chana as Cooked Daal Chana').waitFor();
+  const pulaoCard = card(owner, 'Cooked Chana Pulao');
+  assert.equal(await pulaoCard.locator('[data-raw-stock]').innerText(), '10 kg*', 'shared with Daal Chana');
+  await pulaoCard.locator('[data-shared]').getByText('Daal chana (Shared)').waitFor();
+  assert.equal(await pulaoCard.locator('p[title*="Cooked Daal Chana"]').count(), 1);
+  await pulaoCard.getByRole('button', { name: 'Show ingredients for 10 kg' }).click();
+  await pulaoCard.locator('[data-main-line]').getByText('Recipe for 2 kg Daal chana', { exact: false }).waitFor();
   const after = await saved(owner);
   const pulao = after.inventory.ingredients.find((i) => i.name === 'Cooked Chana Pulao');
   const recipe = after.inventory.recipes.find((r) => r.target.kind === 'PREPARED' && r.target.ingredientId === pulao.id);
@@ -192,6 +243,7 @@ try {
 
   console.log('\n6. Laptop and phone');
   await owner.setViewportSize(LAPTOP);
+  await owner.evaluate(() => window.scrollTo({ top: 0 }));
   await noSidewaysScroll(owner, 'laptop cards');
   await shot(owner, '04-laptop-prepared-items');
   await owner.setViewportSize(PHONE);

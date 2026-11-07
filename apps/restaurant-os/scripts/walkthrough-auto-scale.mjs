@@ -49,8 +49,13 @@ const sizeRow = (page, name) => builder(page).locator(`[data-size-row="${name}"]
 const sizeCost = async (page, name) => (await sizeRow(page, name).locator('[data-size-cost]').innerText()).trim();
 const saved = (page) => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key)), DATA_KEY);
 async function openRecipe(page, itemName) {
-  await page.getByRole('tab', { name: 'Recipes', exact: true }).click();
-  await page.locator('main [data-recipe-summary]').first().waitFor();
+  // Owner, 2026-11-08: an open group (full screen) stays open after a recipe closes; from the overview, open Recipes first
+  const inventoryTab = page.getByRole('tab', { name: 'Recipes', exact: true });
+  if (await inventoryTab.isVisible()) {
+    await inventoryTab.click();
+    await page.locator('main [data-recipe-summary]').first().waitFor();
+  }
+  await page.getByRole('tab', { name: 'Menu items' }).click();
   await page.locator(`main [data-recipe-item="${itemName}"]`).getByRole('button', { name: new RegExp(`recipe: ${itemName}$`) }).click();
   await builder(page).waitFor();
 }
@@ -125,6 +130,7 @@ try {
   await owner.goto(`${BASE_URL}/inventory`, { waitUntil: 'networkidle' });
   await owner.locator('main h1').first().waitFor();
   await owner.getByRole('tab', { name: 'Recipes', exact: true }).click();
+  await owner.getByRole('tab', { name: 'Menu items' }).click();
   await owner.locator('main [data-recipe-item="Chicken Karahi"]').getByText('Auto Scale').waitFor();
   ok('the Recipes list marks Chicken Karahi "Auto Scale"');
   await owner.locator('main [data-recipe-item="Chicken Karahi"]').getByRole('button', { name: /recipe: Chicken Karahi$/ }).click();
@@ -227,6 +233,8 @@ try {
   ok('Chicken White Karahi: base 1 kg Rs. 800 → Pao Rs. 200; Half Pao added (12.5 %, Rs. 100, Rs. 450, food cost 22.2 %); Verify → Menu has Half Pao at Rs. 450, its recipe uses 125 g chicken, VERIFIED');
 
   console.log('\nD. A supplier added from the ingredient form');
+  // The open group takes the whole screen: back to the Recipes overview first, then the Inventory tabs are there
+  await owner.getByRole('button', { name: 'Recipes', exact: true }).click();
   await owner.getByRole('tab', { name: 'Stock', exact: true }).click();
   await owner.getByRole('button', { name: 'Add Ingredient' }).first().click();
   const form = owner.getByRole('dialog');

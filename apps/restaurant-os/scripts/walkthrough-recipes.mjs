@@ -53,6 +53,8 @@ const foodCost = (page) => builder(page).locator('[data-food-cost]').innerText()
 async function openRecipes(page) {
   await page.getByRole('tab', { name: 'Recipes', exact: true }).click();
   await page.locator('main [data-recipe-summary]').first().waitFor();
+  // Owner, 2026-11-08: a group opens on the whole screen
+  await page.getByRole('tab', { name: 'Menu items' }).click();
 }
 async function noSidewaysScroll(page, label) {
   const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -98,6 +100,7 @@ await owner.locator('main [data-recipe-summary]').first().waitFor();
 const summary = await owner.locator('main [data-recipe-summary]').allInnerTexts();
 assert.ok(summary[0].includes('9 of 11'), summary[0]);
 assert.ok(summary[1].includes('10 of 13'), summary[1]);
+await owner.getByRole('tab', { name: 'Menu items' }).click();
 await owner.getByRole('button', { name: /^No recipe/ }).click();
 assert.deepEqual(await owner.locator('main [data-recipe-item]').evaluateAll((els) => els.map((e) => e.dataset.recipeItem)), ['Wings', 'Alfredo Pasta']);
 await owner.getByRole('button', { name: /^All/ }).click();
@@ -243,7 +246,7 @@ await builder(owner).locator('[data-unit-cost]').getByText('Rs. 90').waitFor();
 await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
 await saveDone(owner);
 await owner.locator('main [data-prepared-item="Pizza dough"]').getByText('Rs. 90 / kg').waitFor();
-await owner.getByRole('button', { name: 'Add prepared item' }).click();
+await owner.getByRole('button', { name: 'Add Recipe' }).click();
 await builder(owner).getByLabel('Name', { exact: true }).fill('Spicy mayo');
 await builder(owner).getByLabel('Category').selectOption('SAUCES_SPICES');
 await builder(owner).getByLabel('Ingredient 1').selectOption({ label: 'Mayonnaise (1 kg bottle)' });
