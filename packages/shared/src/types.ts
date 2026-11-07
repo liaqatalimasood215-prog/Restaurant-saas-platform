@@ -213,7 +213,10 @@ export interface OrderItem extends BranchScoped {
   menuItemId: Uuid | null;
   /** Copies at order time — menu changes never change old orders */
   name: string;
+  /** For a mixed line: "1.5 kg: 1 kg + ½ kg" */
   variantName: string | null;
+  /** The sizes of a mixed line (one pot for the kitchen), kept for stock use later */
+  sizeMix?: SizePick[];
   modifiers: OrderItemModifier[];
   unitPrice: Paisa;
   quantity: number;
@@ -606,5 +609,13 @@ export interface DraftItemInput {
   variantId: Uuid | null;
   modifierIds: Uuid[];
   note: string;
+  quantity: number;
+  /** Several weight sizes on one line (1 kg + ½ kg = "1.5 kg"); variantId is null then. See size-mix.ts */
+  sizes?: SizePick[];
+}
+
+/** One size of a mixed line and how many of it */
+export interface SizePick {
+  variantId: Uuid;
   quantity: number;
 }

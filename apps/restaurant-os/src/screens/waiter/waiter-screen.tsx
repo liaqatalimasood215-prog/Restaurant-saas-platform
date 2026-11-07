@@ -191,6 +191,7 @@ function OrderWorkspace({
           modifierIds: line.modifierIds,
           note: line.note,
           quantity: line.quantity,
+          ...(line.sizes ? { sizes: line.sizes } : {}),
         })),
         idempotencyKey: roundKey,
       });

@@ -2,6 +2,7 @@ import {
   MAX_BULK_TABLES,
   MAX_NAME_LENGTH,
   MAX_QUANTITY_PER_LINE,
+  sizeMixFor,
   MAX_TABLE_SEATS,
   PIN_LENGTH,
   RIDER_ASSIGN_MESSAGES,
@@ -1032,8 +1033,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
       throw new ApiError('VALIDATION', `Quantity must be between 1 and ${MAX_QUANTITY_PER_LINE}.`);
     }
 
+    // Several weight sizes on one line (1 kg + ½ kg): one pot for the kitchen, the sum of the size prices
+    const mix = draft.sizes?.length ? sizeMixFor(menuItem, draft.sizes) : null;
+    if (draft.sizes?.length && (!mix || draft.variantId)) throw new ApiError('VALIDATION', `These sizes of ${menuItem.name} cannot go on one line.`);
     const variant = menuItem.variants.find((v) => v.id === draft.variantId) ?? null;
-    if (menuItem.variants.length > 0 && !variant) throw new ApiError('VALIDATION', `Choose a size for ${menuItem.name}.`);
+    if (menuItem.variants.length > 0 && !variant && !mix) throw new ApiError('VALIDATION', `Choose a size for ${menuItem.name}.`);
     if (menuItem.variants.length === 0 && draft.variantId) throw new ApiError('VALIDATION', 'Unknown size.');
 
     const chosen: Modifier[] = [];
@@ -1049,7 +1053,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
 
     const unitPrice = unitPriceFor({
       basePrice: menuItem.basePrice,
-      variantPrice: variant?.price,
+      variantPrice: mix?.price ?? variant?.price,
       modifierPrices: chosen.map((m) => m.price),
     });
     return {
@@ -1059,7 +1063,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
       orderId: order.id,
       menuItemId: menuItem.id,
       name: menuItem.name,
-      variantName: variant?.name ?? null,
+      variantName: mix?.label ?? variant?.name ?? null,
+      ...(mix && draft.sizes ? { sizeMix: draft.sizes.map((s) => ({ variantId: s.variantId, quantity: s.quantity })) } : {}),
       modifiers: chosen.map((m) => ({ name: m.name, price: m.price })),
       unitPrice,
       quantity: draft.quantity,

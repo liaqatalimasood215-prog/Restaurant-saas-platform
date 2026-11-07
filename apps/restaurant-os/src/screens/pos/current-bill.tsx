@@ -70,6 +70,7 @@ const toDraftItem = (l: CartLine): DraftItemInput => ({
   modifierIds: l.modifierIds,
   note: l.note,
   quantity: l.quantity,
+  ...(l.sizes ? { sizes: l.sizes } : {}),
 });
 
 /**

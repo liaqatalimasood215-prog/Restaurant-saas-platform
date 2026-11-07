@@ -5,7 +5,7 @@
 > mein sab se pehle likhein: **"PROGRESS.md aur CLAUDE.md padho, phir wahin se jaari rakho."**
 > Naya project mat banana, code mat badalna jab tak kaam na diya jaye.
 
-**Last updated:** 2026-11-06 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
+**Last updated:** 2026-11-07 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
 everything in very easy Roman Urdu, code and documents in English)
 
 ---
@@ -289,6 +289,8 @@ walkthrough scripts clear localStorage themselves; the POS bill panel remounts w
 changes (state that must survive, such as `payNow`, lives in the draft, `screens/pos/draft.ts`).
 
 ## 9. Pending tasks and next steps (in this order)
+
+**Mixed sizes on one line built 2026-11-07 (DEMO), waiting for his review.** Owner's brief: "dedh kg" Chicken Karahi = tap 1 kg and ½ kg in the same box. Two or more weight sizes = one line "1.5 kg: 1 kg + ½ kg", price = sum of the size prices, one kitchen line (one pot); add-ons and the note go on that line once. Rules `packages/shared/src/size-mix.ts`; box `screens/waiter/item-dialog.tsx` (POS, Waiter Orders, counter order); `walkthrough:sizes`. Open: inventory phase 2 must take stock per size from `OrderItem.sizeMix`; per-size add-ons (makhan on only one size) not built — ask him if needed.
 
 **Multiple purchase units built 2026-11-07 (DEMO), waiting for his review.** Rules in `packages/shared/src/inventory.ts` (`Packing`, `PACKING_KINDS`, `buyOptions`, `findBuyOption`, `buyAmount`, `buyStockMilli`, `checkPackings`; Ingredient `packings`, `loosePrice`; units `tray`, `dozen`) and `suppliers.ts` (bill lines with `unitKey`, ReceiptLine `unit` / `unitSizeMilli` / `rateDivisor`, `averageMainPrice`, `supplierRateKey`). Screens: `packings-editor.tsx` (Add / Edit Product and the Stock form), bill rows in `purchase-bill.tsx`; the bill hides the Inventory header (`onFocus`). Data version 21 (`addDemoPackings`, eggs; old bill lines get their unit). `walkthrough:units`. Not built: choosing which packing is the main one apart from the main-unit fields.
 

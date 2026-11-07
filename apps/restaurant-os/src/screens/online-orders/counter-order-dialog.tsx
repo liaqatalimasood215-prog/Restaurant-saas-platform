@@ -67,7 +67,7 @@ export function CounterOrderDialog({
         customerPhone: phone,
         customerAddress: address,
         note,
-        items: cart.map((l): DraftItemInput => ({ menuItemId: l.menuItemId, variantId: l.variantId, modifierIds: l.modifierIds, note: l.note, quantity: l.quantity })),
+        items: cart.map((l): DraftItemInput => ({ menuItemId: l.menuItemId, variantId: l.variantId, modifierIds: l.modifierIds, note: l.note, quantity: l.quantity, ...(l.sizes ? { sizes: l.sizes } : {}) })),
         idempotencyKey: key,
       });
       onCreated(order);

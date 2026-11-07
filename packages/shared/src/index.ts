@@ -25,3 +25,4 @@ export * from './riders';
 export * from './inventory';
 export * from './recipes';
 export * from './suppliers';
+export * from './size-mix';

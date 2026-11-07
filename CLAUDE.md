@@ -68,6 +68,7 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
   Waiter or POS: open the table, **New sub-order**. At the counter: Table → T1 → the list shows each customer by what they had (Call Waiter if unsure) → tap one → bill only that. Paid customers leave the list, the others stay;
   the number keeps going while anyone is seated (T1-3), and the table is free when no sub-order is open. "Whole table on one bill" pays all open sub-orders, each keeps its invoice. A table with one customer stays plain "T1". Rules: `packages/shared/src/sub-orders.ts`; `walkthrough:sub-orders`.
   stay visible. Product pictures are emoji until real photos (Phase 7).
+- **Mixed sizes (owner, 2026-11-07):** in the size box 1 kg, ½ kg and Pao can be tapped together (each with its own quantity); two or more make ONE bill and kitchen line "1.5 kg: 1 kg + ½ kg" at the sum of the size prices. POS, Waiter Orders, counter order. Small / Medium / Large stay one at a time. Rules: `packages/shared/src/size-mix.ts`; `walkthrough:sizes`.
 
 ## Riders — owner decisions (2026-11-01)
 
