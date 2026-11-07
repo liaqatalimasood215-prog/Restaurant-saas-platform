@@ -24,6 +24,7 @@ import {
   parseQuantity,
   parseRupees,
   sameRecipe,
+  scaleBatch,
   scaleCost,
   scaleLines,
   scaleShareBps,
@@ -50,7 +51,7 @@ import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/lib/session';
 import { ProductArt } from '../../pos/product-art';
-import { fromDisplayMilli, quantityText, toDisplayMilli, unitLabel, whenText } from '../inventory-format';
+import { amountText, fromDisplayMilli, quantityText, stockText, toDisplayMilli, unitLabel, whenText } from '../inventory-format';
 import { bookOf, costableLines, emptyLine, fromDrafts, stateOf, toDrafts, type LineDraft } from './recipe-draft';
 import { CostingRows, LEVEL_TONE, RecipeLines, ingredientArt } from './recipe-lines';
 import { SizesDialog, type SizeRow } from './sizes-dialog';
@@ -197,6 +198,13 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
   const [yieldText, setYieldText] = useState(savedYield ? milliToInput(toDisplayMilli(units, savedYield)) : '');
   const typedYield = parseQuantity(yieldText, { allowZero: false });
   const yieldMilli = subject.kind === 'PREPARED' ? (typedYield === null ? null : fromDisplayMilli(units, typedYield)) : null;
+  // Cooked food: the main raw ingredient is one of the lines; its quantity is what the recipe is for (written once)
+  const savedMain = subject.kind === 'PREPARED' && subject.row?.recipe ? (currentVersion(subject.row.recipe)?.mainIngredientId ?? null) : null;
+  const [mainId, setMainId] = useState<string | null>(savedMain);
+  const preparedLines = subject.kind === 'PREPARED' ? costableLines(drafts[BASE] ?? [], byId) : [];
+  const mainLine = mainId ? preparedLines.find((l) => l.ingredientId === mainId) : undefined;
+  const mainIngredient = mainLine ? (byId.get(mainLine.ingredientId) ?? null) : null;
+  const mainIngredientId = mainLine ? mainLine.ingredientId : null;
 
   // ── Numbers ────────────────────────────────────────────────────────────────────────────────
   const costBook = prepared
@@ -242,6 +250,7 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
       lines: Object.fromEntries(Object.keys(drafts).map((k) => [k, linesOf(k)])),
       name,
       yieldText,
+      mainIngredientId,
     });
   const [initial] = useState(snapshot);
   const anyDirty = snapshot() !== initial;
@@ -452,7 +461,7 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
     const variantOf = (key: string) => (key === BASE ? null : (rows.find((r) => r.key === key)?.variantId ?? null));
     const recipeOfKey = (key: string) => (key === BASE ? baseRecipe : (rows.find((r) => r.key === key)?.recipe ?? null));
     const dirty = (key: string) =>
-      JSON.stringify(linesOf(key)) !== JSON.stringify(savedLines(recipeOfKey(key))) || (subject.kind === 'PREPARED' && (yieldMilli !== savedYield || name.trim() !== (prepared?.name ?? '')));
+      JSON.stringify(linesOf(key)) !== JSON.stringify(savedLines(recipeOfKey(key))) || (subject.kind === 'PREPARED' && (yieldMilli !== savedYield || mainIngredientId !== savedMain || name.trim() !== (prepared?.name ?? '')));
     const toSave = keys.filter((k) => dirty(k) || (verify && k === active && stateOf(recipeOfKey(k)) !== 'VERIFIED'));
     const turnsOff = Boolean(scale?.enabled);
     if (toSave.length === 0 && !turnsOff) return onClose();
@@ -462,6 +471,7 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
           target: targetOf(variantOf(key), prepared?.id ?? 'new'),
           lines: linesOf(key),
           yieldMilli,
+          mainIngredientId,
           note,
         },
         view.ingredients,
@@ -489,6 +499,7 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
           target: targetOf(variantOf(key), preparedId),
           lines: linesOf(key),
           yieldMilli,
+          mainIngredientId,
           note,
           verify,
         });
@@ -667,6 +678,27 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
                   </select>
                 </Field>
               </div>
+              <Field label={t('inventory.recipes.editor.main')}>
+                <select
+                  value={mainIngredientId ?? ''}
+                  onChange={(e) => (setMainId(e.target.value || null), change())}
+                  aria-label={t('inventory.recipes.editor.main')}
+                  className={field}
+                  data-main-ingredient
+                >
+                  <option value="">{t('inventory.recipes.editor.mainNone')}</option>
+                  {preparedLines.map((l) => (
+                    <option key={l.ingredientId} value={l.ingredientId}>
+                      {byId.get(l.ingredientId)?.name ?? '—'}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <p className="-mt-1 text-xs leading-snug text-slate-500" data-main-hint>
+                {mainLine && mainIngredient
+                  ? t('inventory.recipes.editor.mainHint', { qty: stockText(mainIngredient, mainLine.quantityMilli), name: mainIngredient.name })
+                  : t('inventory.recipes.editor.mainPick')}
+              </p>
             </>
           ) : (
             <>
@@ -767,6 +799,26 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
                       {unitCost === null ? '—' : formatPaisa(unitCost)}
                     </dd>
                   </div>
+                  {mainLine && mainIngredient && (
+                    <div className="flex justify-between gap-2 py-1.5">
+                      <dt className="text-slate-600">{t('inventory.recipes.editor.recipeFor')}</dt>
+                      <dd className="text-right font-semibold" data-recipe-for>
+                        {stockText(mainIngredient, mainLine.quantityMilli)} {mainIngredient.name}
+                      </dd>
+                    </div>
+                  )}
+                  {mainIngredient && (
+                    <div className="flex justify-between gap-2 py-1.5">
+                      <dt className="text-slate-600">{t('inventory.recipes.cooked.rawStock', { name: mainIngredient.name })}</dt>
+                      <dd className="text-right font-semibold" data-builder-stock>
+                        {(view.onHand?.[mainIngredient.id] ?? 0) > 0 ? (
+                          amountText(view.onHand?.[mainIngredient.id] ?? 0, mainIngredient.stockUnit)
+                        ) : (
+                          <Badge tone="red">{t('inventory.recipes.cooked.outOfStock')}</Badge>
+                        )}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               ) : (
                 <CostingRows
@@ -904,6 +956,19 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
             />
           </div>
         </section>
+
+        {/* Below, cooked food: the saved recipe for any amount of its main raw ingredient (estimate) */}
+        {subject.kind === 'PREPARED' && (
+          <section className={cn(panel, 'order-4 gap-2 p-3.5 md:col-span-2 lg:col-start-2')} aria-label={t('inventory.recipes.editor.cook.title')} data-cook-any>
+            <CookAnyAmount
+              version={{ lines: preparedLines, yieldMilli, mainIngredientId }}
+              main={mainIngredient}
+              onHandMilli={mainIngredient ? (view.onHand?.[mainIngredient.id] ?? 0) : 0}
+              byId={byId}
+              book={costBook}
+            />
+          </section>
+        )}
 
         {/* Below: every size with its cost, price, food cost and profit */}
         {showSizes && (
@@ -1112,8 +1177,146 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
   );
 }
 
+/** Quick amounts of the main raw ingredient, in kg / litres (or pieces) */
+const QUICK_AMOUNTS = [1, 2, 5, 10];
+
+/**
+ * Cooked food (owner, 2026-11-07): the recipe is saved once for some amount of its main raw ingredient and follows the raw stock
+ * that supplier bills bring in — 7 kg daal mash in stock, the recipe is for 7 kg. Out of stock: the saved recipe. "Try another
+ * amount" works it out for 1, 2, 5, 10 or a typed amount. Read only, an estimate: nothing is cooked or taken from stock.
+ */
+function CookAnyAmount({
+  version,
+  main,
+  onHandMilli,
+  byId,
+  book,
+}: {
+  version: { lines: RecipeLine[]; yieldMilli: number | null; mainIngredientId: string | null };
+  main: Ingredient | null;
+  onHandMilli: number;
+  byId: ReadonlyMap<string, Ingredient>;
+  book: ReturnType<typeof bookOf>;
+}) {
+  const [trying, setTrying] = useState(false);
+  const [amount, setAmount] = useState('5');
+  const unit = main ? displayUnitOf(main) : null;
+  const outOfStock = onHandMilli <= 0;
+  const typed = parseQuantity(amount, { allowZero: false });
+  const mainLine = version.lines.find((l) => l.ingredientId === version.mainIngredientId);
+  // The yield is not part of this (a later step): a missing one must not hide the recipe
+  const recipe = { ...version, yieldMilli: version.yieldMilli ?? MILLI };
+  let rawMilli: number | null = null;
+  if (main && trying) rawMilli = typed === null ? null : fromDisplayMilli(main, typed);
+  else if (mainLine) rawMilli = outOfStock ? mainLine.quantityMilli : onHandMilli;
+  const scaled = rawMilli !== null ? scaleBatch(recipe, rawMilli) : null;
+  const cost = scaled ? linesCost(book, scaled.lines).total : null;
+  return (
+    <>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <Scale className="mt-0.5 size-6 shrink-0 text-brand" aria-hidden />
+          <div className="min-w-0">
+            <h3 className="text-lg font-extrabold text-slate-900">{t('inventory.recipes.editor.cook.title')}</h3>
+            <p className="text-sm text-slate-500">{main ? t('inventory.recipes.editor.cook.hint', { name: main.name }) : t('inventory.recipes.editor.cook.needMain')}</p>
+          </div>
+        </div>
+        {main && (
+          <button
+            type="button"
+            onClick={() => setTrying((on) => !on)}
+            aria-pressed={trying}
+            className="press min-h-10 rounded-xl px-2 text-sm font-bold text-brand underline-offset-2 hover:underline"
+          >
+            {trying ? t('inventory.recipes.editor.cook.back') : t('inventory.recipes.editor.cook.try')}
+          </button>
+        )}
+      </div>
+      {main && unit && (
+        <>
+          {trying ? (
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('inventory.recipes.editor.cook.try')}>
+              {QUICK_AMOUNTS.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setAmount(String(q))}
+                  aria-pressed={amount === String(q)}
+                  className={cn(
+                    'press min-h-11 rounded-xl border-2 px-4 text-sm font-bold',
+                    amount === String(q) ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white text-slate-800 hover:border-brand/40',
+                  )}
+                >
+                  {quantityText(q * MILLI, unit)}
+                </button>
+              ))}
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                {t('inventory.recipes.editor.cook.custom')}
+                <input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  inputMode="decimal"
+                  aria-label={t('inventory.recipes.editor.cook.amount', { name: main.name })}
+                  className="min-h-11 w-24 rounded-xl border border-slate-300 bg-white px-3 text-right tabular-nums"
+                />
+                {unitLabel(unit, 2 * MILLI)}
+              </label>
+            </div>
+          ) : (
+            outOfStock && (
+              <p className="flex flex-wrap items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-900" data-cook-out>
+                <Badge tone="red">{t('inventory.recipes.cooked.outOfStock')}</Badge>
+                {t('inventory.recipes.editor.cook.outHint')}
+              </p>
+            )
+          )}
+          {scaled ? (
+            <>
+              <dl className="grid grid-cols-2 gap-2" data-cook-totals>
+                <div className="rounded-xl bg-slate-50 px-3 py-2">
+                  <dt className="text-xs font-semibold text-slate-500">
+                    {trying || outOfStock ? t('inventory.recipes.editor.cook.amount', { name: main.name }) : t('inventory.recipes.cooked.rawStock', { name: main.name })}
+                  </dt>
+                  <dd className="text-lg font-black tabular-nums text-slate-900" data-cook-amount>
+                    {amountText(scaled.rawMilli, main.stockUnit)}
+                  </dd>
+                </div>
+                <div className="rounded-xl bg-brand-soft px-3 py-2">
+                  <dt className="text-xs font-semibold text-brand">{t('inventory.recipes.editor.cook.cost')}</dt>
+                  <dd className="text-lg font-black tabular-nums text-slate-900" data-cook-cost>
+                    {cost === null ? '—' : formatPaisa(cost)}
+                  </dd>
+                </div>
+              </dl>
+              <p className="text-sm font-bold text-slate-700">{t('inventory.recipes.editor.cook.lines', { qty: amountText(scaled.rawMilli, main.stockUnit) })}</p>
+              <ScaledLines lines={scaled.lines} byId={byId} book={book} bigUnits />
+            </>
+          ) : (
+            trying && (
+              <p role="alert" className="text-sm font-semibold text-red-700">
+                {t('inventory.recipes.editor.cook.invalid')}
+              </p>
+            )
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 /** An automatic size's lines: the base × its share, read only ("Customize this size" makes them editable). */
-function ScaledLines({ lines, byId, book }: { lines: RecipeLine[]; byId: ReadonlyMap<string, Ingredient>; book: ReturnType<typeof bookOf> }) {
+function ScaledLines({
+  lines,
+  byId,
+  book,
+  bigUnits = false,
+}: {
+  lines: RecipeLine[];
+  byId: ReadonlyMap<string, Ingredient>;
+  book: ReturnType<typeof bookOf>;
+  /** Cooked food in bulk: kg and litres from 1 kg / 1 L up */
+  bigUnits?: boolean;
+}) {
   const costed = linesCost(book, lines);
   return (
     <ol className="divide-y divide-slate-100 rounded-xl border border-slate-100" data-scaled-lines>
@@ -1128,7 +1331,7 @@ function ScaledLines({ lines, byId, book }: { lines: RecipeLine[]; byId: Readonl
               <span className="truncate">{ingredient?.name ?? '—'}</span>
             </span>
             <span className="tabular-nums text-slate-700" data-scaled-quantity>
-              {ingredient ? quantityText(line.quantityMilli, ingredient.stockUnit) : '—'}
+              {ingredient ? (bigUnits ? amountText(line.quantityMilli, ingredient.stockUnit) : quantityText(line.quantityMilli, ingredient.stockUnit)) : '—'}
             </span>
             <span className="text-right font-extrabold tabular-nums text-slate-900">{cost === null ? '—' : formatPaisa(cost)}</span>
           </li>

@@ -101,6 +101,11 @@ export interface RecipeVersion {
   lines: RecipeLine[];
   /** Prepared items only: what one batch makes (stock-unit thousandths) */
   yieldMilli: number | null;
+  /**
+   * Prepared items only: the main raw ingredient, one of the lines (Daal mash in cooked Daal Mash). Its line quantity is what
+   * the recipe is for (1 kg, 2 kg, 5 kg …): any other amount is this recipe scaled (owner, 2026-11-07). Missing = none.
+   */
+  mainIngredientId?: Uuid | null;
   status: RecipeStatus;
   note: string;
   savedBy: Uuid;
@@ -253,6 +258,7 @@ export type RecipeProblem =
   | 'SUBSTITUTE_INVALID'
   | 'USES_ITSELF'
   | 'YIELD_INVALID'
+  | 'MAIN_INVALID'
   | 'NOTE_TOO_LONG'
   | 'UNIT_INVALID'
   | 'UNIT_SIZE_REQUIRED';
@@ -274,7 +280,7 @@ function reaches(book: CostBook, lines: readonly RecipeLine[], ingredientId: Uui
  * itself (dough made with dough). `ingredients` holds every ingredient with its In use flag.
  */
 export function checkRecipe(
-  input: { target: RecipeTarget; lines: readonly RecipeLine[]; yieldMilli: number | null; note: string },
+  input: { target: RecipeTarget; lines: readonly RecipeLine[]; yieldMilli: number | null; note: string; mainIngredientId?: Uuid | null },
   ingredients: readonly Pick<Ingredient, 'id' | 'isActive' | 'stockUnit' | 'purchaseUnit' | 'packSizeMilli'>[],
   book: CostBook,
 ): { line: number | null; problem: RecipeProblem } | null {
@@ -304,14 +310,96 @@ export function checkRecipe(
     const index = input.lines.findIndex((l) => l.ingredientId === self || reaches(book, [l], self, new Set()));
     if (index >= 0) return { line: index, problem: 'USES_ITSELF' };
     if (input.yieldMilli === null || !Number.isInteger(input.yieldMilli) || input.yieldMilli <= 0) return { line: null, problem: 'YIELD_INVALID' };
+    if (input.mainIngredientId && !input.lines.some((l) => l.ingredientId === input.mainIngredientId)) return { line: null, problem: 'MAIN_INVALID' };
   }
   if (input.note.trim().length > MAX_RECIPE_NOTE) return { line: null, problem: 'NOTE_TOO_LONG' };
   return null;
 }
 
 /** Same lines and yield: saving again only adds a version when something really changed. */
-export function sameRecipe(a: Pick<RecipeVersion, 'lines' | 'yieldMilli'>, b: Pick<RecipeVersion, 'lines' | 'yieldMilli'>): boolean {
-  return a.yieldMilli === b.yieldMilli && JSON.stringify(a.lines) === JSON.stringify(b.lines);
+export function sameRecipe(
+  a: Pick<RecipeVersion, 'lines' | 'yieldMilli' | 'mainIngredientId'>,
+  b: Pick<RecipeVersion, 'lines' | 'yieldMilli' | 'mainIngredientId'>,
+): boolean {
+  return a.yieldMilli === b.yieldMilli && (a.mainIngredientId ?? null) === (b.mainIngredientId ?? null) && JSON.stringify(a.lines) === JSON.stringify(b.lines);
+}
+
+// ── Cooked food: one recipe for any amount of its main raw ingredient (owner, 2026-11-07) ──────
+
+/**
+ * A cooked dish (Daal Mash, Qeema, Biryani) is a prepared item whose recipe is written ONCE for some amount of its main raw
+ * ingredient (1 kg daal mash + oil, onions, spices … makes 3 kg). Any other amount is the same recipe scaled: 5 kg daal
+ * = every line × 5, makes 15 kg. These are estimates for planning; nothing here is cooked or taken from stock.
+ * Roman Urdu: Recipe sirf ek dafa — 1 kg ki likhein, 5 kg ya 7 kg ka hisaab khud ban jata hai (sirf andaza).
+ */
+export interface BatchScale {
+  /** The main line's quantity: what the saved recipe is for (stock-unit thousandths) */
+  baseMilli: number;
+  rawMilli: number;
+  lines: RecipeLine[];
+  /** What this amount makes (stock-unit thousandths of the prepared item) */
+  yieldMilli: number;
+}
+
+/** The recipe for `rawMilli` of its main ingredient, or null without a main ingredient, a yield or an amount. */
+export function scaleBatch(version: Pick<RecipeVersion, 'lines' | 'yieldMilli' | 'mainIngredientId'>, rawMilli: number): BatchScale | null {
+  const main = version.lines.find((l) => l.ingredientId === version.mainIngredientId);
+  if (!main || !version.yieldMilli || !Number.isInteger(rawMilli) || rawMilli <= 0) return null;
+  return {
+    baseMilli: main.quantityMilli,
+    rawMilli,
+    // The main line is exactly the amount asked for; the others follow it
+    lines: scaleLines(version.lines, rawMilli, main.quantityMilli).map((l) => (l.ingredientId === main.ingredientId ? { ...l, quantityMilli: rawMilli } : l)),
+    yieldMilli: mulDivRound(version.yieldMilli, rawMilli, main.quantityMilli),
+  };
+}
+
+/**
+ * The saved recipe for the raw stock on hand (owner, 2026-11-07): a supplier bill raises the stock of the main ingredient and
+ * the recipe follows it — 5 kg daal bought, the recipe is for 5 kg; 2 kg more, for 7 kg. Out of stock: the saved recipe as it
+ * is (1 kg). Each line says what it needs and how much of it is in stock. Nothing is cooked or taken from stock.
+ * Roman Urdu: Jitna kachcha maal stock mein, utni recipe — khud. Stock khatam to "Out of stock", recipe wahi rehti hai.
+ */
+export interface StockPlan {
+  mainIngredientId: Uuid;
+  /** Raw stock of the main ingredient now (stock-unit thousandths) */
+  onHandMilli: number;
+  outOfStock: boolean;
+  /** The recipe for the stock on hand; the saved recipe itself when out of stock */
+  scale: BatchScale;
+  /** Per line: what this amount needs, what is in stock, and what is missing (0 = enough) */
+  needs: { ingredientId: Uuid; needMilli: number; onHandMilli: number; shortMilli: number }[];
+}
+
+export function stockPlan(
+  version: Pick<RecipeVersion, 'lines' | 'yieldMilli' | 'mainIngredientId'>,
+  onHand: (ingredientId: Uuid) => number,
+): StockPlan | null {
+  const main = version.lines.find((l) => l.ingredientId === version.mainIngredientId);
+  if (!main || !version.mainIngredientId) return null;
+  const onHandMilli = onHand(main.ingredientId);
+  const outOfStock = onHandMilli <= 0;
+  // The yield is not part of this plan (later step); a missing one must not hide the recipe
+  const scale = scaleBatch({ ...version, yieldMilli: version.yieldMilli ?? MILLI }, outOfStock ? main.quantityMilli : onHandMilli);
+  if (!scale) return null;
+  return {
+    mainIngredientId: main.ingredientId,
+    onHandMilli,
+    outOfStock,
+    scale,
+    needs: scale.lines.map((l) => {
+      const have = Math.max(0, onHand(l.ingredientId));
+      return { ingredientId: l.ingredientId, needMilli: l.quantityMilli, onHandMilli: have, shortMilli: outOfStock ? 0 : Math.max(0, l.quantityMilli - have) };
+    }),
+  };
+}
+
+/** A full plate of cooked food, 250 g: an assumption the owner can change later (POS step), shown as an estimate. */
+export const DEFAULT_PLATE_MILLI = 250 * MILLI;
+
+/** Whole plates in a cooked amount (grams): 3 kg → 12 plates of 250 g. */
+export function platesIn(yieldMilli: number, plateMilli: number = DEFAULT_PLATE_MILLI): number {
+  return plateMilli > 0 ? Math.floor(yieldMilli / plateMilli) : 0;
 }
 
 // ── Auto Scale (Recipe Builder R2, owner 2026-11-05) ──────────────────────────────────────────
@@ -470,6 +558,10 @@ export interface RecipesView {
   tax: Pick<TaxSettings, 'rateBps' | 'pricesIncludeTax'>;
   /** Names of the people in the version history */
   staffNames: Record<Uuid, string>;
+  /** Stock on hand of every ingredient (stock-unit thousandths): cooked food follows the raw stock */
+  onHand?: Record<Uuid, number>;
+  /** The latest supplier purchase of each bought ingredient (its PURCHASE stock movement) */
+  lastPurchases?: Record<Uuid, { quantityMilli: number; at: IsoDateTime }>;
 }
 
 export interface FoodCostSummary {

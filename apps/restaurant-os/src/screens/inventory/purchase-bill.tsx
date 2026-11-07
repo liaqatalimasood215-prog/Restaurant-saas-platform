@@ -42,7 +42,7 @@ import { getApi, type PurchaseDraft } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
-import { fromDisplayMilli, stockText, unitLabel } from './inventory-format';
+import { amountText, fromDisplayMilli, stockText, unitLabel } from './inventory-format';
 import { PackingsEditor, packingDrafts, packingsFromDrafts, type PackingDraft } from './packings-editor';
 import { ingredientArt } from './recipes/recipe-lines';
 
@@ -210,7 +210,20 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
         note,
         idempotencyKey: key,
       });
-      toast.show({ tone: 'success', title: t('inventory.bill.saved', { amount: formatPaisa(result.purchase.amount), name: supplier.name }) });
+      // Cooked food made from what was bought: its recipe now follows the new stock (read only)
+      const updates = (result.recipeUpdates ?? []).map((u) => {
+        const unit = byId.get(u.mainIngredientId)?.stockUnit ?? 'g';
+        return t('inventory.bill.recipeUpdate', {
+          dish: u.dishName,
+          after: amountText(u.afterMilli, unit),
+          was: u.beforeMilli > 0 ? amountText(u.beforeMilli, unit) : t('inventory.recipes.cooked.wasOut'),
+        });
+      });
+      toast.show({
+        tone: 'success',
+        title: t('inventory.bill.saved', { amount: formatPaisa(result.purchase.amount), name: supplier.name }),
+        ...(updates.length > 0 && { body: t('inventory.bill.recipesUpdated', { list: updates.join('; ') }) }),
+      });
       if (print) setPrinted(result);
       else onClose();
     } catch (err) {

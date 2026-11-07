@@ -250,7 +250,7 @@ try {
   await owner.reload({ waitUntil: 'networkidle' });
   await openSuppliers(owner);
   const upgraded = await saved(owner);
-  assert.equal(upgraded.version, 21);
+  assert.equal(upgraded.version, 22);
   assert.equal(upgraded.inventory.ingredients.length, old.inventory.ingredients.length + 19);
   const his = upgraded.inventory.suppliers.find((s) => s.id === PACKAGING);
   assert.equal(his.name, 'samad karina store');

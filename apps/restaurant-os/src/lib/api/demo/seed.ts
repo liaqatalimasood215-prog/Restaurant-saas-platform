@@ -25,7 +25,7 @@ import {
   type WaiterCall,
 } from '@restaurant-saas/shared';
 import { createInventorySeed, withSupplierProfiles, type DemoInventory } from './inventory-seed';
-import { LALA_NAME, addDemoPackings, addSupplierRanges, createLalaInventory, lalaMenu, lalaWebsite, upgradeToLala } from './lala-seed';
+import { LALA_NAME, addCookedFood, addDemoPackings, addSupplierRanges, createLalaInventory, lalaMenu, lalaWebsite, upgradeToLala } from './lala-seed';
 import { createRecipeSeed } from './recipe-seed';
 
 /**
@@ -34,7 +34,7 @@ import { createRecipeSeed } from './recipe-seed';
  * - 'acceptance': "Aziz Pizza — DEMO", the fixed data of the automatic tests (MASTER_PROMPT.md §12 Test A: Table 5 =
  *   Rs. 5,900). The walkthroughs ask for it through localStorage before the page loads (DEMO_FIXTURE_KEY).
  */
-export const DEMO_DATA_VERSION = 21;
+export const DEMO_DATA_VERSION = 22;
 export type DemoFixture = 'restaurant' | 'acceptance';
 export const DEMO_FIXTURE_KEY = 'lala-os-demo-fixture';
 
@@ -438,6 +438,10 @@ export function upgradeDemoData(raw: unknown, fixture: DemoFixture = 'restaurant
       }),
     }));
     data = { ...addDemoPackings({ ...(data as DemoData), inventory: { ...data.inventory, khata } }), version: 21 };
+  }
+  if (data.version === 21 && data.inventory) {
+    // Cooked food: recipes written once for the main raw ingredient (owner, 2026-11-07)
+    data = { ...addCookedFood(data as DemoData), version: 22 };
   }
   return data.version === DEMO_DATA_VERSION && data.inventory ? (data as DemoData) : null;
 }

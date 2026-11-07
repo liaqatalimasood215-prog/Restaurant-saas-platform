@@ -27,6 +27,7 @@
     "walkthrough:supplier-order": "node scripts/walkthrough-supplier-order.mjs",
     "walkthrough:units": "node scripts/walkthrough-units.mjs",
     "walkthrough:sizes": "node scripts/walkthrough-sizes.mjs",
+    "walkthrough:cooked": "node scripts/walkthrough-cooked.mjs",
     "walkthrough:connected": "node scripts/walkthrough-connected.mjs",
     "walkthrough:sub-orders": "node scripts/walkthrough-sub-orders.mjs",
     "walkthrough:previews": "node scripts/walkthrough-previews.mjs"

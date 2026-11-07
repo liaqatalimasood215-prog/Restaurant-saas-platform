@@ -389,6 +389,10 @@ const ROWS: Row[] = [
   [79, 'Khoya', 'KHY-001', 'DAIRY', 'kg', 'g', null, 0.5, 2, 1200, SUPPLIER.dairy, LOCATION.fridge, 0.5, 4],
   // Owner, 2026-11-07: eggs come as a tray of 30, a dozen or a carton. Added by the 20 → 21 upgrade.
   [80, 'Eggs (anday)', 'EGG-001', 'DAIRY', 'tray', 'piece', 30, 30, 2, 1050, SUPPLIER.kiryana, LOCATION.fridge, 60, 14],
+  // Owner, 2026-11-07: raw ingredients of the cooked food (daal masoor, daal makhni, qeema). Added by the 21 → 22 upgrade.
+  [81, 'Daal masoor', 'DMR-001', 'GRAINS', 'kg', 'g', null, 3, 10, 340, SUPPLIER.kiryana, LOCATION.dry, 8, null],
+  [82, 'Sabut urad (kali daal)', 'URD-001', 'GRAINS', 'kg', 'g', null, 2, 5, 560, SUPPLIER.kiryana, LOCATION.dry, 6, null],
+  [83, 'Beef qeema', 'BFQ-001', 'MEAT', 'kg', 'g', null, 2, 8, 1100, SUPPLIER.mutton, LOCATION.freezer, 6, 2],
 ];
 
 /**
@@ -414,14 +418,15 @@ function packingsOf(n: number, stockUnit: StockUnit): Packing[] | undefined {
 const ING = (n: number) => id(1300 + n);
 const NAAN_DOUGH = id(1360);
 
-function naanDough(scope: Scope, at: string): Ingredient {
+/** Made in the kitchen, counted in kg; no supplier and no stock of its own yet. */
+function preparedItem(scope: Scope, at: string, ingredientId: string, name: string, code: string, category: IngredientCategory, locationId: string): Ingredient {
   return {
-    id: NAAN_DOUGH,
+    id: ingredientId,
     ...scope,
     kind: 'PREPARED',
-    name: 'Naan dough',
-    code: 'NDO-001',
-    category: 'BAKERY',
+    name,
+    code,
+    category,
     purchaseUnit: 'kg',
     stockUnit: 'g',
     packSizeMilli: null,
@@ -429,13 +434,36 @@ function naanDough(scope: Scope, at: string): Ingredient {
     reorderQtyMilli: 0,
     purchasePrice: 0,
     preferredSupplierId: null,
-    locationId: LOCATION.tandoor,
+    locationId,
     batchNo: '',
     expiryDate: null,
     isActive: true,
     createdAt: at,
     updatedAt: at,
   };
+}
+
+function naanDough(scope: Scope, at: string): Ingredient {
+  return preparedItem(scope, at, NAAN_DOUGH, 'Naan dough', 'NDO-001', 'BAKERY', LOCATION.tandoor);
+}
+
+/**
+ * Cooked food (owner, 2026-11-07): each recipe is written once for its main raw ingredient (Daal mash) and works for any
+ * amount. [n (id 1300 + n), name, code, category]. Added by the 21 → 22 upgrade.
+ */
+const COOKED: [number, string, string, IngredientCategory][] = [
+  [84, 'Cooked Daal Mash', 'CDM-001', 'GRAINS'],
+  [85, 'Cooked Daal Chana', 'CDC-001', 'GRAINS'],
+  [86, 'Cooked Daal Masoor', 'CDS-001', 'GRAINS'],
+  [87, 'Cooked Daal Makhni', 'CDK-001', 'GRAINS'],
+  [88, 'Cooked Qeema', 'CQM-001', 'MEAT'],
+  [89, 'Cooked Chicken Qorma', 'CCQ-001', 'MEAT'],
+  [90, 'Cooked Chicken Biryani', 'CCB-001', 'GRAINS'],
+  [91, 'Cooked Rice (zeera)', 'CRZ-001', 'GRAINS'],
+];
+
+function cookedFood(scope: Scope, at: string, skip: ReadonlySet<string>): Ingredient[] {
+  return COOKED.filter(([n]) => !skip.has(ING(n))).map(([n, name, code, category]) => preparedItem(scope, at, ING(n), name, code, category, LOCATION.kitchen));
 }
 
 // ── Recipes ───────────────────────────────────────────────────────────────────────────────────
@@ -453,7 +481,7 @@ const lines = (rows: L[]): RecipeLine[] =>
 const item = (menuItemId: string, variantId: string | null = null): RecipeTarget => ({ kind: 'ITEM', menuItemId, variantId });
 
 /** Base recipes (variantId null) of items with sizes are the 1 kg pot that Auto Scale shares out. */
-const RECIPES: [RecipeTarget, RecipeStatus, L[], number?][] = [
+const RECIPES: [RecipeTarget, RecipeStatus, L[], yieldGrams?: number, mainN?: number][] = [
   [
     { kind: 'PREPARED', ingredientId: NAAN_DOUGH },
     'VERIFIED',
@@ -629,6 +657,155 @@ const RECIPES: [RecipeTarget, RecipeStatus, L[], number?][] = [
   [item(ITEM.coldDrink), 'VERIFIED', [[18, 1]]],
   [item(ITEM.water), 'VERIFIED', [[19, 1]]],
   [{ kind: 'ADDON', modifierId: ADDON.makhan }, 'VERIFIED', [[36, 25]]],
+  // Cooked food (owner, 2026-11-07): written once for the main raw ingredient (the 5th value); sample quantities and yields.
+  [
+    { kind: 'PREPARED', ingredientId: ING(84) },
+    'VERIFIED',
+    [
+      [45, 1000],
+      [12, 150],
+      [8, 250],
+      [7, 200],
+      [39, 30],
+      [40, 30],
+      [38, 20],
+      [52, 25],
+      [16, 15],
+      [62, 5],
+      [63, 5],
+      [37, 50],
+      [44, 20],
+    ],
+    3000,
+    45,
+  ],
+  [
+    { kind: 'PREPARED', ingredientId: ING(85) },
+    'VERIFIED',
+    [
+      [46, 1000],
+      [12, 150],
+      [8, 250],
+      [7, 250],
+      [39, 30],
+      [40, 30],
+      [52, 25],
+      [16, 15],
+      [62, 5],
+      [65, 5],
+    ],
+    2800,
+    46,
+  ],
+  [
+    { kind: 'PREPARED', ingredientId: ING(86) },
+    'VERIFIED',
+    [
+      [81, 1000],
+      [12, 120],
+      [8, 200],
+      [7, 200],
+      [40, 25],
+      [52, 22],
+      [16, 12],
+      [62, 6],
+      [63, 5],
+    ],
+    3200,
+    81,
+  ],
+  [
+    { kind: 'PREPARED', ingredientId: ING(87) },
+    'DRAFT',
+    [
+      [82, 2000],
+      [36, 200],
+      [4, 400],
+      [7, 600],
+      [8, 400],
+      [39, 60],
+      [40, 60],
+      [52, 45],
+      [16, 25],
+      [65, 10],
+    ],
+    6000,
+    82,
+  ],
+  [
+    { kind: 'PREPARED', ingredientId: ING(88) },
+    'VERIFIED',
+    [
+      [83, 1000],
+      [12, 150],
+      [8, 300],
+      [7, 300],
+      [34, 100],
+      [39, 30],
+      [40, 30],
+      [38, 30],
+      [52, 20],
+      [16, 15],
+      [65, 8],
+    ],
+    1400,
+    83,
+  ],
+  [
+    { kind: 'PREPARED', ingredientId: ING(89) },
+    'VERIFIED',
+    [
+      [30, 1000],
+      [12, 200],
+      [8, 400],
+      [34, 250],
+      [39, 30],
+      [40, 30],
+      [52, 20],
+      [16, 15],
+      [64, 10],
+      [65, 8],
+      [66, 3],
+    ],
+    1600,
+    30,
+  ],
+  [
+    { kind: 'PREPARED', ingredientId: ING(90) },
+    'VERIFIED',
+    [
+      [61, 5000],
+      [30, 5000],
+      [12, 1000],
+      [8, 2000],
+      [7, 1500],
+      [34, 1000],
+      [68, 1000],
+      [39, 150],
+      [40, 150],
+      [38, 150],
+      [52, 150],
+      [16, 80],
+      [65, 40],
+      [66, 15],
+      [73, 100],
+      [44, 100],
+    ],
+    22000,
+    61,
+  ],
+  [
+    { kind: 'PREPARED', ingredientId: ING(91) },
+    'VERIFIED',
+    [
+      [61, 1000],
+      [12, 80],
+      [63, 10],
+      [52, 20],
+    ],
+    2500,
+    61,
+  ],
 ];
 
 /** Auto Scale: 1 kg base, sizes by their share (½ kg = 500 thousandths of a kg). White karahis are left for the owner to try. */
@@ -687,8 +864,9 @@ function newRecipe(scope: Scope, recipeId: string, target: RecipeTarget, status:
 function addRecipes(scope: Scope, inventory: Pick<DemoInventory, 'ingredients' | 'recipes' | 'recipeScales'>, ownerId: string, at: string): void {
   const known = new Set(inventory.ingredients.map((i) => i.id));
   const added: Recipe[] = [];
-  RECIPES.forEach(([target, status, rows, yieldGrams], n) => {
+  RECIPES.forEach(([target, status, rows, yieldGrams, mainN], n) => {
     if (inventory.recipes.some((r) => sameTarget(r.target, target))) return;
+    if (target.kind === 'PREPARED' && !known.has(target.ingredientId)) return;
     const recipe = newRecipe(
       scope,
       id(1800 + n),
@@ -699,6 +877,7 @@ function addRecipes(scope: Scope, inventory: Pick<DemoInventory, 'ingredients' |
       ownerId,
       at,
     );
+    if (mainN !== undefined && known.has(ING(mainN))) recipe.versions[0]!.mainIngredientId = ING(mainN);
     inventory.recipes.push(recipe);
     added.push(recipe);
   });
@@ -789,6 +968,7 @@ function ingredientsAndMovements(scope: Scope, ownerId: string, now: Date, skip:
     }
   }
   if (!skip.has(NAAN_DOUGH)) ingredients.push(naanDough(scope, createdAt));
+  ingredients.push(...cookedFood(scope, createdAt, skip));
   return { ingredients, movements };
 }
 
@@ -1020,4 +1200,21 @@ export function addDemoPackings(data: DemoData, now = new Date()): DemoData {
     return packings ? { ...ingredient, packings } : ingredient;
   });
   return { ...withRanges, inventory: { ...inventory, ingredients } };
+}
+
+// ── Upgrade 21 → 22: cooked food, one recipe for any amount (owner, 2026-11-07) ───────────────
+
+/**
+ * Lala data only: the raw daal masoor, kali daal and beef qeema (with their suppliers), the eight cooked dishes as prepared
+ * items, and their sample recipes with the main raw ingredient. What he made stays as it is: a recipe he already has is
+ * never replaced.
+ */
+export function addCookedFood(data: DemoData, now = new Date()): DemoData {
+  if (!data.inventory.suppliers.some((s) => s.id === SUPPLIER.kiryana)) return data;
+  const withRanges = addSupplierRanges(data, now);
+  const inventory = { ...withRanges.inventory, recipes: [...withRanges.inventory.recipes], recipeScales: [...withRanges.inventory.recipeScales] };
+  const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+  const ownerId = data.staff.find((s) => s.role === 'OWNER')?.id ?? id(101);
+  addRecipes(scope, inventory, ownerId, now.toISOString());
+  return { ...withRanges, inventory };
 }

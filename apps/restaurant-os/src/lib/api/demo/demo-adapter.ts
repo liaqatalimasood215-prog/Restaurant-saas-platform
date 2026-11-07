@@ -227,6 +227,7 @@ import {
   type KhataPeriod,
   type PurchaseBillInput,
   type PurchaseBillResult,
+  type RecipeUpdate,
   type PurchaseDraft,
   type ReceiveStockInput,
   type SupplierPaymentInput,
@@ -2744,6 +2745,13 @@ export class DemoAdapter implements ApiClient, DemoControls {
         baseRecipes: inv.recipes.filter((r) => r.target.kind === 'ITEM' && r.target.variantId === null && data.items.some((i) => r.target.kind === 'ITEM' && i.id === r.target.menuItemId && i.variants.length > 0)),
         tax: { rateBps: tax.rateBps, pricesIncludeTax: tax.pricesIncludeTax },
         staffNames: Object.fromEntries([...people].filter(Boolean).map((uid) => [uid, this.staffName(data, uid) ?? ''])),
+        onHand: Object.fromEntries(inv.ingredients.map((i) => [i.id, onHandOf(i.id, inv.movements)])),
+        lastPurchases: inv.movements
+          .filter((m) => m.type === 'PURCHASE')
+          .reduce<Record<string, { quantityMilli: number; at: string }>>((latest, m) => {
+            if (!latest[m.ingredientId] || m.createdAt >= latest[m.ingredientId]!.at) latest[m.ingredientId] = { quantityMilli: m.quantityMilli, at: m.createdAt };
+            return latest;
+          }, {}),
       };
     });
   }
@@ -2763,14 +2771,25 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (!exists) throw new ApiError('NOT_FOUND', 'This menu item, size or add-on was not found.');
         const book = this.costBook(data);
         const problem = checkRecipe(input, inv.ingredients, book);
-        if (problem) throw new ApiError('VALIDATION', 'Please check the recipe lines.');
-        return this.writeRecipe(data, user, book, target, input.lines, target.kind === 'PREPARED' ? input.yieldMilli : null, input.note, input.verify);
+        if (problem) throw new ApiError('VALIDATION', problem.problem === 'MAIN_INVALID' ? 'The main ingredient must be one of the recipe lines.' : 'Please check the recipe lines.');
+        const prepared = target.kind === 'PREPARED';
+        return this.writeRecipe(data, user, book, target, input.lines, prepared ? input.yieldMilli : null, input.note, input.verify, prepared ? (input.mainIngredientId ?? null) : null);
       }),
     );
   }
 
   /** Adds a version when the lines changed (old versions stay); the same lines again only verify. */
-  private writeRecipe(data: DemoData, user: StaffUser, book: ReturnType<DemoAdapter['costBook']>, target: RecipeTarget, lines: RecipeLine[], yieldMilli: number | null, note: string, verify: boolean): Recipe {
+  private writeRecipe(
+    data: DemoData,
+    user: StaffUser,
+    book: ReturnType<DemoAdapter['costBook']>,
+    target: RecipeTarget,
+    lines: RecipeLine[],
+    yieldMilli: number | null,
+    note: string,
+    verify: boolean,
+    mainIngredientId: string | null = null,
+  ): Recipe {
     const now = nowIso();
     let recipe = this.recipeFor(data, target);
     if (!recipe) {
@@ -2778,7 +2797,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
       data.inventory.recipes.push(recipe);
     }
     const current = currentVersion(recipe);
-    const next = { lines, yieldMilli };
+    // Only cooked food carries a main ingredient; other recipes keep their old shape
+    const next = { lines, yieldMilli, ...(mainIngredientId ? { mainIngredientId } : {}) };
     if (current && sameRecipe(current, next)) {
       // Nothing changed: a double tap adds nothing; "Save & verify" only marks it verified.
       if (verify && current.status === 'DRAFT') Object.assign(current, { status: 'VERIFIED', verifiedBy: user.id, verifiedAt: now });
@@ -3111,6 +3131,23 @@ export class DemoAdapter implements ApiClient, DemoControls {
     );
   }
 
+  /**
+   * Cooked food whose main raw ingredient is on this bill (owner, 2026-11-07): its recipe now follows the new stock. Read only:
+   * nothing is saved, cooked or taken from stock, and the khata is not touched.
+   */
+  private recipeUpdates(data: DemoData, lines: readonly { ingredientId: string; stockMilli: number }[]): RecipeUpdate[] {
+    const inv = data.inventory;
+    return inv.ingredients.flatMap((dish) => {
+      if (dish.kind !== 'PREPARED' || !dish.isActive) return [];
+      const recipe = this.recipeFor(data, { kind: 'PREPARED', ingredientId: dish.id });
+      const mainId = recipe ? currentVersion(recipe)?.mainIngredientId : null;
+      const bought = mainId ? lines.filter((l) => l.ingredientId === mainId).reduce((sum, l) => sum + l.stockMilli, 0) : 0;
+      if (!mainId || bought <= 0) return [];
+      const afterMilli = onHandOf(mainId, inv.movements);
+      return [{ dishName: dish.name, mainIngredientId: mainId, beforeMilli: afterMilli - bought, afterMilli }];
+    });
+  }
+
   savePurchaseBill(input: PurchaseBillInput): Promise<PurchaseBillResult> {
     return this.request(() =>
       this.store.update((data) => {
@@ -3163,7 +3200,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         }
         inv.purchaseDrafts = (inv.purchaseDrafts ?? []).filter((d) => d.supplierId !== supplier.id);
         data.idempotency[key] = entryId;
-        return { purchase, payment };
+        return { purchase, payment, recipeUpdates: this.recipeUpdates(data, lines) };
       }),
     );
   }

@@ -11,7 +11,8 @@ import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { quantityText, toDisplayMilli, unitLabel } from '../inventory-format';
-import { stateOf, type RecipeState } from './recipe-draft';
+import { bookOf, stateOf, type RecipeState } from './recipe-draft';
+import { CookedCard, LatestPurchase, cookedDishes } from './cooked-card';
 import { RecipeBuilder, type EditorSubject } from './recipe-builder';
 import { LEVEL_TONE } from './recipe-lines';
 
@@ -117,6 +118,10 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
   const openItem = (group: MenuItemGroup, variantId: string | null) =>
     setEditing({ kind: 'ITEM', menuItemId: group.menuItemId, variantId });
   if (subject) return <RecipeBuilder key={versionsKey(subject, view)} subject={subject} view={view} onClose={() => setEditing(null)} />;
+  // Cooked food follows the raw stock that supplier bills bring in
+  const book = bookOf(view);
+  const byId = new Map(view.ingredients.map((i) => [i.id, i]));
+  const dishes = cookedDishes(view, book);
 
   return (
     <div className="space-y-4">
@@ -254,8 +259,24 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
               </button>
             )}
           </div>
+          <LatestPurchase view={view} book={book} dishes={dishes} />
+          {dishes.length > 0 && <p className="text-xs text-slate-500">{t('inventory.recipes.cooked.note')}</p>}
           <ul className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
             {view.prepared.map((row) => {
+              // Cooked food (a main raw ingredient): the recipe follows the raw stock from supplier bills
+              const dish = dishes.find((d) => d.row.ingredient.id === row.ingredient.id);
+              if (dish)
+                return (
+                  <li key={row.ingredient.id} data-prepared-item={row.ingredient.name}>
+                    <CookedCard
+                      dish={dish}
+                      sharedWith={dishes.filter((d) => d !== dish && d.main.id === dish.main.id).map((d) => d.row.ingredient.name)}
+                      byId={byId}
+                      canManage={canManage}
+                      onEdit={() => setEditing({ kind: 'PREPARED', ingredientId: row.ingredient.id })}
+                    />
+                  </li>
+                );
               const state = stateOf(row.recipe);
               const yieldMilli = row.recipe ? currentVersion(row.recipe)?.yieldMilli : null;
               const unit = displayUnitOf(row.ingredient);

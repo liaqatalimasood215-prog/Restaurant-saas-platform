@@ -21,6 +21,9 @@ import {
   ingredientCost,
   linesCost,
   makeCostBook,
+  platesIn,
+  scaleBatch,
+  stockPlan,
   priceWithoutTax,
   sameRecipe,
   summarizeFoodCost,
@@ -262,4 +265,58 @@ test('Auto Scale: the base needs a quantity and at least one ticked size', () =>
   assert.deepEqual(checkRecipeScale({ ...ok, sizes: ok.sizes.map((s) => ({ ...s, active: false })) }), { size: null, problem: 'NO_SIZES' });
   assert.deepEqual(checkRecipeScale({ ...ok, sizes: [...ok.sizes, size('pao', 125)] }), { size: 3, problem: 'SIZE_DUPLICATE' });
   assert.deepEqual(checkRecipeScale({ ...ok, sizes: [size('big', 200_000)] }), { size: 0, problem: 'SIZE_QUANTITY_INVALID' });
+});
+
+test('cooked food: the Daal Mash recipe is written once for 1 kg daal and scales to any amount (estimate)', () => {
+  const daal = { ...version([line('daal', g(1000)), line('oil', g(150)), line('onion', g(250)), line('salt', g(25))], g(3000)), mainIngredientId: 'daal' };
+  const five = scaleBatch(daal, g(5000))!;
+  assert.equal(five.baseMilli, g(1000));
+  assert.deepEqual(five.lines.map((l) => l.quantityMilli), [g(5000), g(750), g(1250), g(125)]);
+  assert.equal(five.yieldMilli, g(15_000));
+  assert.equal(platesIn(five.yieldMilli), 60, '15 kg at 250 g a plate');
+  // 5 kg, then 2 kg more: the same recipe for 7 kg, never written again
+  const seven = scaleBatch(daal, g(7000))!;
+  assert.deepEqual(seven.lines.map((l) => l.quantityMilli), [g(7000), g(1050), g(1750), g(175)]);
+  assert.equal(seven.yieldMilli, g(21_000));
+  // A recipe written for 2 kg works the same way
+  const twoKg = { ...daal, lines: daal.lines.map((l) => ({ ...l, quantityMilli: l.quantityMilli * 2 })), yieldMilli: g(6000) };
+  assert.equal(scaleBatch(twoKg, g(5000))!.yieldMilli, g(15_000));
+  // No main ingredient, no yield or no amount: nothing to scale
+  assert.equal(scaleBatch({ ...daal, mainIngredientId: null }, g(5000)), null);
+  assert.equal(scaleBatch({ ...daal, yieldMilli: null }, g(5000)), null);
+  assert.equal(scaleBatch(daal, 0), null);
+  assert.equal(platesIn(g(3100)), 12);
+});
+
+test('cooked food: the main ingredient must be one of the lines, and changing it is a new version', () => {
+  const ingredients = [
+    { id: 'daal', isActive: true, stockUnit: 'g' as const, purchaseUnit: 'kg' as const, packSizeMilli: null },
+    { id: 'oil', isActive: true, stockUnit: 'ml' as const, purchaseUnit: 'l' as const, packSizeMilli: null },
+  ];
+  const input = { target: { kind: 'PREPARED' as const, ingredientId: 'cooked' }, lines: [line('daal', g(1000)), line('oil', g(150))], yieldMilli: g(3000), note: '' };
+  assert.equal(checkRecipe({ ...input, mainIngredientId: 'daal' }, ingredients, book), null);
+  assert.equal(checkRecipe({ ...input, mainIngredientId: null }, ingredients, book), null, 'a prepared item without a main ingredient still saves (naan dough)');
+  assert.deepEqual(checkRecipe({ ...input, mainIngredientId: 'rice' }, ingredients, book), { line: null, problem: 'MAIN_INVALID' });
+  assert.equal(sameRecipe({ lines: input.lines, yieldMilli: g(3000), mainIngredientId: 'daal' }, { lines: input.lines, yieldMilli: g(3000) }), false);
+  assert.equal(sameRecipe({ lines: input.lines, yieldMilli: g(3000), mainIngredientId: null }, { lines: input.lines, yieldMilli: g(3000) }), true);
+});
+
+test('cooked food follows the raw stock: 5 kg bought → 5 kg recipe, 2 kg more → 7 kg; 0 → Out of stock, recipe kept', () => {
+  const daal = { ...version([line('daal', g(1000)), line('oil', g(150)), line('onion', g(250))], g(3000)), mainIngredientId: 'daal' };
+  const stock: Record<string, number> = { daal: g(5000), oil: g(2000), onion: g(1000) };
+  const five = stockPlan(daal, (id) => stock[id] ?? 0)!;
+  assert.equal(five.outOfStock, false);
+  assert.deepEqual(five.scale.lines.map((l) => l.quantityMilli), [g(5000), g(750), g(1250)]);
+  assert.deepEqual(five.needs.map((n) => n.shortMilli), [0, 0, g(250)], 'onions: 1.25 kg needed, 1 kg in stock');
+  stock.daal = g(7000);
+  assert.deepEqual(stockPlan(daal, (id) => stock[id] ?? 0)!.scale.lines.map((l) => l.quantityMilli), [g(7000), g(1050), g(1750)]);
+  stock.daal = 0;
+  const out = stockPlan(daal, (id) => stock[id] ?? 0)!;
+  assert.equal(out.outOfStock, true);
+  assert.deepEqual(out.scale.lines.map((l) => l.quantityMilli), [g(1000), g(150), g(250)], 'the saved 1 kg recipe stays');
+  assert.deepEqual(out.needs.map((n) => n.shortMilli), [0, 0, 0], 'no shortage is shown while out of stock');
+  stock.daal = -g(500);
+  assert.equal(stockPlan(daal, (id) => stock[id] ?? 0)!.outOfStock, true, 'below zero counts as out of stock');
+  assert.equal(stockPlan({ ...daal, mainIngredientId: null }, () => g(5000)), null, 'no main ingredient: not cooked food');
+  assert.equal(stockPlan({ ...daal, yieldMilli: null }, (id) => stock[id] ?? 0)!.scale.lines.length, 3, 'works without a yield');
 });

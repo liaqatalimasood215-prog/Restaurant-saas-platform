@@ -39,6 +39,12 @@ export function fromDisplayMilli(item: Units, displayMilli: number): number {
   return mulDivRound(displayMilli, displayFactorMilli(item), MILLI);
 }
 
+/** A recipe amount in bulk: 7,000 g → "7 kg", 1,050 ml → "1.05 litres"; below 1 kg / 1 litre it stays in g / ml. */
+export function amountText(milli: number, stockUnit: StockUnit): string {
+  if ((stockUnit === 'g' || stockUnit === 'ml') && milli >= MILLI * MILLI) return quantityText(mulDivRound(milli, 1, MILLI), stockUnit === 'g' ? 'kg' : 'l');
+  return quantityText(milli, stockUnit);
+}
+
 /** Stock as people read it: "8.5 kg", "60 bottles". */
 export function stockText(item: Units, stockMilli: number): string {
   return quantityText(toDisplayMilli(item, stockMilli), displayUnitOf(item));

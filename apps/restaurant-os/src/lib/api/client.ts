@@ -325,6 +325,8 @@ export interface RecipeInput {
   lines: RecipeLine[];
   /** Prepared items: what one batch makes (stock-unit thousandths) */
   yieldMilli: number | null;
+  /** Cooked food (prepared items): the main raw ingredient, one of the lines; its quantity is what the recipe is for */
+  mainIngredientId?: Uuid | null;
   note: string;
   /** Save as VERIFIED (checked by the Owner / Manager); otherwise a DRAFT */
   verify: boolean;
@@ -416,6 +418,16 @@ export interface PurchaseBillInput {
 export interface PurchaseBillResult {
   purchase: KhataEntry;
   payment: KhataEntry | null;
+  /** Cooked food whose recipe now follows the raw stock this bill brought (owner, 2026-11-07); read only */
+  recipeUpdates?: RecipeUpdate[];
+}
+
+/** "Cooked Daal Mash: recipe now for 7 kg (was 5 kg)" — stock-unit thousandths of the main raw ingredient */
+export interface RecipeUpdate {
+  dishName: string;
+  mainIngredientId: Uuid;
+  beforeMilli: number;
+  afterMilli: number;
 }
 
 /** An unfinished bill as he typed it (DEMO: kept with the demo data in this browser). Never touches stock or the khata. */
