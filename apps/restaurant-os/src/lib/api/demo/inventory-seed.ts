@@ -6,6 +6,7 @@ import {
   rupeesToPaisa,
   type Ingredient,
   type KhataEntry,
+  type PurchaseRecipe,
   type Recipe,
   type RecipeScale,
   type IngredientCategory,
@@ -38,6 +39,8 @@ export interface DemoInventory {
   khata: KhataEntry[];
   /** New Purchase (Bill): one unfinished bill per supplier, as typed (missing in data from before 2026-11-06) */
   purchaseDrafts?: PurchaseDraft[];
+  /** P3 (2026-11-08): each supplier purchase's own recipe for cooked food, fixed on the bill's day (missing before) */
+  purchaseRecipes?: PurchaseRecipe[];
   expiringSoonDays: number;
 }
 

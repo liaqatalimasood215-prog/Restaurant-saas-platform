@@ -13,6 +13,7 @@ export type {
   HeldBillInput,
   KhataPeriod,
   PurchaseBillInput,
+  PurchaseBillResult,
   PurchaseDraft,
   OrderFilter,
   RecordPaymentInput,

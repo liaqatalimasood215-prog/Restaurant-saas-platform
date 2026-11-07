@@ -139,6 +139,11 @@ import {
   cleanIngredientName,
   expiryState,
   onHandOf,
+  purchaseRecipeCost,
+  recipeForAmount,
+  shortages,
+  type PurchaseRecipeRow,
+  type RecipeVersion,
   stockStatus,
   stockValueOf,
   summarizeInventory,
@@ -2746,6 +2751,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         tax: { rateBps: tax.rateBps, pricesIncludeTax: tax.pricesIncludeTax },
         staffNames: Object.fromEntries([...people].filter(Boolean).map((uid) => [uid, this.staffName(data, uid) ?? ''])),
         onHand: Object.fromEntries(inv.ingredients.map((i) => [i.id, onHandOf(i.id, inv.movements)])),
+        purchaseRecipes: this.purchaseRecipeRows(data),
         lastPurchases: inv.movements
           .filter((m) => m.type === 'PURCHASE')
           .reduce<Record<string, { quantityMilli: number; at: string }>>((latest, m) => {
@@ -3090,6 +3096,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           createdAt: now,
         };
         inv.khata.push(entry);
+        this.addPurchaseRecipes(data, entry);
         data.idempotency[key] = entryId;
         return entry;
       }),
@@ -3148,6 +3155,86 @@ export class DemoAdapter implements ApiClient, DemoControls {
     });
   }
 
+  /** Cooked dishes: active prepared items whose current recipe names its main raw ingredient. */
+  private cookedDishes(data: DemoData): { dish: Ingredient; version: RecipeVersion; mainId: string }[] {
+    return data.inventory.ingredients.flatMap((dish) => {
+      if (dish.kind !== 'PREPARED' || !dish.isActive) return [];
+      const recipe = this.recipeFor(data, { kind: 'PREPARED', ingredientId: dish.id });
+      const version = recipe ? currentVersion(recipe) : null;
+      return version?.mainIngredientId ? [{ dish, version, mainId: version.mainIngredientId }] : [];
+    });
+  }
+
+  /**
+   * P3 (owner, 2026-11-08): the bill's own recipe for every cooked dish whose main raw ingredient it brought, fixed on the bill's
+   * day — the main ingredient at what this bill paid, the others at today's prices, today's recipe version. A record to read only:
+   * stock, khata and recipes are not touched, nothing is cooked.
+   */
+  private addPurchaseRecipes(data: DemoData, purchase: KhataEntry): void {
+    const inv = data.inventory;
+    const book = this.costBook(data);
+    for (const { dish, version, mainId } of this.cookedDishes(data)) {
+      const bought = purchase.lines.filter((l) => l.ingredientId === mainId);
+      const rawMilli = bought.reduce((sum, l) => sum + l.stockMilli, 0);
+      const lines = rawMilli > 0 ? recipeForAmount(version, rawMilli) : null;
+      if (!lines) continue;
+      (inv.purchaseRecipes ??= []).push({
+        id: newId(),
+        restaurantId: data.restaurant.id,
+        branchId: data.branch.id,
+        purchaseId: purchase.id,
+        preparedId: dish.id,
+        recipeVersion: version.version,
+        mainIngredientId: mainId,
+        rawMilli,
+        lines,
+        cost: purchaseRecipeCost(book, lines, mainId, rawMilli, bought.reduce((sum, l) => sum + l.amount, 0)),
+        createdAt: purchase.createdAt,
+      });
+    }
+  }
+
+  /**
+   * Every purchase's recipe, newest first: the saved ones, and for bills from before P3 the same worked out now (the other
+   * ingredients at today's prices, today's recipe). Each with the total raw stock now, apart from it.
+   */
+  private purchaseRecipeRows(data: DemoData, purchaseId?: string): PurchaseRecipeRow[] {
+    const inv = data.inventory;
+    const book = this.costBook(data);
+    const dishes = this.cookedDishes(data);
+    const onHand = (id: string) => onHandOf(id, inv.movements);
+    const names = new Map(inv.ingredients.map((i) => [i.id, i.name]));
+    const saved = inv.purchaseRecipes ?? [];
+    const rows: PurchaseRecipeRow[] = [];
+    for (const purchase of inv.khata) {
+      if (purchase.kind !== 'PURCHASE' || (purchaseId && purchase.id !== purchaseId)) continue;
+      const supplierName = inv.suppliers.find((s) => s.id === purchase.supplierId)?.name ?? '';
+      const row = (r: Omit<PurchaseRecipeRow, 'supplierName' | 'billNo' | 'at' | 'shared' | 'mainOnHandMilli' | 'short' | 'dishName'>): PurchaseRecipeRow => ({
+        ...r,
+        dishName: names.get(r.preparedId) ?? '',
+        supplierName,
+        billNo: purchase.billNo ?? '',
+        at: purchase.createdAt,
+        shared: dishes.filter((d) => d.mainId === r.mainIngredientId).length > 1,
+        mainOnHandMilli: onHand(r.mainIngredientId),
+        short: shortages(r.lines, onHand),
+      });
+      for (const record of saved.filter((s) => s.purchaseId === purchase.id)) {
+        rows.push(row({ id: record.id, purchaseId: purchase.id, preparedId: record.preparedId, mainIngredientId: record.mainIngredientId, rawMilli: record.rawMilli, lines: record.lines, cost: record.cost, recipeVersion: record.recipeVersion, todayPrices: false }));
+      }
+      if (saved.some((s) => s.purchaseId === purchase.id)) continue;
+      for (const { dish, version, mainId } of dishes) {
+        const bought = purchase.lines.filter((l) => l.ingredientId === mainId);
+        const rawMilli = bought.reduce((sum, l) => sum + l.stockMilli, 0);
+        const lines = rawMilli > 0 ? recipeForAmount(version, rawMilli) : null;
+        if (!lines) continue;
+        const cost = purchaseRecipeCost(book, lines, mainId, rawMilli, bought.reduce((sum, l) => sum + l.amount, 0));
+        rows.push(row({ id: `${purchase.id}:${dish.id}`, purchaseId: purchase.id, preparedId: dish.id, mainIngredientId: mainId, rawMilli, lines, cost, recipeVersion: null, todayPrices: true }));
+      }
+    }
+    return rows.sort((a, b) => b.at.localeCompare(a.at));
+  }
+
   savePurchaseBill(input: PurchaseBillInput): Promise<PurchaseBillResult> {
     return this.request(() =>
       this.store.update((data) => {
@@ -3158,7 +3245,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const done = data.idempotency[key];
         if (done) {
           const purchase = inv.khata.find((e) => e.id === done)!;
-          return { purchase, payment: inv.khata.find((e) => e.billId === purchase.id) ?? null };
+          return { purchase, payment: inv.khata.find((e) => e.billId === purchase.id) ?? null, purchaseRecipes: this.purchaseRecipeRows(data, purchase.id) };
         }
         const supplier = inv.suppliers.find((s) => s.id === input.supplierId && s.isActive);
         if (!supplier) throw new ApiError('NOT_FOUND', 'Supplier not found.');
@@ -3200,7 +3287,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
         }
         inv.purchaseDrafts = (inv.purchaseDrafts ?? []).filter((d) => d.supplierId !== supplier.id);
         data.idempotency[key] = entryId;
-        return { purchase, payment, recipeUpdates: this.recipeUpdates(data, lines) };
+        this.addPurchaseRecipes(data, purchase);
+        return { purchase, payment, recipeUpdates: this.recipeUpdates(data, lines), purchaseRecipes: this.purchaseRecipeRows(data, purchase.id) };
       }),
     );
   }

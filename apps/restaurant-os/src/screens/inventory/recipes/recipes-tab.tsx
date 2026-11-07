@@ -11,7 +11,8 @@ import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { bookOf, stateOf, type RecipeState } from './recipe-draft';
-import { CookedCard, LatestPurchase, PreparedCard, cookedDishes, dishState, type CardLayout, type CookedDish, type DishState } from './cooked-card';
+import { CookedCard, PreparedCard, cookedDishes, dishState, type CardLayout, type CookedDish, type DishState } from './cooked-card';
+import { RecentPurchases } from './purchase-recipes';
 import { RecipeBuilder, type EditorSubject } from './recipe-builder';
 import { LEVEL_TONE } from './recipe-lines';
 
@@ -371,7 +372,7 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
             </button>
           </div>
 
-          <LatestPurchase view={view} book={book} dishes={dishes} />
+          <RecentPurchases rows={view.purchaseRecipes ?? []} byId={byId} />
 
           {shownPrepared.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
@@ -391,6 +392,7 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
                         canManage={canManage}
                         onEdit={edit}
                         layout={preparedLayout}
+                        purchases={(view.purchaseRecipes ?? []).filter((p) => p.preparedId === row.ingredient.id)}
                       />
                     ) : (
                       <PreparedCard row={row} canManage={canManage} onEdit={edit} layout={preparedLayout} />

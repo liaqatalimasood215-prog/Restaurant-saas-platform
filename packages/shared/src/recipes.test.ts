@@ -24,6 +24,9 @@ import {
   platesIn,
   scaleBatch,
   stockPlan,
+  purchaseRecipeCost,
+  recipeForAmount,
+  shortages,
   priceWithoutTax,
   sameRecipe,
   summarizeFoodCost,
@@ -319,4 +322,35 @@ test('cooked food follows the raw stock: 5 kg bought → 5 kg recipe, 2 kg more 
   assert.equal(stockPlan(daal, (id) => stock[id] ?? 0)!.outOfStock, true, 'below zero counts as out of stock');
   assert.equal(stockPlan({ ...daal, mainIngredientId: null }, () => g(5000)), null, 'no main ingredient: not cooked food');
   assert.equal(stockPlan({ ...daal, yieldMilli: null }, (id) => stock[id] ?? 0)!.scale.lines.length, 3, 'works without a yield');
+});
+
+test('P3: each purchase gets its own recipe — 1 kg = Rs. 800, a 5 kg purchase Rs. 4,000, a separate 8 kg Rs. 6,400', () => {
+  // daal Rs. 500 / kg + oil 150 ml (Rs. 87) + onions 250 g (Rs. 100) + spices Rs. 113 = Rs. 800 for 1 kg
+  const ingredients: CostIngredient[] = [
+    bought('daal', 'kg', 'g', 500),
+    bought('oil', 'l', 'ml', 580),
+    bought('onion', 'kg', 'g', 400),
+    bought('spice', 'kg', 'g', 1130),
+  ];
+  const daalBook = makeCostBook(ingredients, []);
+  const daal = { ...version([line('daal', g(1000)), line('oil', g(150)), line('onion', g(250)), line('spice', g(100))], g(3000)), mainIngredientId: 'daal' };
+  assert.equal(linesCost(daalBook, daal.lines).total, 80_000);
+  const five = recipeForAmount(daal, g(5000))!;
+  assert.deepEqual(five.map((l) => l.quantityMilli), [g(5000), g(750), g(1250), g(500)]);
+  // Bought at the same Rs. 500 / kg: 5 kg paid Rs. 2,500
+  assert.equal(purchaseRecipeCost(daalBook, five, 'daal', g(5000), 250_000), 400_000);
+  const eight = recipeForAmount(daal, g(8000))!;
+  assert.equal(purchaseRecipeCost(daalBook, eight, 'daal', g(8000), 400_000), 640_000);
+  // Bought dearer (Rs. 560 / kg): only the daal part follows that bill
+  assert.equal(purchaseRecipeCost(daalBook, five, 'daal', g(5000), 280_000), 430_000);
+  // A line without a price, or no main line: no cost
+  assert.equal(purchaseRecipeCost(makeCostBook([bought('daal', 'kg', 'g', 500)], []), five, 'daal', g(5000), 250_000), null);
+  assert.equal(purchaseRecipeCost(daalBook, five, 'rice', g(5000), 250_000), null);
+  assert.equal(recipeForAmount({ ...daal, mainIngredientId: null }, g(5000)), null);
+  assert.deepEqual(recipeForAmount({ ...daal, yieldMilli: null }, g(2000))!.map((l) => l.quantityMilli), [g(2000), g(300), g(500), g(200)], 'no yield needed');
+  // What this purchase's recipe still needs from stock
+  assert.deepEqual(shortages(eight, (id) => ({ daal: g(13_000), oil: g(1000), onion: g(5000), spice: -g(1) })[id] ?? 0), [
+    { ingredientId: 'oil', shortMilli: g(200) },
+    { ingredientId: 'spice', shortMilli: g(800) },
+  ]);
 });

@@ -138,6 +138,8 @@ try {
   await noSidewaysScroll(owner, 'laptop bill');
   await bill.getByRole('button', { name: 'Save Purchase' }).click();
   await owner.getByText(/Purchase saved: Rs\. 9,000 added to the khata/).waitFor();
+  // P3 (2026-11-08): rice is the main ingredient of Biryani and Zeera Rice, so this purchase's recipes show until Done
+  await owner.getByRole('dialog', { name: 'Recipes for this purchase' }).getByRole('button', { name: 'Done' }).click();
   ok('picture cards; search "masala" finds 3; most delivered first (Sugar 2×, oil 1×); one bill with Atta 2 bags + Basmati 10 kg = Rs. 9,000, category chips');
 
   console.log('\n2. Edit order: Karyana first, Sabzi second, Chicken third');

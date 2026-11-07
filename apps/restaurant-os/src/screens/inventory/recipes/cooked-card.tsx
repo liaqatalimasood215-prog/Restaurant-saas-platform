@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { BadgeCheck, ChevronRight, Coins, Eye, Link2, Package, Pencil, ShoppingCart, TriangleAlert, CircleCheck, CircleX } from 'lucide-react';
+import { BadgeCheck, ChevronDown, ChevronRight, Coins, Eye, Link2, Package, Pencil, Receipt, TriangleAlert, CircleCheck, CircleX } from 'lucide-react';
 import {
   MILLI,
   currentVersion,
@@ -12,15 +12,17 @@ import {
   type CostBook,
   type Ingredient,
   type PreparedRow,
+  type PurchaseRecipeRow,
   type RecipesView,
   type StockPlan,
 } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
-import { amountText, quantityText, stockText, toDisplayMilli, unitLabel, whenText } from '../inventory-format';
+import { amountText, quantityText, stockText, toDisplayMilli, unitLabel } from '../inventory-format';
 import { stateOf } from './recipe-draft';
 import { ingredientArt } from './recipe-lines';
+import { DishPurchases } from './purchase-recipes';
 
 /** A food picture for a prepared item on a round plate (real photos come in Phase 7). */
 const PREPARED_ART: [RegExp, string][] = [
@@ -55,45 +57,6 @@ export function cookedDishes(view: RecipesView, book: CostBook, onHand: (ingredi
     const main = plan ? byId.get(plan.mainIngredientId) : undefined;
     return plan && main ? [{ row, main, plan, cost: linesCost(book, plan.scale.lines).total }] : [];
   });
-}
-
-/**
- * The latest supplier purchase of a main raw ingredient and what it did to the recipes that use it (owner, 2026-11-07):
- * "Daal mash +2 kg → Cooked Daal Mash: recipe now for 7 kg (was 5 kg)". Read only: the bill already changed the stock.
- */
-export function LatestPurchase({ view, book, dishes }: { view: RecipesView; book: CostBook; dishes: CookedDish[] }) {
-  const latest = dishes
-    .map((d) => ({ dish: d, bought: view.lastPurchases?.[d.main.id] }))
-    .filter((x): x is { dish: CookedDish; bought: { quantityMilli: number; at: string } } => Boolean(x.bought))
-    .sort((a, b) => b.bought.at.localeCompare(a.bought.at))[0];
-  if (!latest) return null;
-  const { main } = latest.dish;
-  const { bought } = latest;
-  // Before the purchase: the same stock without it
-  const before = cookedDishes(view, book, (id) => (view.onHand?.[id] ?? 0) - (id === main.id ? bought.quantityMilli : 0));
-  const changed = dishes.filter((d) => d.main.id === main.id);
-  return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-brand/15 bg-white px-3 py-2 text-sm shadow-sm" data-latest-purchase>
-      <ShoppingCart className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
-      <p className="min-w-0 text-slate-700">
-        <strong className="text-slate-900">{t('inventory.recipes.cooked.latest', { name: main.name, qty: amountText(bought.quantityMilli, main.stockUnit), when: whenText(bought.at) })}</strong>
-        {changed.map((dish) => {
-          const was = before.find((b) => b.row.ingredient.id === dish.row.ingredient.id);
-          const wasText = !was || was.plan.outOfStock ? t('inventory.recipes.cooked.wasOut') : amountText(was.plan.onHandMilli, main.stockUnit);
-          return (
-            <span key={dish.row.ingredient.id} className="block sm:ml-1 sm:inline" data-latest-dish={dish.row.ingredient.name}>
-              {t('inventory.recipes.cooked.latestDish', {
-                dish: dish.row.ingredient.name,
-                after: amountText(dish.plan.onHandMilli, main.stockUnit),
-                was: wasText,
-                cost: dish.cost === null ? '—' : formatPaisa(dish.cost),
-              })}
-            </span>
-          );
-        })}
-      </p>
-    </div>
-  );
 }
 
 const PILL: Record<DishState, { className: string; icon: typeof CircleCheck }> = {
@@ -178,6 +141,7 @@ export function CookedCard({
   canManage,
   onEdit,
   layout = 'grid',
+  purchases = [],
 }: {
   dish: CookedDish;
   /** Other cooked dishes made from the same main raw ingredient */
@@ -186,9 +150,13 @@ export function CookedCard({
   canManage: boolean;
   onEdit: () => void;
   layout?: CardLayout;
+  /** P3: each supplier purchase of its main ingredient with its own recipe, newest first */
+  purchases?: PurchaseRecipeRow[];
 }) {
   const [open, setOpen] = useState(false);
+  const [showPurchases, setShowPurchases] = useState(false);
   const { row, main, plan, cost } = dish;
+  const lastPurchase = purchases[0];
   const state = dishState(dish);
   const shared = sharedWith.length > 0;
   const amount = amountText(plan.scale.rawMilli, main.stockUnit);
@@ -219,6 +187,28 @@ export function CookedCard({
         </span>
         {plan.outOfStock && <span className="ml-1 font-normal text-slate-500">{t('inventory.recipes.cooked.savedFor', { qty: amount })}</span>}
       </InfoLine>
+      {/* P3: each purchase has its own recipe, apart from the total stock above */}
+      <button
+        type="button"
+        onClick={() => setShowPurchases((s) => !s)}
+        aria-expanded={showPurchases}
+        aria-label={t('inventory.recipes.purchases.open', { name: main.name })}
+        className="press -mx-1 flex w-[calc(100%+0.5rem)] items-center gap-1.5 rounded-md px-1 text-left text-[13px] leading-snug text-slate-600 hover:bg-brand-soft/50"
+        data-purchases-line
+      >
+        <Receipt className="size-3.5 shrink-0 text-brand" aria-hidden />
+        <span className="shrink-0">{t('inventory.recipes.purchases.line')}</span>
+        <span className="min-w-0 truncate font-bold text-slate-900">
+          {lastPurchase
+            ? t('inventory.recipes.purchases.lineValue', {
+                n: purchases.length,
+                qty: amountText(lastPurchase.rawMilli, main.stockUnit),
+                cost: lastPurchase.cost === null ? '—' : formatPaisa(lastPurchase.cost),
+              })
+            : '—'}
+        </span>
+        <ChevronDown className={cn('ml-auto size-3.5 shrink-0 text-slate-400 transition-transform', showPurchases && 'rotate-180')} aria-hidden />
+      </button>
     </div>
   );
 
@@ -266,6 +256,11 @@ export function CookedCard({
         </div>
         {list ? buttons : null}
       </div>
+      {showPurchases && (
+        <div className="mt-2.5">
+          <DishPurchases rows={purchases} byId={byId} />
+        </div>
+      )}
       {!list && <div className="mt-2.5">{buttons}</div>}
 
       {open && (

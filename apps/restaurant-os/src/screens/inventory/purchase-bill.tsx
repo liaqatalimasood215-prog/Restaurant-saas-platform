@@ -30,6 +30,7 @@ import {
   type PurchaseUnit,
   type StockUnit,
   type SupplierPaymentMethod,
+  type RecipesView,
   type SupplierWorkspace,
 } from '@restaurant-saas/shared';
 import { Button } from '@/components/ui/button';
@@ -38,13 +39,15 @@ import { Dialog } from '@/components/ui/dialog';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { t } from '@/i18n';
-import { getApi, type PurchaseDraft } from '@/lib/api';
+import { getApi, type PurchaseBillResult, type PurchaseDraft } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
 import { amountText, fromDisplayMilli, stockText, unitLabel } from './inventory-format';
 import { PackingsEditor, packingDrafts, packingsFromDrafts, type PackingDraft } from './packings-editor';
+import { bookOf } from './recipes/recipe-draft';
 import { ingredientArt } from './recipes/recipe-lines';
+import { PurchasePreview, PurchaseSummary, purchasePreview } from './recipes/purchase-recipes';
 
 /**
  * New Purchase (Bill) — owner's brief and picture, 2026-11-06. Two screens, one at a time:
@@ -69,12 +72,26 @@ const newKey = () => crypto.randomUUID();
 export function PurchaseBill({ supplierId, firstProductId, onClose }: { supplierId: string; firstProductId?: string | null; onClose: () => void }) {
   const ws = useApiQuery(() => getApi().getSupplierWorkspace(supplierId, 'TODAY'), [supplierId]);
   const draft = useApiQuery(() => getApi().getPurchaseDraft(supplierId), [supplierId]);
+  // P3: the cooked food recipes, for "Recipes for this purchase" (the bill works without them)
+  const recipes = useApiQuery(() => getApi().getRecipes(), []);
   if ((ws.loading && !ws.data) || (draft.loading && !draft.data && !draft.error)) return <LoadingState />;
   if (!ws.data) return <ErrorState message={ws.error?.message} onRetry={ws.reload} />;
-  return <BillScreens workspace={ws.data} draft={draft.data ?? null} firstProductId={firstProductId ?? null} onClose={onClose} />;
+  return <BillScreens workspace={ws.data} draft={draft.data ?? null} recipes={recipes.data ?? null} firstProductId={firstProductId ?? null} onClose={onClose} />;
 }
 
-function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { workspace: SupplierWorkspace; draft: PurchaseDraft | null; firstProductId: string | null; onClose: () => void }) {
+function BillScreens({
+  workspace: ws,
+  draft,
+  recipes,
+  firstProductId,
+  onClose,
+}: {
+  workspace: SupplierWorkspace;
+  draft: PurchaseDraft | null;
+  recipes: RecipesView | null;
+  firstProductId: string | null;
+  onClose: () => void;
+}) {
   const toast = useToast();
   const { supplier, summary } = ws;
   const [extra, setExtra] = useState<Ingredient[]>([]);
@@ -105,6 +122,8 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(newKey);
   const [printed, setPrinted] = useState<{ purchase: KhataEntry; payment: KhataEntry | null } | null>(null);
+  /** P3: after saving, this purchase's recipes stay on screen until Done (then the print or the supplier screen) */
+  const [afterSave, setAfterSave] = useState<{ result: PurchaseBillResult; print: boolean } | null>(null);
   /** The row whose quantity gets the cursor */
   const [focusRow, setFocusRow] = useState<string | null>(lines[0]?.row ?? null);
 
@@ -125,6 +144,23 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
     return milli > 0 ? [{ ingredient, milli }] : [];
   });
   const { subtotal } = billTotals(parsed, 0);
+  // P3: what each main raw ingredient on this bill makes — its recipe for that amount, at the price typed here
+  const recipeNames = new Map((recipes?.ingredients ?? allIngredients).map((i) => [i.id, i]));
+  const preview = recipes
+    ? purchasePreview(
+        recipes,
+        bookOf(recipes),
+        stockAdded.map(({ ingredient, milli }) => ({
+          ingredientId: ingredient.id,
+          milli,
+          paid: lines.reduce((sum, l, i) => {
+            const option = optionOf(l);
+            const p = parsed[i]!;
+            return l.ingredientId === ingredient.id && option && p.quantityMilli !== null && p.ratePaisa !== null ? sum + buyAmount(p.quantityMilli, p.ratePaisa, option.rateDivisor) : sum;
+          }, 0),
+        })),
+      )
+    : [];
   const discountPaisa = !discount.trim() ? 0 : discountMode === 'RS' ? parseRupees(discount) : percentPaisa(subtotal, discount);
   const total = subtotal - (discountPaisa ?? 0);
   const paidPaisa = !paid.trim() ? 0 : parseRupees(paid);
@@ -224,7 +260,8 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
         title: t('inventory.bill.saved', { amount: formatPaisa(result.purchase.amount), name: supplier.name }),
         ...(updates.length > 0 && { body: t('inventory.bill.recipesUpdated', { list: updates.join('; ') }) }),
       });
-      if (print) setPrinted(result);
+      if ((result.purchaseRecipes ?? []).length > 0) setAfterSave({ result, print });
+      else if (print) setPrinted(result);
       else onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('states.errorBody'));
@@ -232,6 +269,18 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
     }
   };
 
+  if (afterSave)
+    return (
+      <PurchaseSummary
+        rows={afterSave.result.purchaseRecipes ?? []}
+        byId={recipeNames}
+        onDone={() => {
+          if (afterSave.print) setPrinted(afterSave.result);
+          else onClose();
+          setAfterSave(null);
+        }}
+      />
+    );
   if (printed) return <BillPrintDialog workspace={ws} purchase={printed.purchase} payment={printed.payment} ingredients={allIngredients} onClose={onClose} />;
 
   if (editing) {
@@ -351,6 +400,7 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
               <p>{stockAdded.map(({ ingredient, milli }) => `${ingredient.name} +${stockText(ingredient, milli)}`).join(' · ')}</p>
             </div>
           )}
+          <PurchasePreview rows={preview} byId={recipeNames} />
           <dl className="space-y-1.5 border-t border-slate-100 pt-2 text-sm">
             <Row label={t('inventory.bill.subtotal')} value={formatPaisa(subtotal)} />
             <div className="flex items-center justify-between gap-2">

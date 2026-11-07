@@ -54,6 +54,7 @@ import type {
   IngredientKind,
   Recipe,
   RecipeLine,
+  PurchaseRecipeRow,
   RecipeScale,
   RecipeTarget,
   RecipesView,
@@ -420,6 +421,8 @@ export interface PurchaseBillResult {
   payment: KhataEntry | null;
   /** Cooked food whose recipe now follows the raw stock this bill brought (owner, 2026-11-07); read only */
   recipeUpdates?: RecipeUpdate[];
+  /** P3: this bill's own recipe for each cooked dish whose main raw ingredient it brought (read only) */
+  purchaseRecipes?: PurchaseRecipeRow[];
 }
 
 /** "Cooked Daal Mash: recipe now for 7 kg (was 5 kg)" — stock-unit thousandths of the main raw ingredient */

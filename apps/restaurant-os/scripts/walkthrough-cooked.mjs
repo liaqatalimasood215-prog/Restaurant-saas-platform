@@ -57,8 +57,14 @@ async function openPrepared(page) {
   await page.getByRole('tab', { name: 'Prepared items' }).click();
   await card(page, 'Naan dough').waitFor();
 }
-/** A supplier bill for daal mash from the kiryana store, at his usual rate. */
-async function buyDaalMash(page, kg) {
+/** Rs. 4,477.75 → 4477.75; equal within a few paisa (every line is rounded on its own) */
+const near = (a, b) => Math.abs(a - b) <= 0.05;
+const money = (rupeesValue) => rupeesValue.toLocaleString('en-PK', { minimumFractionDigits: rupeesValue % 1 ? 2 : 0, maximumFractionDigits: 2 });
+/**
+ * A supplier bill for daal mash from the kiryana store, at his usual rate. Before saving, the bill shows this purchase's recipe
+ * (its cost is returned); after saving, the summary of this purchase's recipes stays open until Done.
+ */
+async function buyDaalMash(page, kg, shotName) {
   await page.goto(`${BASE_URL}/inventory`, { waitUntil: 'networkidle' });
   await page.locator(`main [data-supplier-card="${KIRYANA}"]`).click();
   await page.locator('main [data-supplier-workspace]').getByRole('button', { name: 'New Purchase (Bill)' }).click();
@@ -66,7 +72,20 @@ async function buyDaalMash(page, kg) {
   await bill(page).getByRole('searchbox', { name: 'Search product (e.g. Atta, Sugar, Oil …)' }).fill('daal mash');
   await bill(page).getByRole('button', { name: 'Add Daal mash to the bill' }).click();
   await bill(page).locator('[data-bill-line="Daal mash"][data-bill-unit="main"]').getByRole('textbox', { name: 'Quantity of Daal mash received' }).fill(String(kg));
+  const preview = bill(page).locator('[data-purchase-preview] [data-preview-dish="Cooked Daal Mash"]');
+  await preview.getByText(`Cooked Daal Mash: recipe for ${kg} kg →`, { exact: false }).waitFor();
+  if (shotName) {
+    await bill(page).locator('[data-purchase-preview]').scrollIntoViewIfNeeded();
+    await shot(page, shotName);
+  }
+  const previewCost = rupees((await preview.innerText()).split('→')[1].trim());
   await bill(page).getByRole('button', { name: 'Save Purchase' }).click();
+  const summary = page.locator('[data-purchase-summary]');
+  await summary.waitFor();
+  return { preview: previewCost, summary };
+}
+async function doneAfterBill(page) {
+  await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
   await page.locator('main [data-supplier-workspace]').waitFor();
 }
 async function noSidewaysScroll(page, label) {
@@ -148,68 +167,106 @@ try {
   ok('summary 9 / 7 / 0 / 1; filters: Out of Stock → Daal Mash, Dough & sauces → Naan dough, All → 9; search qeema / basmati / pizza; list and cards');
   ok(`Daal Mash: Out of Stock, "Recipe for 1 kg Daal mash" stays (Rs. ${oneKg}); Biryani for 5 kg rice, 10 kg in stock, rice shared with Zeera Rice; no plates`);
 
-  console.log('\n2. Supplier bill: 5 kg daal mash → the recipe for 5 kg');
-  await buyDaalMash(owner, 5);
+  console.log('\n2. P3, his example: a 5 kg purchase gets its own recipe for 5 kg');
+  const first = await buyDaalMash(owner, 5, '02a-desktop-bill-preview-5kg');
+  assert.ok(near(first.preview, 5 * oneKg), `preview: 5 kg → ${first.preview} (5 × ${oneKg})`);
   await owner.getByText('Recipes updated: Cooked Daal Mash now for 5 kg (was out of stock)').waitFor();
-  await openPrepared(owner);
-  assert.equal(await daal.locator('[data-raw-stock]').innerText(), '5 kg');
-  const five = rupees(await daal.locator('[data-cooked-cost]').innerText());
-  assert.ok(Math.abs(five - 5 * oneKg) <= 1, `5 kg costs 5 × 1 kg (${five} vs ${5 * oneKg})`);
-  await owner.locator('main [data-latest-purchase]').getByText('Latest purchase: Daal mash +5 kg').waitFor();
-  await owner.locator('main [data-latest-dish="Cooked Daal Mash"]').getByText('recipe now for 5 kg (was out of stock)').waitFor();
-  ok(`bill saved → "Recipes updated: Cooked Daal Mash now for 5 kg"; card 5 kg, Rs. ${five} = 5 × the 1 kg recipe`);
+  const summaryDish = first.summary.locator('[data-summary-dish="Cooked Daal Mash"]');
+  assert.ok(near(rupees(await summaryDish.locator('[data-summary-cost]').innerText()), 5 * oneKg), 'the saved recipe of this purchase costs 5 × the 1 kg recipe');
+  await summaryDish.locator('[data-purchase-lines] li', { hasText: 'Cooking oil' }).getByText('750 ml').waitFor();
+  await summaryDish.locator('[data-summary-total]').getByText('Total Daal mash stock now: 5 kg', { exact: false }).waitFor();
+  await shot(owner, '02b-desktop-purchase-summary-5kg');
+  await doneAfterBill(owner);
+  ok(`bill preview and saved summary: 5 kg daal mash → recipe for 5 kg, Rs. ${first.preview} (5 × Rs. ${oneKg}); oil 750 ml; total stock 5 kg shown apart`);
 
-  console.log('\n3. 2 kg more → 7 kg, every ingredient and the cost follow');
-  await buyDaalMash(owner, 2);
-  await owner.getByText('Recipes updated: Cooked Daal Mash now for 7 kg (was 5 kg)').waitFor();
+  console.log('\n3. A separate 8 kg purchase gets its own recipe for 8 kg; the total stock (13 kg) stays apart');
+  const second = await buyDaalMash(owner, 8);
+  assert.ok(near(second.preview, 8 * oneKg), `preview: 8 kg → ${second.preview} (8 × ${oneKg})`);
+  const secondDish = second.summary.locator('[data-summary-dish="Cooked Daal Mash"]');
+  assert.ok(near(rupees(await secondDish.locator('[data-summary-cost]').innerText()), 8 * oneKg));
+  await secondDish.locator('[data-purchase-lines] li', { hasText: 'Cooking oil' }).getByText('1.2 litres').waitFor();
+  await secondDish.locator('[data-summary-total]').getByText('Total Daal mash stock now: 13 kg', { exact: false }).waitFor();
+  await doneAfterBill(owner);
   await openPrepared(owner);
-  assert.equal(await daal.locator('[data-raw-stock]').innerText(), '7 kg');
-  await daal.locator('[data-dish-state="OK"]').getByText('In Stock').waitFor();
-  const seven = rupees(await daal.locator('[data-cooked-cost]').innerText());
-  assert.ok(Math.abs(seven - 7 * oneKg) <= 1, `7 kg costs 7 × 1 kg (${seven} vs ${7 * oneKg})`);
-  await owner.locator('main [data-latest-dish="Cooked Daal Mash"]').getByText('recipe now for 7 kg (was 5 kg)').waitFor();
-  assert.equal(await daal.locator('[data-cooked-lines]').count(), 0, 'ingredients only when opened');
-  await daal.getByRole('button', { name: 'Show ingredients for 7 kg' }).click();
-  await daal.locator('[data-cooked-lines] li', { hasText: 'Cooking oil' }).getByText('1.05 litres').waitFor();
-  await daal.locator('[data-cooked-lines] li', { hasText: 'Onions' }).getByText('1.75 kg').waitFor();
-  await daal.locator('[data-cooked-lines] li', { hasText: 'Onions' }).getByText('20 kg in stock').waitFor();
+  assert.equal(await daal.locator('[data-raw-stock]').innerText(), '13 kg', 'the total raw stock: 5 + 8');
+  // 13 kg needs 260 g coriander leaves; 200 g are in stock: Not Enough, and the opened list says how much is short
+  await daal.locator('[data-dish-state="SHORT"]').getByText('Not Enough').waitFor();
+  const thirteen = rupees(await daal.locator('[data-cooked-cost]').innerText());
+  assert.ok(near(thirteen, 13 * oneKg), `13 kg costs 13 × 1 kg (${thirteen})`);
+  await daal.locator('[data-purchases-line]').getByText(`2 · last 8 kg → Rs. ${money(second.preview)}`).waitFor();
+  await daal.locator('[data-purchases-line]').click();
+  const rows = daal.locator('[data-dish-purchases] [data-purchase-amount]');
+  assert.deepEqual(await rows.allInnerTexts(), [`8 kg → Rs. ${money(second.preview)}`, `5 kg → Rs. ${money(first.preview)}`], 'each purchase with its own recipe, newest first');
+  await daal.locator('[data-dish-purchases] [data-purchase-recipe]').nth(1).getByRole('button').click();
+  await daal.locator('[data-dish-purchases] [data-purchase-lines] li', { hasText: 'Cooking oil' }).getByText('750 ml').waitFor();
+  assert.equal(await owner.locator('main [data-recent-purchases] [data-recent-purchase="Cooked Daal Mash"]').count(), 2, 'Recent purchases lists both');
   await daal.scrollIntoViewIfNeeded();
-  await shot(owner, '02-desktop-daal-mash-7kg');
+  await shot(owner, '02c-desktop-daal-purchases');
+  assert.equal(await daal.locator('[data-cooked-lines]').count(), 0, 'ingredients only when opened');
+  await daal.getByRole('button', { name: 'Show ingredients for 13 kg' }).click();
+  await daal.locator('[data-cooked-lines] li', { hasText: 'Cooking oil' }).getByText('1.95 litres').waitFor();
+  await daal.locator('[data-cooked-lines] li', { hasText: 'Onions' }).getByText('3.25 kg').waitFor();
+  await daal.locator('[data-cooked-lines] li', { hasText: 'Onions' }).getByText('20 kg in stock').waitFor();
+  await daal.locator('[data-cooked-lines] li', { hasText: 'Coriander leaves' }).getByText('60 g short').waitFor();
   const data = await saved(owner);
   const daalMoves = data.inventory.movements.filter((m) => m.ingredientId === DAAL_MASH);
   assert.deepEqual(
     daalMoves.map((m) => [m.type, m.quantityMilli]),
-    [['OPENING', 8_000_000], ['ADJUSTMENT', -8_000_000], ['PURCHASE', 5_000_000], ['PURCHASE', 2_000_000]],
+    [['OPENING', 8_000_000], ['ADJUSTMENT', -8_000_000], ['PURCHASE', 5_000_000], ['PURCHASE', 8_000_000]],
     'after the count, only the two bills changed the daal stock',
   );
   const cookedMoves = data.inventory.movements.filter((m) => COOKED.some((n) => data.inventory.ingredients.find((i) => i.id === m.ingredientId)?.name === n));
   assert.equal(cookedMoves.length, 0, 'buying is not cooking: no cooked stock');
   const kiryana = data.inventory.suppliers.find((s) => s.name === KIRYANA);
   const bills = data.inventory.khata.filter((e) => e.supplierId === kiryana.id && e.kind === 'PURCHASE');
-  assert.equal(bills.length, 2, 'the khata has the two bills and nothing from the recipe');
-  ok(`7 kg: oil 1.05 litres, onions 1.75 kg (20 kg in stock), Rs. ${seven} = 7 × 1 kg; after the count only the 2 bills moved the stock; no cooked stock; 2 khata bills`);
+  assert.equal(bills.length, 2, 'the khata has the two bills and nothing from the recipes');
+  assert.deepEqual(
+    data.inventory.purchaseRecipes.map((r) => [r.rawMilli, r.mainIngredientId]),
+    [[5_000_000, DAAL_MASH], [8_000_000, DAAL_MASH]],
+    'one saved recipe per purchase',
+  );
+  ok(`card: total 13 kg, Rs. ${thirteen}; Purchases 8 kg → Rs. ${money(second.preview)} and 5 kg → Rs. ${money(first.preview)}, each with its own lines; 2 khata bills, no cooked stock`);
 
   console.log('\n4. Recipe Builder: the recipe for your stock, and Try another amount');
   await owner.getByRole('button', { name: 'Edit recipe: Cooked Daal Mash' }).click();
   await builder(owner).waitFor();
   assert.equal(await builder(owner).locator('[data-main-ingredient]').inputValue(), DAAL_MASH);
-  assert.equal(await builder(owner).locator('[data-builder-stock]').innerText(), '7 kg');
-  assert.equal(await cook(owner).locator('[data-cook-amount]').innerText(), '7 kg');
-  await cook(owner).locator('[data-scaled-lines] li', { hasText: 'Daal mash' }).getByText('7 kg').waitFor();
+  assert.equal(await builder(owner).locator('[data-builder-stock]').innerText(), '13 kg');
+  assert.equal(await cook(owner).locator('[data-cook-amount]').innerText(), '13 kg');
+  await cook(owner).locator('[data-scaled-lines] li', { hasText: 'Daal mash' }).getByText('13 kg').waitFor();
   await cook(owner).getByRole('button', { name: 'Try another amount' }).click();
   await cook(owner).getByRole('textbox', { name: 'Amount of Daal mash' }).fill('10');
   assert.equal(await cook(owner).locator('[data-cook-amount]').innerText(), '10 kg');
   await cook(owner).getByRole('textbox', { name: 'Amount of Daal mash' }).fill('abc');
   await cook(owner).getByText('Type an amount, for example 7 or 2.5.').waitFor();
   await cook(owner).getByRole('button', { name: 'Back to my stock' }).click();
-  assert.equal(await cook(owner).locator('[data-cook-amount]').innerText(), '7 kg');
+  assert.equal(await cook(owner).locator('[data-cook-amount]').innerText(), '13 kg');
   assert.equal(await builder(owner).getByRole('button', { name: 'Save Draft' }).isDisabled(), true, 'looking at amounts changes nothing to save');
   await cook(owner).scrollIntoViewIfNeeded();
   await shot(owner, '03-desktop-builder-for-stock');
-  ok('builder: daal mash in stock 7 kg, recipe for 7 kg; Try another amount 10 kg; Back to my stock; nothing to save');
+  ok('builder: daal mash in stock 13 kg, recipe for 13 kg; Try another amount 10 kg; Back to my stock; nothing to save');
+
+  console.log('\n4b. A recipe changed later: old purchases keep the recipe of their day; bills from before P3 use today\'s');
+  await builder(owner).getByLabel('Quantity 2').fill('200');
+  await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
+  await builder(owner).waitFor({ state: 'detached' });
+  await daal.locator('[data-purchases-line]').click();
+  await daal.locator('[data-dish-purchases] [data-purchase-recipe]').nth(1).getByRole('button').click();
+  await daal.locator('[data-dish-purchases] [data-purchase-lines] li', { hasText: 'Cooking oil' }).getByText('750 ml').waitFor();
+  // Bills saved before P3 have no saved recipe: they are worked out now, marked "today's prices"
+  await owner.evaluate((key) => {
+    const old = JSON.parse(window.localStorage.getItem(key));
+    delete old.inventory.purchaseRecipes;
+    window.localStorage.setItem(key, JSON.stringify(old));
+  }, DATA_KEY);
+  await openPrepared(owner);
+  await daal.locator('[data-purchases-line]').click();
+  assert.equal(await daal.locator('[data-dish-purchases]').getByText("(today’s prices)").count(), 2);
+  await daal.locator('[data-dish-purchases] [data-purchase-recipe]').nth(1).getByRole('button').click();
+  await daal.locator('[data-dish-purchases] [data-purchase-lines] li', { hasText: 'Cooking oil' }).getByText('1 litre', { exact: true }).waitFor();
+  ok('oil changed to 200 ml: the 5 kg purchase keeps 750 ml (its day\'s recipe); without saved records the bills are worked out now (1 litre), marked "today\'s prices"');
 
   console.log('\n5. A new cooked dish, written once for 2 kg, follows the daal chana stock');
-  await builder(owner).getByRole('button', { name: 'Recipes' }).first().click();
   await card(owner, 'Naan dough').waitFor();
   await owner.getByRole('button', { name: 'Add Recipe' }).click();
   await builder(owner).getByLabel('Name', { exact: true }).fill('Cooked Chana Pulao');
@@ -281,7 +338,7 @@ try {
   ok('version 21 → 22: cooked dishes, daal masoor, kali daal and beef qeema added; "Cooked Chana Pulao" kept');
 
   assert.deepEqual(errors, [], `page errors: ${errors.join(' | ')}`);
-  console.log('\nAll cooked-food P1 checks passed (DEMO).');
+  console.log('\nAll cooked-food P1–P3 checks passed (DEMO).');
 } finally {
   await browser.close();
 }

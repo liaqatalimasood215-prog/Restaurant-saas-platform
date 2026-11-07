@@ -95,6 +95,10 @@ try {
   assert.equal(await bill(owner).locator('[data-bill-total]').innerText(), 'Rs. 25,120', '12,120 + 9,000 + 1,900 + 2,100');
   await shot(owner, '01-laptop-mixed-units');
   await bill(owner).getByRole('button', { name: 'Save Purchase' }).click();
+  // P3 (2026-11-08): 30 kg rice is the main ingredient of Biryani and Zeera Rice: their recipes for this purchase show until Done
+  const recipesForPurchase = owner.getByRole('dialog', { name: 'Recipes for this purchase' });
+  await recipesForPurchase.locator('[data-summary-dish="Cooked Rice (zeera)"]').getByText('30 kg').first().waitFor();
+  await recipesForPurchase.getByRole('button', { name: 'Done' }).click();
   await workspace(owner).waitFor();
   let data = await saved(owner);
   const onHand = (ingredientId) => data.inventory.movements.filter((m) => m.ingredientId === ingredientId).reduce((sum, m) => sum + m.quantityMilli, 0);

@@ -394,6 +394,82 @@ export function stockPlan(
   };
 }
 
+// ── P3: every supplier purchase gets its own recipe (owner, 2026-11-08) ─────────────────────────
+
+/**
+ * The recipe is saved once (1 kg Daal Mash = Rs. 800). Each supplier purchase of its main raw ingredient gets its own
+ * calculation: 5 kg bought → the recipe for 5 kg (Rs. 4,000); a separate 8 kg → the recipe for 8 kg (Rs. 6,400). It is kept
+ * apart from the total raw stock and fixed on the bill's day: the main ingredient at what that purchase paid, the others at
+ * that day's prices, with the recipe version of that day. Nothing is cooked, saved to stock or taken from it.
+ * Roman Urdu: Har khareed ka apna recipe hisaab — 5 kg ka alag, 8 kg ka alag. Kul stock alag rehta hai.
+ */
+export interface PurchaseRecipe extends BranchScoped {
+  id: Uuid;
+  /** The bill (its khata PURCHASE entry) */
+  purchaseId: Uuid;
+  /** The cooked dish (prepared item) and the recipe version used */
+  preparedId: Uuid;
+  recipeVersion: number;
+  mainIngredientId: Uuid;
+  /** What this purchase brought of the main ingredient (stock-unit thousandths) */
+  rawMilli: number;
+  lines: RecipeLine[];
+  cost: Paisa | null;
+  createdAt: IsoDateTime;
+}
+
+/** A purchase's recipe as the screens show it. */
+export interface PurchaseRecipeRow {
+  /** The saved record's id, or "purchaseId:preparedId" for a bill from before P3 */
+  id: string;
+  purchaseId: Uuid;
+  preparedId: Uuid;
+  dishName: string;
+  mainIngredientId: Uuid;
+  supplierName: string;
+  billNo: string;
+  at: IsoDateTime;
+  rawMilli: number;
+  lines: RecipeLine[];
+  cost: Paisa | null;
+  recipeVersion: number | null;
+  /** A bill from before P3, worked out now: the other ingredients at today's prices and today's recipe */
+  todayPrices: boolean;
+  /** Another cooked dish is made from the same main ingredient: this purchase is for one of them */
+  shared: boolean;
+  /** The main ingredient's total raw stock now, apart from this purchase */
+  mainOnHandMilli: number;
+  /** Lines this purchase's recipe needs more of than is in stock now (stock-unit thousandths) */
+  short: { ingredientId: Uuid; shortMilli: number }[];
+}
+
+/** The saved recipe for an amount of its main raw ingredient (no yield needed); null without a main ingredient. */
+export function recipeForAmount(version: Pick<RecipeVersion, 'lines' | 'yieldMilli' | 'mainIngredientId'>, rawMilli: number): RecipeLine[] | null {
+  return scaleBatch({ ...version, yieldMilli: version.yieldMilli ?? MILLI }, rawMilli)?.lines ?? null;
+}
+
+/**
+ * A purchase's recipe cost: the main ingredient at what this purchase paid for it (its loss % included), the other lines from
+ * the cost book (that day's prices). Null when another line has no price.
+ */
+export function purchaseRecipeCost(book: CostBook, lines: readonly RecipeLine[], mainIngredientId: Uuid, rawMilli: number, paid: Paisa): Paisa | null {
+  const main = lines.find((l) => l.ingredientId === mainIngredientId);
+  if (!main || rawMilli <= 0) return null;
+  const rest = linesCost(
+    book,
+    lines.filter((l) => l !== main),
+  ).total;
+  return rest === null ? null : rest + mulDivRound(paid, grossQuantity(main.quantityMilli, main.lossBps), rawMilli);
+}
+
+/** What the lines need more of than is in stock (0 or less in stock counts as none). */
+export function shortages(lines: readonly RecipeLine[], onHand: (ingredientId: Uuid) => number): { ingredientId: Uuid; shortMilli: number }[] {
+  return lines.flatMap((l) => {
+    const shortMilli = l.quantityMilli - Math.max(0, onHand(l.ingredientId));
+    return shortMilli > 0 ? [{ ingredientId: l.ingredientId, shortMilli }] : [];
+  });
+}
+
 /** A full plate of cooked food, 250 g: an assumption the owner can change later (POS step), shown as an estimate. */
 export const DEFAULT_PLATE_MILLI = 250 * MILLI;
 
@@ -562,6 +638,8 @@ export interface RecipesView {
   onHand?: Record<Uuid, number>;
   /** The latest supplier purchase of each bought ingredient (its PURCHASE stock movement) */
   lastPurchases?: Record<Uuid, { quantityMilli: number; at: IsoDateTime }>;
+  /** P3: every supplier purchase's own recipe for cooked food, newest first */
+  purchaseRecipes?: PurchaseRecipeRow[];
 }
 
 export interface FoodCostSummary {
