@@ -250,7 +250,7 @@ try {
   await owner.reload({ waitUntil: 'networkidle' });
   await openSuppliers(owner);
   const upgraded = await saved(owner);
-  assert.equal(upgraded.version, 20);
+  assert.equal(upgraded.version, 21);
   assert.equal(upgraded.inventory.ingredients.length, old.inventory.ingredients.length + 19);
   const his = upgraded.inventory.suppliers.find((s) => s.id === PACKAGING);
   assert.equal(his.name, 'samad karina store');
@@ -261,7 +261,7 @@ try {
   await product(owner, 'Potatoes (aloo)').waitFor();
   await openSupplier(owner, DAIRY);
   await product(owner, 'Paneer').waitFor();
-  ok('saved version 19 data → 20: 19 new products and their suppliers; "samad karina store" keeps his name and products');
+  ok('saved version 19 data → 21: 19 new products and their suppliers; "samad karina store" keeps his name and products');
 
   console.log('\n6. Manager, desktop and phone');
   const manager = await openAs(USER.manager, DESKTOP);

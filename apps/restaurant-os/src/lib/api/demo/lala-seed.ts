@@ -11,6 +11,8 @@ import {
   scaleLines,
   type Ingredient,
   type IngredientCategory,
+  type Packing,
+  type PackingKind,
   type ItemVariant,
   type KitchenStation,
   type MenuCategory,
@@ -385,7 +387,29 @@ const ROWS: Row[] = [
   [77, 'Chicken breast (tikka cut)', 'CHT-001', 'MEAT', 'kg', 'g', null, 3, 10, 700, SUPPLIER.chicken, LOCATION.freezer, 5, 3],
   [78, 'Paneer', 'PNR-001', 'DAIRY', 'kg', 'g', null, 0.5, 2, 1400, SUPPLIER.dairy, LOCATION.fridge, 1, 5],
   [79, 'Khoya', 'KHY-001', 'DAIRY', 'kg', 'g', null, 0.5, 2, 1200, SUPPLIER.dairy, LOCATION.fridge, 0.5, 4],
+  // Owner, 2026-11-07: eggs come as a tray of 30, a dozen or a carton. Added by the 20 → 21 upgrade.
+  [80, 'Eggs (anday)', 'EGG-001', 'DAIRY', 'tray', 'piece', 30, 30, 2, 1050, SUPPLIER.kiryana, LOCATION.fridge, 60, 14],
 ];
+
+/**
+ * Other ways to buy (owner's multiple-units brief, 2026-11-07), by row number: [kind, size in the display unit (kg, litres
+ * or pieces), price in rupees]. Loose kg / g, litre / ml and single pieces come with every product on their own.
+ */
+const PACKINGS: Record<number, [PackingKind, number, number][]> = {
+  61: [['bag', 25, 9000]],
+  56: [['bag', 50, 7500]],
+  12: [['bottle', 1, 600], ['carton', 12, 6900]],
+  35: [['pack', 1, 230], ['carton', 12, 2640]],
+  80: [['dozen', 12, 430], ['carton', 360, 12000]],
+  18: [['pack', 6, 620]],
+};
+
+function packingsOf(n: number, stockUnit: StockUnit): Packing[] | undefined {
+  const rows = PACKINGS[n];
+  if (!rows) return undefined;
+  const factor = stockUnit === 'g' || stockUnit === 'ml' ? 1000 : 1;
+  return rows.map(([kind, size, rupees], i) => ({ id: `p-${n}-${i}`, kind, sizeMilli: Math.round(size * factor * MILLI), pricePaisa: rupeesToPaisa(rupees) }));
+}
 
 const ING = (n: number) => id(1300 + n);
 const NAAN_DOUGH = id(1360);
@@ -748,6 +772,7 @@ function ingredientsAndMovements(scope: Scope, ownerId: string, now: Date, skip:
       isActive: true,
       createdAt,
       updatedAt: createdAt,
+      ...(PACKINGS[n] && { packings: packingsOf(n, stockUnit) }),
     });
     if (opening > 0) {
       movements.push({
@@ -976,4 +1001,23 @@ export function addSupplierRanges(data: DemoData, now = new Date()): DemoData {
     return more.length > 0 ? { ...s, productIds: [...s.productIds, ...more] } : s;
   });
   return { ...data, inventory: { ...inventory, suppliers, ingredients: [...inventory.ingredients, ...ingredients], movements: [...inventory.movements, ...movements] } };
+}
+
+// ── Upgrade 20 → 21: ways to buy (owner, 2026-11-07) ──────────────────────────────────────────
+
+/**
+ * Lala data only: the eggs product (with its supplier), and the sample packings on the demo products that do not have
+ * any yet and still count stock in the same unit. Products, stock and bills he made stay as they are.
+ */
+export function addDemoPackings(data: DemoData, now = new Date()): DemoData {
+  if (!data.inventory.suppliers.some((s) => s.id === SUPPLIER.kiryana)) return data;
+  const withRanges = addSupplierRanges(data, now);
+  const inventory = withRanges.inventory;
+  const ingredients = inventory.ingredients.map((ingredient) => {
+    const row = ROWS.find(([n]) => ING(n) === ingredient.id);
+    if (!row || ingredient.packings?.length || ingredient.stockUnit !== row[5]) return ingredient;
+    const packings = packingsOf(row[0], ingredient.stockUnit);
+    return packings ? { ...ingredient, packings } : ingredient;
+  });
+  return { ...withRanges, inventory: { ...inventory, ingredients } };
 }

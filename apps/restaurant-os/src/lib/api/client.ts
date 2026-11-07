@@ -50,6 +50,7 @@ import type {
   Uuid,
   AdjustReason,
   Ingredient,
+  Packing,
   IngredientKind,
   Recipe,
   RecipeLine,
@@ -311,6 +312,10 @@ export interface IngredientInput {
   expiryDate: string | null;
   /** New ingredient only: written as its OPENING stock movement */
   openingMilli: number;
+  /** Other ways to buy it (2026-11-07); missing = unchanged */
+  packings?: Packing[];
+  /** Loose price per kg / litre / one; null = from the main price; missing = unchanged */
+  loosePrice?: number | null;
   /** New ingredient only; missing = BOUGHT. PREPARED items are made in the kitchen from a batch recipe. */
   kind?: IngredientKind;
 }
@@ -397,8 +402,8 @@ export interface PurchaseBillInput {
   billNo: string;
   /** Business date of the bill (YYYY-MM-DD), not in the future */
   date: string;
-  /** Quantity in the purchase unit (thousandths) and the rate per purchase unit (paisa) */
-  lines: { ingredientId: Uuid; quantityMilli: number; ratePaisa: number }[];
+  /** Quantity in the way it is bought (unitKey: 'main', 'loose:kg', 'pack:<id>'; thousandths) and its rate (paisa) */
+  lines: { ingredientId: Uuid; unitKey: string; quantityMilli: number; ratePaisa: number }[];
   /** Paisa off the subtotal */
   discount: number;
   /** Paid at once (paisa), up to this bill's total; 0 = nothing yet */
@@ -418,7 +423,8 @@ export interface PurchaseDraft {
   supplierId: Uuid;
   billNo: string;
   date: string;
-  lines: { ingredientId: Uuid; quantity: string; rate: string }[];
+  /** unitKey missing = 'main' (drafts from before 2026-11-07) */
+  lines: { ingredientId: Uuid; unitKey?: string; quantity: string; rate: string }[];
   discount: string;
   discountMode: 'RS' | 'PERCENT';
   paid: string;

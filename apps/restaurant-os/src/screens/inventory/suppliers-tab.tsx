@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Banknote, Camera, Check, ChevronRight, ListOrdered, Pencil, Phone, Plus, Search, ShoppingCart, Trash2, Truck } from 'lucide-react';
 import {
   MILLI,
@@ -44,12 +44,17 @@ const newKey = () => crypto.randomUUID();
  * Paid / Partly paid / Unpaid), the chosen supplier beside it: totals, his products with Receive Stock (stock and khata
  * in one step), Settle Payment and today's khata. Phones show the list first, then the supplier with a Back button.
  */
-export function SuppliersTab({ canManage }: { canManage: boolean }) {
+export function SuppliersTab({ canManage, onFocus }: { canManage: boolean; /** A bill is open: the Inventory header and tabs step aside */ onFocus?: (on: boolean) => void }) {
   const toast = useToast();
   const view = useApiQuery(() => getApi().getSuppliers(), []);
   const [chosen, setChosen] = useState<string | null>(null);
   /** New Purchase (Bill) of the open supplier; productId = the product tapped to start it */
   const [bill, setBill] = useState<{ productId: string | null } | null>(null);
+  // The bill gets the whole screen (owner, 2026-11-07: more room for products).
+  useEffect(() => {
+    onFocus?.(bill !== null);
+    return () => onFocus?.(false);
+  }, [bill, onFocus]);
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Supplier | 'new' | null>(null);
   /** Edit order (owner, 2026-11-06): the suppliers tapped so far, in that order */
@@ -435,7 +440,7 @@ function KhataList({ rows, workspace, showDate }: { rows: KhataEntryRow[]; works
               entry.lines
                 .map((l) => {
                   const i = nameOf(l.ingredientId);
-                  return `${i?.name ?? '—'} ${parseFloat((l.quantityMilli / MILLI).toFixed(3))} ${i ? unitLabel(i.purchaseUnit, l.quantityMilli) : ''} × ${formatPaisa(l.ratePaisa)}`;
+                  return `${i?.name ?? '—'} ${parseFloat((l.quantityMilli / MILLI).toFixed(3))} ${unitLabel(l.unit ?? i?.purchaseUnit ?? 'piece', l.quantityMilli)} × ${formatPaisa(l.ratePaisa)}`;
                 })
                 .join(', ') +
               (entry.discount ? ` · ${t('inventory.bill.khataDiscount', { amount: formatPaisa(entry.discount) })}` : '')

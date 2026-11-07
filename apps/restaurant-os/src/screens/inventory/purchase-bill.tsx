@@ -5,6 +5,13 @@ import { ArrowLeft, Check, FileText, PackagePlus, Pencil, Plus, Printer, Save, S
 import {
   INGREDIENT_CATEGORIES,
   MILLI,
+  PACKING_KINDS,
+  buyAmount,
+  buyOptions,
+  buyStockMilli,
+  findBuyOption,
+  supplierRateKey,
+  type BuyOption,
   SUPPLIER_PAYMENT_METHODS,
   billTotals,
   checkIngredient,
@@ -12,7 +19,6 @@ import {
   discountFromPercent,
   displayUnitOf,
   formatPaisa,
-  lineAmount,
   paisaToInput,
   parseQuantity,
   parseRupees,
@@ -37,6 +43,7 @@ import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useSession } from '@/lib/session';
 import { fromDisplayMilli, stockText, unitLabel } from './inventory-format';
+import { PackingsEditor, packingDrafts, packingsFromDrafts, type PackingDraft } from './packings-editor';
 import { ingredientArt } from './recipes/recipe-lines';
 
 /**
@@ -48,7 +55,11 @@ import { ingredientArt } from './recipes/recipe-lines';
  */
 
 interface BillLine {
+  /** One row of the bill (a product may have several rows, one per way to buy) */
+  row: string;
   ingredientId: string;
+  /** 'main', 'loose:kg' … or 'pack:<id>' */
+  unitKey: string;
   quantity: string;
   rate: string;
 }
@@ -66,9 +77,20 @@ export function PurchaseBill({ supplierId, firstProductId, onClose }: { supplier
 function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { workspace: SupplierWorkspace; draft: PurchaseDraft | null; firstProductId: string | null; onClose: () => void }) {
   const toast = useToast();
   const { supplier, summary } = ws;
-  const rateOf = (id: string) => ws.products.find((p) => p.ingredient.id === id)?.lastRatePaisa ?? ws.ingredients.find((i) => i.id === id)?.purchasePrice ?? 0;
+  const [extra, setExtra] = useState<Ingredient[]>([]);
+  const allIngredients = [...ws.ingredients, ...extra.filter((e) => !ws.ingredients.some((i) => i.id === e.id))];
+  const byId = new Map(allIngredients.map((i) => [i.id, i]));
+  /** His last rate for this way to buy, else the product's usual price for it. */
+  const rateFor = (ingredientId: string, unitKey: string, fresh?: Ingredient) => {
+    // A product saved a moment ago is not in the lists yet: it comes along as "fresh".
+    const ingredient = byId.get(ingredientId) ?? fresh;
+    const option = ingredient ? findBuyOption(ingredient, unitKey) : null;
+    return supplier.rates?.[supplierRateKey(ingredientId, unitKey)] ?? (unitKey === 'main' ? ws.products.find((p) => p.ingredient.id === ingredientId)?.lastRatePaisa : undefined) ?? option?.pricePaisa ?? 0;
+  };
+  const rateOf = (id: string) => rateFor(id, 'main');
+  const newLine = (ingredientId: string, unitKey = 'main', fresh?: Ingredient): BillLine => ({ row: newKey(), ingredientId, unitKey, quantity: '', rate: paisaToInput(rateFor(ingredientId, unitKey, fresh)) });
   // The unfinished bill lives here, above both screens: switching to Add New Product never clears it.
-  const [lines, setLines] = useState<BillLine[]>(() => draft?.lines ?? (firstProductId ? [{ ingredientId: firstProductId, quantity: '', rate: paisaToInput(rateOf(firstProductId)) }] : []));
+  const [lines, setLines] = useState<BillLine[]>(() => draft?.lines.map((l) => ({ ...l, row: newKey(), unitKey: l.unitKey ?? 'main' })) ?? (firstProductId ? [newLine(firstProductId)] : []));
   const [billNo, setBillNo] = useState(draft?.billNo ?? '');
   const [date, setDate] = useState(draft?.date ?? ws.today);
   const [discount, setDiscount] = useState(draft?.discount ?? '');
@@ -79,16 +101,29 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
   const [screen, setScreen] = useState<'bill' | 'new-product'>('bill');
   /** Edit Product opened from a product card (the bill stays as it is) */
   const [editing, setEditing] = useState<Ingredient | null>(null);
-  const [extra, setExtra] = useState<Ingredient[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(newKey);
   const [printed, setPrinted] = useState<{ purchase: KhataEntry; payment: KhataEntry | null } | null>(null);
-  const [focusId, setFocusId] = useState<string | null>(firstProductId);
-  const allIngredients = [...ws.ingredients, ...extra.filter((e) => !ws.ingredients.some((i) => i.id === e.id))];
-  const byId = new Map(allIngredients.map((i) => [i.id, i]));
+  /** The row whose quantity gets the cursor */
+  const [focusRow, setFocusRow] = useState<string | null>(lines[0]?.row ?? null);
 
-  const parsed = lines.map((l) => ({ ingredientId: l.ingredientId, quantityMilli: parseQuantity(l.quantity, { allowZero: false }), ratePaisa: parseRupees(l.rate) }));
+  const optionOf = (line: BillLine): BuyOption | null => {
+    const ingredient = byId.get(line.ingredientId);
+    return ingredient ? findBuyOption(ingredient, line.unitKey) : null;
+  };
+  const parsed = lines.map((l) => ({ ingredientId: l.ingredientId, unitKey: l.unitKey, quantityMilli: parseQuantity(l.quantity, { allowZero: false }), ratePaisa: parseRupees(l.rate), rateDivisor: optionOf(l)?.rateDivisor ?? 1 }));
+  // What the bill adds to stock, per product (2 cartons of 12 + 6 bottles = 30 bottles).
+  const stockAdded = [...new Set(lines.map((l) => l.ingredientId))].flatMap((id) => {
+    const ingredient = byId.get(id);
+    if (!ingredient) return [];
+    const milli = lines.reduce((sum, l, i) => {
+      const option = optionOf(l);
+      const q = parsed[i]!.quantityMilli;
+      return l.ingredientId === id && option && q !== null ? sum + buyStockMilli(q, option.sizeMilli) : sum;
+    }, 0);
+    return milli > 0 ? [{ ingredient, milli }] : [];
+  });
   const { subtotal } = billTotals(parsed, 0);
   const discountPaisa = !discount.trim() ? 0 : discountMode === 'RS' ? parseRupees(discount) : percentPaisa(subtotal, discount);
   const total = subtotal - (discountPaisa ?? 0);
@@ -96,21 +131,41 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
   const billDue = total - (paidPaisa ?? 0);
   const touch = () => (setError(null), setKey(newKey()));
 
+  /** Tapping a product: a new row in its usual unit, or the cursor to the row it already has. */
   const addLine = (ingredient: Ingredient) => {
-    setFocusId(ingredient.id);
     touch();
-    setLines((all) => (all.some((l) => l.ingredientId === ingredient.id) ? all : [...all, { ingredientId: ingredient.id, quantity: '', rate: paisaToInput(rateOf(ingredient.id) || ingredient.purchasePrice) }]));
+    const existing = lines.find((l) => l.ingredientId === ingredient.id);
+    if (existing) return setFocusRow(existing.row);
+    const line = newLine(ingredient.id, 'main', ingredient);
+    setFocusRow(line.row);
+    setLines((all) => [...all, line]);
   };
-  const setLine = (id: string, patch: Partial<BillLine>) => {
+  /** "+ another unit": the same product again in a way not on the bill yet (6 loose bottles next to 2 cartons). */
+  const addOtherUnit = (line: BillLine) => {
+    const ingredient = byId.get(line.ingredientId);
+    const used = lines.filter((l) => l.ingredientId === line.ingredientId).map((l) => l.unitKey);
+    const next = ingredient ? buyOptions(ingredient).find((o) => !used.includes(o.key)) : undefined;
+    if (!next) return;
     touch();
-    setLines((all) => all.map((l) => (l.ingredientId === id ? { ...l, ...patch } : l)));
+    const added = newLine(line.ingredientId, next.key);
+    setFocusRow(added.row);
+    setLines((all) => {
+      const at = all.findIndex((l) => l.row === line.row);
+      return [...all.slice(0, at + 1), added, ...all.slice(at + 1)];
+    });
   };
-  const removeLine = (id: string) => {
+  const setLine = (row: string, patch: Partial<BillLine>) => {
     touch();
-    setLines((all) => all.filter((l) => l.ingredientId !== id));
+    setLines((all) => all.map((l) => (l.row === row ? { ...l, ...patch } : l)));
+  };
+  /** A new unit brings its own last rate (Rs. 4,800 a carton, Rs. 420 a bottle). */
+  const setUnit = (line: BillLine, unitKey: string) => setLine(line.row, { unitKey, rate: paisaToInput(rateFor(line.ingredientId, unitKey)) });
+  const removeLine = (row: string) => {
+    touch();
+    setLines((all) => all.filter((l) => l.row !== row));
   };
 
-  const draftOf = (): Omit<PurchaseDraft, 'savedAt'> => ({ supplierId: supplier.id, billNo, date, lines, discount, discountMode, paid, method, note });
+  const draftOf = (): Omit<PurchaseDraft, 'savedAt'> => ({ supplierId: supplier.id, billNo, date, lines: lines.map(({ ingredientId, unitKey, quantity, rate }) => ({ ingredientId, unitKey, quantity, rate })), discount, discountMode, paid, method, note });
   const saveDraft = async (quiet = false) => {
     try {
       await getApi().savePurchaseDraft(draftOf());
@@ -148,7 +203,7 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
         supplierId: supplier.id,
         billNo,
         date,
-        lines: parsed.map((l) => ({ ingredientId: l.ingredientId, quantityMilli: l.quantityMilli!, ratePaisa: l.ratePaisa! })),
+        lines: parsed.map((l) => ({ ingredientId: l.ingredientId, unitKey: l.unitKey, quantityMilli: l.quantityMilli!, ratePaisa: l.ratePaisa! })),
         discount: discountPaisa!,
         paid: paidPaisa!,
         method: paidPaisa! > 0 ? method : null,
@@ -179,7 +234,7 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
         onSaved={(ingredient) => {
           // A line still at the old price takes the corrected one; a price typed on the bill stays.
           const newRate = paisaToInput(ingredient.purchasePrice);
-          setLines((all) => all.map((l) => (l.ingredientId === ingredient.id && l.rate === oldRate ? { ...l, rate: newRate } : l)));
+          setLines((all) => all.map((l) => (l.ingredientId === ingredient.id && l.unitKey === 'main' && l.rate === oldRate ? { ...l, rate: newRate } : l)));
           setEditing(null);
           toast.show({ tone: 'success', title: t('inventory.bill.editProduct.saved', { name: ingredient.name }) });
         }}
@@ -254,24 +309,35 @@ function BillScreens({ workspace: ws, draft, firstProductId, onClose }: { worksp
             <ul className="divide-y divide-slate-100" data-bill-lines>
               {lines.map((line, index) => {
                 const ingredient = byId.get(line.ingredientId);
-                if (!ingredient) return null;
+                const option = optionOf(line);
+                if (!ingredient || !option) return null;
                 const p = parsed[index]!;
-                const amount = p.quantityMilli !== null && p.ratePaisa !== null ? lineAmount(p.quantityMilli, p.ratePaisa) : null;
+                const used = lines.filter((l) => l.ingredientId === line.ingredientId).map((l) => l.unitKey);
                 return (
                   <BillRow
-                    key={line.ingredientId}
+                    key={line.row}
                     ingredient={ingredient}
                     line={line}
-                    amount={amount}
-                    autoFocus={focusId === line.ingredientId}
-                    onChange={(patch) => setLine(line.ingredientId, patch)}
-                    onRemove={() => removeLine(line.ingredientId)}
+                    option={option}
+                    amount={p.quantityMilli !== null && p.ratePaisa !== null ? buyAmount(p.quantityMilli, p.ratePaisa, option.rateDivisor) : null}
+                    canAddUnit={buyOptions(ingredient).some((o) => !used.includes(o.key))}
+                    autoFocus={focusRow === line.row}
+                    onChange={(patch) => setLine(line.row, patch)}
+                    onUnit={(unitKey) => setUnit(line, unitKey)}
+                    onOtherUnit={() => addOtherUnit(line)}
+                    onRemove={() => removeLine(line.row)}
                   />
                 );
               })}
             </ul>
           )}
 
+          {stockAdded.length > 0 && (
+            <div className="rounded-xl bg-green-50 px-3 py-2 text-xs text-green-900" data-stock-added>
+              <p className="font-bold">{t('inventory.bill.stockAdded')}</p>
+              <p>{stockAdded.map(({ ingredient, milli }) => `${ingredient.name} +${stockText(ingredient, milli)}`).join(' · ')}</p>
+            </div>
+          )}
           <dl className="space-y-1.5 border-t border-slate-100 pt-2 text-sm">
             <Row label={t('inventory.bill.subtotal')} value={formatPaisa(subtotal)} />
             <div className="flex items-center justify-between gap-2">
@@ -373,16 +439,51 @@ function Row({ label, value, strong = false, data }: { label: string; value: str
   );
 }
 
-/** One compact bill line: name and amount on top, quantity × price below. */
-function BillRow({ ingredient, line, amount, autoFocus, onChange, onRemove }: { ingredient: Ingredient; line: BillLine; amount: number | null; autoFocus: boolean; onChange: (patch: Partial<BillLine>) => void; onRemove: () => void }) {
+/** "Bag (25 kg)", "Carton (12 bottles)", "kg", "gram" — how a way to buy is named on the bill and the receipt. */
+export function optionLabel(option: Pick<BuyOption, 'unit' | 'sizeMilli' | 'packing' | 'key'>, ingredient: Pick<Ingredient, 'purchaseUnit' | 'stockUnit'>): string {
+  const name = unitLabel(option.unit, MILLI);
+  const counted = option.packing !== null || (option.key === 'main' && !['kg', 'g', 'l', 'ml', 'piece', 'bottle', 'portion'].includes(option.unit));
+  return counted ? `${name} (${stockText(ingredient, option.sizeMilli)})` : name;
+}
+
+/** The unit a rate is per: grams and ml are priced per kg / litre. */
+function rateUnit(option: BuyOption): string {
+  if (option.rateDivisor === 1000) return unitLabel(option.unit === 'g' ? 'kg' : 'l', MILLI);
+  return unitLabel(option.unit, MILLI);
+}
+
+/** One compact bill row: name and amount on top; quantity, unit and price below; what it adds to stock under them. */
+function BillRow({
+  ingredient,
+  line,
+  option,
+  amount,
+  canAddUnit,
+  autoFocus,
+  onChange,
+  onUnit,
+  onOtherUnit,
+  onRemove,
+}: {
+  ingredient: Ingredient;
+  line: BillLine;
+  option: BuyOption;
+  amount: number | null;
+  canAddUnit: boolean;
+  autoFocus: boolean;
+  onChange: (patch: Partial<BillLine>) => void;
+  onUnit: (unitKey: string) => void;
+  onOtherUnit: () => void;
+  onRemove: () => void;
+}) {
   const qtyRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (autoFocus) qtyRef.current?.focus();
   }, [autoFocus]);
-  const unit = ingredient.purchaseUnit;
-  const qtyMilli = parseQuantity(line.quantity, { allowZero: false }) ?? 2 * MILLI;
+  const options = buyOptions(ingredient);
+  const qtyMilli = parseQuantity(line.quantity, { allowZero: false });
   return (
-    <li className="py-2" data-bill-line={ingredient.name}>
+    <li className="py-2" data-bill-line={ingredient.name} data-bill-unit={option.key}>
       <div className="flex items-center gap-2">
         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-lg" aria-hidden>
           {ingredientArt(ingredient)}
@@ -395,13 +496,29 @@ function BillRow({ ingredient, line, amount, autoFocus, onChange, onRemove }: { 
           <Trash2 className="size-4" aria-hidden />
         </button>
       </div>
-      <div className="mt-1 flex items-center gap-1.5 pl-10">
-        <input ref={qtyRef} value={line.quantity} onChange={(e) => onChange({ quantity: e.target.value })} inputMode="decimal" placeholder="0" aria-label={t('inventory.suppliers.quantityOf', { name: ingredient.name })} className="min-h-9 w-16 rounded-lg border border-slate-300 bg-white px-2 text-right text-sm tabular-nums" />
-        <span className="text-xs font-semibold text-slate-600">{unitLabel(unit, qtyMilli)}</span>
-        <span className="text-xs text-slate-400">×</span>
-        <span className="text-xs font-semibold text-slate-500">Rs.</span>
-        <input value={line.rate} onChange={(e) => onChange({ rate: e.target.value })} inputMode="decimal" aria-label={t('inventory.suppliers.rateOf', { name: ingredient.name })} className="min-h-9 w-20 rounded-lg border border-slate-300 bg-white px-2 text-right text-sm tabular-nums" />
-        <span className="text-xs text-slate-500">/ {unitLabel(unit, MILLI)}</span>
+      {/* One compact row: quantity, unit, × price (grams and ml say "/ kg" or "/ litre": they are priced per kg / litre). */}
+      <div className="mt-1 grid grid-cols-[3.5rem_minmax(0,1fr)_auto_4.75rem] items-center gap-1.5">
+        <input ref={qtyRef} value={line.quantity} onChange={(e) => onChange({ quantity: e.target.value })} inputMode="decimal" placeholder="0" aria-label={t('inventory.suppliers.quantityOf', { name: ingredient.name })} className="min-h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-right text-sm tabular-nums" />
+        <select value={option.key} onChange={(e) => onUnit(e.target.value)} aria-label={t('inventory.bill.unitOf', { name: ingredient.name })} title={t('inventory.bill.ratePer', { unit: rateUnit(option) })} className="min-h-9 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-1.5 text-xs font-semibold text-slate-800">
+          {options.map((o) => (
+            <option key={o.key} value={o.key}>
+              {optionLabel(o, ingredient)}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-slate-400">× Rs.</span>
+        <input value={line.rate} onChange={(e) => onChange({ rate: e.target.value })} inputMode="decimal" aria-label={t('inventory.suppliers.rateOf', { name: ingredient.name })} className="min-h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-right text-sm tabular-nums" />
+      </div>
+      <div className="mt-0.5 flex items-center justify-between gap-2 text-[11px]">
+        <span className="font-semibold text-green-700" data-line-stock>
+          {qtyMilli !== null ? `= ${stockText(ingredient, buyStockMilli(qtyMilli, option.sizeMilli))}` : ''}
+          {option.rateDivisor === 1000 && <span className="ml-1 font-normal text-slate-500">({t('inventory.bill.ratePer', { unit: rateUnit(option) })})</span>}
+        </span>
+        {canAddUnit && (
+          <button type="button" onClick={onOtherUnit} className="press rounded-md px-1.5 py-0.5 font-bold text-brand hover:bg-brand-soft">
+            {t('inventory.bill.otherUnit')}
+          </button>
+        )}
       </div>
     </li>
   );
@@ -442,7 +559,7 @@ function ProductPicker({ workspace: ws, lines, onPick, onEdit, onNewProduct }: {
           ))}
         </div>
       )}
-      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4" data-product-grid>
+      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5" data-product-grid>
         {shown.map((p) => (
           <ProductTile key={p.ingredient.id} ingredient={p.ingredient} stock={stockText(p.ingredient, p.onHandMilli)} rate={p.lastRatePaisa} uses={p.deliveries30d} line={inBill(p.ingredient.id)} onPick={() => onPick(p.ingredient)} onEdit={() => onEdit(p.ingredient)} />
         ))}
@@ -473,7 +590,7 @@ function ProductTile({ ingredient, stock, rate, uses, line, onPick, onEdit }: { 
         data-product-tile={ingredient.name}
         className={cn('press relative flex h-full w-full flex-col rounded-2xl border bg-white p-2 text-left transition hover:border-brand/50 hover:shadow-md', line ? 'border-brand ring-2 ring-brand/20' : 'border-slate-200')}
       >
-        <span className="grid h-16 place-items-center rounded-xl bg-gradient-to-b from-brand-soft to-white text-4xl" aria-hidden>
+        <span className="grid h-14 place-items-center rounded-xl bg-gradient-to-b from-brand-soft to-white text-3xl" aria-hidden>
           {ingredientArt(ingredient)}
         </span>
         {uses > 0 && <span className="absolute left-3 top-3 rounded-full bg-white/90 px-1.5 text-[10px] font-bold text-brand ring-1 ring-brand/20">{t('inventory.suppliers.uses', { n: uses })}</span>}
@@ -484,6 +601,11 @@ function ProductTile({ ingredient, stock, rate, uses, line, onPick, onEdit }: { 
         )}
         <span className="mt-1.5 line-clamp-2 text-sm font-extrabold leading-snug text-slate-900">{ingredient.name}</span>
         {stock && <span className="text-[11px] text-slate-500">{t('inventory.bill.stock', { stock })}</span>}
+        <span className="truncate text-[11px] font-semibold text-slate-600" data-ways>
+          {buyOptions(ingredient)
+            .map((o) => optionLabel(o, ingredient))
+            .join(' · ')}
+        </span>
         <span className="mt-auto flex items-center justify-between gap-1 pt-1">
           <span className="text-xs font-bold text-slate-700">
             {formatPaisa(rate)} / {unitLabel(ingredient.purchaseUnit, MILLI)}
@@ -509,21 +631,21 @@ export function EditProductButton({ name, onClick }: { name: string; onClick: ()
 
 // ── Screen 2: Add New Product / Edit Product ───────────────────────────────────────────────────
 
-const MEASURE_UNITS = ['kg', 'g', 'l', 'ml', 'piece'] as const;
+const MEASURE_UNITS = ['kg', 'g', 'l', 'ml', 'piece', 'bottle'] as const;
 type MeasureUnit = (typeof MEASURE_UNITS)[number];
-const PACKINGS = ['bag', 'pack', 'box', 'carton'] as const;
-type Packing = (typeof PACKINGS)[number];
-const STOCK_UNIT: Record<MeasureUnit, StockUnit> = { kg: 'g', g: 'g', l: 'ml', ml: 'ml', piece: 'piece' };
+const PACKINGS = PACKING_KINDS;
+type MainPacking = (typeof PACKINGS)[number];
+const STOCK_UNIT: Record<MeasureUnit, StockUnit> = { kg: 'g', g: 'g', l: 'ml', ml: 'ml', piece: 'piece', bottle: 'bottle' };
 const isMeasure = (u: string): u is MeasureUnit => (MEASURE_UNITS as readonly string[]).includes(u);
-const isPacking = (u: string): u is Packing => (PACKINGS as readonly string[]).includes(u);
+const isPacking = (u: string): u is MainPacking => (PACKINGS as readonly string[]).includes(u);
 
 /** How the form shows a saved product: measured in, packing and its size; null = units this form cannot show (bottles). */
-function unitsOf(product: Ingredient): { measure: MeasureUnit; packing: Packing | null; packSize: string } | null {
-  if (product.stockUnit !== 'g' && product.stockUnit !== 'ml' && product.stockUnit !== 'piece') return null;
+function unitsOf(product: Ingredient): { measure: MeasureUnit; packing: MainPacking | null; packSize: string } | null {
+  if (product.stockUnit !== 'g' && product.stockUnit !== 'ml' && product.stockUnit !== 'piece' && product.stockUnit !== 'bottle') return null;
   const loose = isMeasure(product.purchaseUnit) ? product.purchaseUnit : null;
   const packing = isPacking(product.purchaseUnit) ? product.purchaseUnit : null;
   if (!loose && !packing) return null;
-  const measure: MeasureUnit = loose ?? (product.stockUnit === 'g' ? 'kg' : product.stockUnit === 'ml' ? 'l' : 'piece');
+  const measure: MeasureUnit = loose ?? (product.stockUnit === 'g' ? 'kg' : product.stockUnit === 'ml' ? 'l' : product.stockUnit);
   const factor = measure === 'kg' || measure === 'l' ? 1000 : 1;
   const packSize = packing && product.packSizeMilli ? String(parseFloat((product.packSizeMilli / factor / MILLI).toFixed(3))) : '';
   return { measure, packing, packSize };
@@ -563,7 +685,9 @@ export function ProductScreen({
   const [name, setName] = useState(product?.name ?? '');
   const [category, setCategory] = useState<IngredientCategory>(product?.category ?? 'OTHER');
   const [measure, setMeasure] = useState<MeasureUnit>(start?.measure ?? 'kg');
-  const [packing, setPacking] = useState<Packing | null>(start?.packing ?? null);
+  const [packing, setPacking] = useState<MainPacking | null>(start?.packing ?? null);
+  const [others, setOthers] = useState<PackingDraft[]>(() => packingDrafts(product?.packings, product?.stockUnit ?? 'g'));
+  const [loose, setLoose] = useState(product?.loosePrice != null ? paisaToInput(product.loosePrice) : '');
   const [packSize, setPackSize] = useState(start?.packSize ?? '');
   const [price, setPrice] = useState(product ? paisaToInput(rate ?? product.purchasePrice) : '');
   const [opening, setOpening] = useState('');
@@ -576,8 +700,8 @@ export function ProductScreen({
   const units = { purchaseUnit, stockUnit };
   // Editing: only units with the same stock unit (kg ↔ g, litre ↔ ml), so recorded stock keeps its meaning.
   const measures = product ? MEASURE_UNITS.filter((u) => STOCK_UNIT[u] === product.stockUnit) : MEASURE_UNITS;
-  const others = ingredients.filter((i) => i.id !== product?.id);
-  const like = !product && name.trim().length >= 3 ? similarIngredients(name, others.filter((i) => i.isActive && i.kind === 'BOUGHT')).slice(0, 4) : [];
+  const rest = ingredients.filter((i) => i.id !== product?.id);
+  const like = !product && name.trim().length >= 3 ? similarIngredients(name, rest.filter((i) => i.isActive && i.kind === 'BOUGHT')).slice(0, 4) : [];
   const his = new Set(ws.supplier.productIds);
   const key = product ? 'editProduct' : 'newProduct';
 
@@ -602,6 +726,10 @@ export function ProductScreen({
     if (purchasePrice === null) return setError(t('inventory.bill.newProduct.priceInvalid'));
     const openingDisplay = product ? 0 : parseQuantity(opening || '0');
     if (openingDisplay === null) return setError(t('inventory.bill.newProduct.openingInvalid'));
+    const more = packingsFromDrafts(others, stockUnit);
+    if (more.error !== null) return setError(more.error);
+    const loosePrice = loose.trim() ? parseRupees(loose) : null;
+    if (loose.trim() && loosePrice === null) return setError(t('inventory.packings.errors.PRICE_INVALID', { packing: '' }));
     const input = {
       // Editing keeps everything this form does not show (code, levels, storage place, batch, expiry).
       id: product?.id ?? null,
@@ -619,6 +747,8 @@ export function ProductScreen({
       batchNo: product?.batchNo ?? '',
       expiryDate: product?.expiryDate ?? null,
       openingMilli: fromDisplayMilli(units, openingDisplay),
+      packings: more.packings,
+      loosePrice,
     };
     const problem = checkIngredient({ ...input, openingMilli: product ? null : input.openingMilli }, ingredients);
     if (problem) return setError(t(`inventory.errors.${problem.problem}`));
@@ -711,7 +841,7 @@ export function ProductScreen({
                 <button type="button" aria-pressed={packing === null} onClick={() => setPacking(null)} className={chip(packing === null)}>
                   {t('inventory.bill.newProduct.loose')}
                 </button>
-                {PACKINGS.map((p) => (
+                {PACKINGS.filter((p) => p !== measure).map((p) => (
                   <button key={p} type="button" aria-pressed={packing === p} onClick={() => (setPacking(p), setError(null))} className={chip(packing === p)}>
                     {t(`inventory.unitOne.${p}`)}
                   </button>
@@ -743,6 +873,11 @@ export function ProductScreen({
             </label>
           )}
         </div>
+        <fieldset>
+          <legend className="mb-1 text-sm font-bold text-slate-800">{t('inventory.packings.title')}</legend>
+          <p className="mb-2 text-xs text-slate-500">{t('inventory.packings.hint')}</p>
+          <PackingsEditor stockUnit={stockUnit} drafts={others} onChange={(next) => (setOthers(next), setError(null))} loosePrice={loose} onLoosePrice={(v) => (setLoose(v), setError(null))} loosePlaceholder={t('inventory.packings.fromMain')} />
+        </fieldset>
         <p className="flex items-start gap-2 rounded-xl bg-green-50 px-3 py-2 text-sm text-green-900">
           <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
           {product ? t('inventory.bill.editProduct.forEveryone') : t('inventory.bill.newProduct.saveInInventory')}
@@ -811,7 +946,7 @@ function BillPrintDialog({ workspace: ws, purchase, payment, ingredients, onClos
                 <p className="font-bold">{i?.name ?? '—'}</p>
                 <p className="flex justify-between">
                   <span>
-                    {parseFloat((l.quantityMilli / MILLI).toFixed(3))} {i ? unitLabel(i.purchaseUnit, l.quantityMilli) : ''} × {formatPaisa(l.ratePaisa)}
+                    {parseFloat((l.quantityMilli / MILLI).toFixed(3))} {unitLabel(l.unit ?? i?.purchaseUnit ?? 'piece', l.quantityMilli)} × {formatPaisa(l.ratePaisa)}
                   </span>
                   <span>{formatPaisa(l.amount)}</span>
                 </p>

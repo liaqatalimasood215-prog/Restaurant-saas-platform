@@ -30,6 +30,7 @@ import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { fromDisplayMilli, quantityText, stockText, toDisplayMilli, unitLabel } from './inventory-format';
+import { PackingsEditor, packingDrafts, packingsFromDrafts, type PackingDraft } from './packings-editor';
 
 const NEW_SUPPLIER = '__new_supplier';
 
@@ -82,6 +83,9 @@ export function IngredientDialog({ row, view, onClose }: { row: IngredientRow | 
   const [batchNo, setBatchNo] = useState(item?.batchNo ?? '');
   const [expiryDate, setExpiryDate] = useState(item?.expiryDate ?? '');
   const [inUse, setInUse] = useState(item?.isActive ?? true);
+  // Other ways to buy (2026-11-07): the same list as Add / Edit Product on a supplier.
+  const [packingRows, setPackingRows] = useState<PackingDraft[]>(() => packingDrafts(item?.packings, item?.stockUnit ?? 'g'));
+  const [loose, setLoose] = useState(item?.loosePrice != null ? paisaToInput(item.loosePrice) : '');
   const [error, setError] = useState<{ field: IngredientField | null; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -133,6 +137,10 @@ export function IngredientDialog({ row, view, onClose }: { row: IngredientRow | 
     };
     const problem = checkIngredient(input, others);
     if (problem) return setError({ field: problem.field, text: t(`inventory.errors.${problem.problem}`) });
+    const more = packingsFromDrafts(packingRows, stockUnit);
+    if (more.error !== null) return setError({ field: null, text: more.error });
+    const loosePrice = loose.trim() ? parseRupees(loose) : null;
+    if (loose.trim() && loosePrice === null) return setError({ field: null, text: t('inventory.packings.errors.PRICE_INVALID', { packing: '' }) });
     setBusy(true);
     setError(null);
     try {
@@ -144,6 +152,8 @@ export function IngredientDialog({ row, view, onClose }: { row: IngredientRow | 
         openingMilli: input.openingMilli ?? 0,
         preferredSupplierId: supplierId || null,
         locationId: locationId || null,
+        packings: more.packings,
+        loosePrice,
       });
       if (item && item.isActive !== inUse) await getApi().setIngredientActive(saved.id, inUse);
       toast.show({ tone: 'success', title: item ? t('inventory.form.saved', { name: saved.name }) : t('inventory.form.added', { name: saved.name }) });
@@ -244,6 +254,13 @@ export function IngredientDialog({ row, view, onClose }: { row: IngredientRow | 
               {conversionText}
             </p>
           )}
+        </Group>
+
+        <Group title={t('inventory.packings.title')}>
+          <div className="sm:col-span-2">
+            <p className="mb-2 text-xs text-slate-500">{t('inventory.packings.hint')}</p>
+            <PackingsEditor stockUnit={stockUnit} drafts={packingRows} onChange={(next) => (setPackingRows(next), setError(null))} loosePrice={loose} onLoosePrice={(v) => (setLoose(v), setError(null))} loosePlaceholder={t('inventory.packings.fromMain')} />
+          </div>
         </Group>
 
         <Group title={t('inventory.form.stock')}>

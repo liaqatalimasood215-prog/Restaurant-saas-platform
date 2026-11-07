@@ -20,7 +20,7 @@ export const STOCK_UNITS = ['g', 'ml', 'piece', 'bottle', 'portion'] as const;
 export type StockUnit = (typeof STOCK_UNITS)[number];
 
 /** The unit an ingredient is bought in. */
-export const PURCHASE_UNITS = ['kg', 'g', 'l', 'ml', 'piece', 'bottle', 'portion', 'pack', 'bag', 'box', 'carton'] as const;
+export const PURCHASE_UNITS = ['kg', 'g', 'l', 'ml', 'piece', 'bottle', 'portion', 'pack', 'bag', 'box', 'carton', 'tray', 'dozen'] as const;
 export type PurchaseUnit = (typeof PURCHASE_UNITS)[number];
 
 /** Weight and volume units convert by fixed numbers; the others are counted things or packages. */
@@ -192,6 +192,106 @@ export interface Ingredient extends BranchScoped {
   isActive: boolean;
   createdAt: IsoDateTime;
   updatedAt: IsoDateTime;
+  /** Other ways to buy it besides the main purchase unit (owner, 2026-11-07): a carton of 12, a bag of 25 kg … */
+  packings?: Packing[];
+  /** Loose price per kg / litre / one (paisa); missing = worked out from the main price */
+  loosePrice?: Paisa | null;
+}
+
+// ── Ways to buy one product (owner's multiple-units brief, 2026-11-07) ────────────────────────
+
+/**
+ * One product, several ways to buy it, one stock: the main purchase unit (purchaseUnit, packSizeMilli, purchasePrice —
+ * what recipes cost from), loose kg / g, litre / ml or single pieces, and the product's own packings (a carton of 12
+ * bottles, a bag of 25 kg, a tray of 30 eggs). Every way turns into the stock unit, so stock is counted once.
+ */
+export const PACKING_KINDS = ['bag', 'pack', 'box', 'carton', 'tray', 'dozen', 'bottle'] as const;
+export type PackingKind = (typeof PACKING_KINDS)[number];
+export const MAX_PACKINGS = 6;
+
+export interface Packing {
+  id: string;
+  kind: PackingKind;
+  /** Stock-unit thousandths in one (a bag of 25 kg = 25,000,000; a carton of 12 bottles = 12,000) */
+  sizeMilli: number;
+  /** Usual price of one (paisa) */
+  pricePaisa: Paisa;
+}
+
+export interface BuyOption {
+  /** 'main', 'loose:kg' … or 'pack:<packing id>' */
+  key: string;
+  /** The unit the quantity is typed in */
+  unit: PurchaseUnit;
+  /** Stock-unit thousandths in one of it */
+  sizeMilli: number;
+  /** Usual price (paisa) per one, or per kg / litre when rateDivisor is 1,000 (grams and ml are priced per kg / litre) */
+  pricePaisa: Paisa;
+  rateDivisor: 1 | 1000;
+  packing: Packing | null;
+}
+
+type BuyFields = Pick<Ingredient, 'purchaseUnit' | 'stockUnit' | 'packSizeMilli' | 'purchasePrice' | 'packings' | 'loosePrice'>;
+
+/** The loose units of a stock unit, the first one carrying the price: kg + g, litre + ml, or the counted unit. */
+const LOOSE: Record<StockUnit, { unit: PurchaseUnit; size: number; divisor: 1 | 1000 }[]> = {
+  g: [
+    { unit: 'kg', size: 1000, divisor: 1 },
+    { unit: 'g', size: 1, divisor: 1000 },
+  ],
+  ml: [
+    { unit: 'l', size: 1000, divisor: 1 },
+    { unit: 'ml', size: 1, divisor: 1000 },
+  ],
+  piece: [{ unit: 'piece', size: 1, divisor: 1 }],
+  bottle: [{ unit: 'bottle', size: 1, divisor: 1 }],
+  portion: [{ unit: 'portion', size: 1, divisor: 1 }],
+};
+
+/** Every way to buy a product: the main unit first, then loose, then its packings. Nothing when the main unit has no size. */
+export function buyOptions(item: BuyFields): BuyOption[] {
+  const conversion = purchaseConversion(item.purchaseUnit, item.stockUnit, item.packSizeMilli);
+  if (!conversion.ok) return [];
+  const main: BuyOption = { key: 'main', unit: item.purchaseUnit, sizeMilli: conversion.factorMilli, pricePaisa: item.purchasePrice, rateDivisor: 1, packing: null };
+  const loose = LOOSE[item.stockUnit];
+  // Loose price per kg / litre / one: set, or the main price worked out per that unit.
+  const loosePrice = item.loosePrice ?? (Number.isInteger(item.purchasePrice) ? mulDivRound(item.purchasePrice, loose[0]!.size * MILLI, conversion.factorMilli) : 0);
+  const looseOptions = loose
+    .filter((l) => l.unit !== item.purchaseUnit)
+    .map((l): BuyOption => ({ key: `loose:${l.unit}`, unit: l.unit, sizeMilli: l.size * MILLI, pricePaisa: loosePrice, rateDivisor: l.divisor, packing: null }));
+  const packings = (item.packings ?? []).map((p): BuyOption => ({ key: `pack:${p.id}`, unit: p.kind, sizeMilli: p.sizeMilli, pricePaisa: p.pricePaisa, rateDivisor: 1, packing: p }));
+  return [main, ...looseOptions, ...packings];
+}
+
+export function findBuyOption(item: BuyFields, key: string | undefined): BuyOption | null {
+  return buyOptions(item).find((o) => o.key === (key ?? 'main')) ?? null;
+}
+
+/** quantity × rate (grams and ml at a price per kg / litre): 500 g × Rs. 650 / kg = Rs. 325. */
+export function buyAmount(quantityMilli: number, ratePaisa: Paisa, rateDivisor: number = 1): Paisa {
+  return mulDivRound(quantityMilli, ratePaisa, MILLI * rateDivisor);
+}
+
+/** Stock-unit thousandths a quantity adds: 2 cartons of 12 bottles = 24,000 (24 bottles). */
+export function buyStockMilli(quantityMilli: number, sizeMilli: number): number {
+  return mulDivRound(quantityMilli, sizeMilli, MILLI);
+}
+
+export type PackingProblem = 'KIND_INVALID' | 'SIZE_INVALID' | 'PRICE_INVALID' | 'TOO_MANY' | 'DUPLICATE';
+
+/** Packings of one product: a known kind, a size above zero, a price (0 allowed), at most 6, no kind + size twice. */
+export function checkPackings(packings: readonly { kind: string; sizeMilli: number | null; pricePaisa: number | null }[]): { index: number | null; problem: PackingProblem } | null {
+  if (packings.length > MAX_PACKINGS) return { index: null, problem: 'TOO_MANY' };
+  const seen = new Set<string>();
+  for (const [index, p] of packings.entries()) {
+    if (!(PACKING_KINDS as readonly string[]).includes(p.kind)) return { index, problem: 'KIND_INVALID' };
+    if (p.sizeMilli === null || !Number.isInteger(p.sizeMilli) || p.sizeMilli <= 0 || p.sizeMilli > MAX_PACK_SIZE * 1000 * MILLI) return { index, problem: 'SIZE_INVALID' };
+    if (p.pricePaisa === null || !Number.isInteger(p.pricePaisa) || p.pricePaisa < 0 || p.pricePaisa > 100_000_000) return { index, problem: 'PRICE_INVALID' };
+    const key = `${p.kind}:${p.sizeMilli}`;
+    if (seen.has(key)) return { index, problem: 'DUPLICATE' };
+    seen.add(key);
+  }
+  return null;
 }
 
 export const MAX_INGREDIENT_NAME = 60;

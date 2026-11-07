@@ -147,8 +147,16 @@ import {
   checkReceipt,
   checkSupplierPayment,
   deliveriesPerProduct,
+  MILLI,
+  averageMainPrice,
+  mulDivRound,
   billTotals,
+  buyAmount,
+  buyStockMilli,
+  checkPackings,
   checkPurchaseBill,
+  findBuyOption,
+  supplierRateKey,
   isSupplierPhoto,
   MAX_RECEIPT_LINES,
   type PurchaseBillProblem,
@@ -2504,6 +2512,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
     if (problem) throw new ApiError('VALIDATION', 'Please check the ingredient details.');
     if (input.preferredSupplierId && !inv.suppliers.some((s) => s.id === input.preferredSupplierId)) throw new ApiError('VALIDATION', 'Choose a supplier from the list.');
     if (input.locationId && !inv.locations.some((l) => l.id === input.locationId)) throw new ApiError('VALIDATION', 'Choose a storage place from the list.');
+    if (input.packings && checkPackings(input.packings)) throw new ApiError('VALIDATION', 'Please check the packings: a size above zero, a price, no packing twice.');
+    if (input.loosePrice != null && (!Number.isInteger(input.loosePrice) || input.loosePrice < 0)) throw new ApiError('VALIDATION', 'Type the loose price in rupees.');
     const now = nowIso();
     const fields = {
       name: cleanIngredientName(input.name),
@@ -2520,6 +2530,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
       batchNo: input.batchNo.trim(),
       expiryDate: input.expiryDate,
       updatedAt: now,
+      ...(input.packings !== undefined && { packings: input.packings.map((p) => ({ id: p.id || newId(), kind: p.kind, sizeMilli: p.sizeMilli, pricePaisa: p.pricePaisa })) }),
+      ...(input.loosePrice !== undefined && { loosePrice: input.loosePrice }),
     };
     if (existing) {
       // The stock unit gives every movement its meaning: it never changes once stock was written.
@@ -3037,7 +3049,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           Object.assign(ingredient, { purchasePrice: line.ratePaisa, updatedAt: now });
           if (!supplier.productIds.includes(ingredient.id)) supplier.productIds.push(ingredient.id);
           supplier.rates = { ...supplier.rates, [ingredient.id]: line.ratePaisa };
-          return { ingredientId: ingredient.id, quantityMilli: line.quantityMilli, ratePaisa: line.ratePaisa, amount: lineAmount(line.quantityMilli, line.ratePaisa), stockMilli, movementId };
+          return { ingredientId: ingredient.id, quantityMilli: line.quantityMilli, ratePaisa: line.ratePaisa, amount: lineAmount(line.quantityMilli, line.ratePaisa), stockMilli, movementId, unit: ingredient.purchaseUnit, unitSizeMilli: mulDivRound(stockMilli, MILLI, line.quantityMilli), rateDivisor: 1 };
         });
         const entry: KhataEntry = {
           id: entryId,
@@ -3118,15 +3130,24 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const note = input.note.trim();
         const lines = input.lines.map((line) => {
           const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId)!;
-          const stockMilli = receivedStockMilli(line.quantityMilli, ingredient)!;
+          // Every way to buy turns into the stock unit: 2 cartons of 12 = 24 bottles, a 25 kg bag = 25,000 g.
+          const option = findBuyOption(ingredient, line.unitKey)!;
+          const stockMilli = buyStockMilli(line.quantityMilli, option.sizeMilli);
           const movementId = newId();
           inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: 'PURCHASE', quantityMilli: stockMilli, reason: null, note: billNo ? `Bill ${billNo}` : note, createdBy: user.id, createdAt: now, supplierId: supplier.id, khataEntryId: entryId });
-          // The rate paid becomes the product's purchase price (recipe costs follow) and his own last rate.
-          Object.assign(ingredient, { purchasePrice: line.ratePaisa, updatedAt: now });
-          supplier.rates = { ...supplier.rates, [ingredient.id]: line.ratePaisa };
+          // His last rate for this way to buy, and the product's usual price for it.
+          supplier.rates = { ...supplier.rates, [supplierRateKey(ingredient.id, line.unitKey)]: line.ratePaisa };
+          if (option.packing) ingredient.packings = (ingredient.packings ?? []).map((p) => (p.id === option.packing!.id ? { ...p, pricePaisa: line.ratePaisa } : p));
+          else if (option.key !== 'main') ingredient.loosePrice = line.ratePaisa;
           if (!supplier.productIds.includes(ingredient.id)) supplier.productIds.push(ingredient.id);
-          return { ingredientId: ingredient.id, quantityMilli: line.quantityMilli, ratePaisa: line.ratePaisa, amount: lineAmount(line.quantityMilli, line.ratePaisa), stockMilli, movementId };
+          return { ingredientId: ingredient.id, quantityMilli: line.quantityMilli, ratePaisa: line.ratePaisa, amount: buyAmount(line.quantityMilli, line.ratePaisa, option.rateDivisor), stockMilli, movementId, unit: option.unit, unitSizeMilli: option.sizeMilli, rateDivisor: option.rateDivisor };
         });
+        // Recipes cost from this bill's average (owner's choice): all lines of a product, as the price of one main unit.
+        for (const ingredientId of new Set(lines.map((l) => l.ingredientId))) {
+          const ingredient = inv.ingredients.find((i) => i.id === ingredientId)!;
+          const average = averageMainPrice(lines.filter((l) => l.ingredientId === ingredientId), findBuyOption(ingredient, 'main')!.sizeMilli);
+          if (average !== null) Object.assign(ingredient, { purchasePrice: average, updatedAt: now });
+        }
         const { total } = billTotals(lines, input.discount);
         const purchase: KhataEntry = { id: entryId, ...scope, supplierId: supplier.id, kind: 'PURCHASE', amount: total, lines, method: null, businessDate: input.date, note, createdBy: user.id, createdAt: now, billNo, discount: input.discount };
         inv.khata.push(purchase);

@@ -1,4 +1,4 @@
-import { MAX_QUANTITY, MILLI, mulDivRound, purchaseConversion, type Ingredient, type Supplier } from './inventory';
+import { MAX_QUANTITY, MILLI, buyAmount, findBuyOption, mulDivRound, purchaseConversion, type Ingredient, type PurchaseUnit, type Supplier } from './inventory';
 import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
 
 /**
@@ -33,6 +33,11 @@ export interface ReceiptLine {
   /** Stock-unit thousandths added (50 litres = 50,000,000 ml-thousandths) */
   stockMilli: number;
   movementId: Uuid;
+  /** Bought as (2026-11-07): the unit typed, the stock-unit thousandths in one, and 1,000 when priced per kg / litre.
+   * Kept on the line, so editing the product later never changes an old bill. Missing = the main unit of that time. */
+  unit?: PurchaseUnit;
+  unitSizeMilli?: number;
+  rateDivisor?: number;
 }
 
 export interface KhataEntry extends BranchScoped {
@@ -74,22 +79,27 @@ export function receivedStockMilli(quantityMilli: number, ingredient: Pick<Ingre
 
 export type ReceiptProblem = 'NO_LINES' | 'TOO_MANY_LINES' | 'PRODUCT_REQUIRED' | 'DUPLICATE_PRODUCT' | 'QUANTITY_INVALID' | 'RATE_INVALID' | 'UNITS_INVALID' | 'NOTE_TOO_LONG';
 
-/** The first problem with a delivery, or null. Every product once, a real quantity and a rate above zero. */
+/**
+ * The first problem with a delivery, or null: a real quantity and a rate above zero, a way to buy the product has
+ * (unitKey: 'main' when missing). One product may come in several lines with different units (2 cartons + 6 bottles),
+ * never twice in the same unit.
+ */
 export function checkReceipt(
-  input: { lines: readonly { ingredientId: Uuid; quantityMilli: number | null; ratePaisa: number | null }[]; note: string },
-  ingredients: readonly Pick<Ingredient, 'id' | 'isActive' | 'kind' | 'purchaseUnit' | 'stockUnit' | 'packSizeMilli'>[],
+  input: { lines: readonly { ingredientId: Uuid; unitKey?: string; quantityMilli: number | null; ratePaisa: number | null }[]; note: string },
+  ingredients: readonly Pick<Ingredient, 'id' | 'isActive' | 'kind' | 'purchaseUnit' | 'stockUnit' | 'packSizeMilli' | 'purchasePrice' | 'packings' | 'loosePrice'>[],
 ): { line: number | null; problem: ReceiptProblem } | null {
   if (input.lines.length === 0) return { line: null, problem: 'NO_LINES' };
   if (input.lines.length > MAX_RECEIPT_LINES) return { line: null, problem: 'TOO_MANY_LINES' };
-  const seen = new Set<Uuid>();
+  const seen = new Set<string>();
   for (const [index, line] of input.lines.entries()) {
     const ingredient = ingredients.find((i) => i.id === line.ingredientId);
     if (!ingredient || !ingredient.isActive || ingredient.kind !== 'BOUGHT') return { line: index, problem: 'PRODUCT_REQUIRED' };
-    if (seen.has(line.ingredientId)) return { line: index, problem: 'DUPLICATE_PRODUCT' };
-    seen.add(line.ingredientId);
+    const key = `${line.ingredientId}|${line.unitKey ?? 'main'}`;
+    if (seen.has(key)) return { line: index, problem: 'DUPLICATE_PRODUCT' };
+    seen.add(key);
     if (line.quantityMilli === null || !Number.isInteger(line.quantityMilli) || line.quantityMilli <= 0 || line.quantityMilli > MAX_QUANTITY * MILLI) return { line: index, problem: 'QUANTITY_INVALID' };
     if (line.ratePaisa === null || !Number.isInteger(line.ratePaisa) || line.ratePaisa <= 0 || line.ratePaisa > MAX_SUPPLIER_AMOUNT) return { line: index, problem: 'RATE_INVALID' };
-    if (receivedStockMilli(line.quantityMilli, ingredient) === null) return { line: index, problem: 'UNITS_INVALID' };
+    if (!findBuyOption(ingredient, line.unitKey)) return { line: index, problem: 'UNITS_INVALID' };
   }
   if (input.note.trim().length > MAX_SUPPLIER_NOTE) return { line: null, problem: 'NOTE_TOO_LONG' };
   return null;
@@ -126,9 +136,29 @@ export interface PurchaseBillTotals {
   total: Paisa;
 }
 
-export function billTotals(lines: readonly { quantityMilli: number | null; ratePaisa: number | null }[], discount: Paisa): PurchaseBillTotals {
-  const subtotal = lines.reduce((sum, l) => sum + (l.quantityMilli !== null && l.ratePaisa !== null ? lineAmount(l.quantityMilli, l.ratePaisa) : 0), 0);
+export function billTotals(lines: readonly { quantityMilli: number | null; ratePaisa: number | null; rateDivisor?: number }[], discount: Paisa): PurchaseBillTotals {
+  const subtotal = lines.reduce((sum, l) => sum + (l.quantityMilli !== null && l.ratePaisa !== null ? buyAmount(l.quantityMilli, l.ratePaisa, l.rateDivisor) : 0), 0);
   return { subtotal, discount, total: subtotal - discount };
+}
+
+/**
+ * Owner's choice (2026-11-07): recipes cost from this bill's average. All lines of one product together: their amount
+ * per stock unit, given as the price of one main purchase unit. 2 cartons (24 bottles) Rs. 9,600 + 6 bottles Rs. 2,520 =
+ * Rs. 12,120 for 30 bottles = Rs. 404 a bottle.
+ */
+export function averageMainPrice(lines: readonly { amount: Paisa; stockMilli: number }[], mainSizeMilli: number): Paisa | null {
+  const stock = lines.reduce((sum, l) => sum + l.stockMilli, 0);
+  if (stock <= 0) return null;
+  return mulDivRound(
+    lines.reduce((sum, l) => sum + l.amount, 0),
+    mainSizeMilli,
+    stock,
+  );
+}
+
+/** Where a supplier's last rate for one way to buy is kept: the product id for the main unit, else "id|way". */
+export function supplierRateKey(ingredientId: Uuid, unitKey: string | undefined): string {
+  return !unitKey || unitKey === 'main' ? ingredientId : `${ingredientId}|${unitKey}`;
 }
 
 /** A percentage discount in paisa (10 % of Rs. 15,400 = Rs. 1,540); basis points, 10 % = 1,000. */
@@ -141,7 +171,7 @@ export type PurchaseBillProblem = ReceiptProblem | 'DISCOUNT_INVALID' | 'PAID_IN
 /** The first problem with a bill, or null: the delivery lines, a discount up to the subtotal, paid up to the total. */
 export function checkPurchaseBill(
   input: {
-    lines: readonly { ingredientId: Uuid; quantityMilli: number | null; ratePaisa: number | null }[];
+    lines: readonly { ingredientId: Uuid; unitKey?: string; quantityMilli: number | null; ratePaisa: number | null }[];
     note: string;
     discount: number | null;
     paid: number | null;
@@ -154,7 +184,11 @@ export function checkPurchaseBill(
 ): { line: number | null; problem: PurchaseBillProblem } | null {
   const receipt = checkReceipt(input, ingredients);
   if (receipt) return receipt;
-  const { subtotal } = billTotals(input.lines, 0);
+  // Grams and ml are priced per kg / litre: the way each line is bought decides its amount.
+  const { subtotal } = billTotals(
+    input.lines.map((l) => ({ ...l, rateDivisor: findBuyOption(ingredients.find((i) => i.id === l.ingredientId)!, l.unitKey)!.rateDivisor })),
+    0,
+  );
   if (input.discount === null || !Number.isInteger(input.discount) || input.discount < 0 || input.discount > subtotal) return { line: null, problem: 'DISCOUNT_INVALID' };
   if (input.paid === null || !Number.isInteger(input.paid) || input.paid < 0) return { line: null, problem: 'PAID_INVALID' };
   if (input.paid > subtotal - input.discount) return { line: null, problem: 'PAID_MORE_THAN_BILL' };

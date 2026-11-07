@@ -122,3 +122,41 @@ test('a new product with a name like one we have is flagged (Chini ↔ Chini (Su
   assert.deepEqual(similarIngredients('Maida 20 kg bag', list), [], 'bag and kg are not names');
   assert.deepEqual(similarIngredients('', list), []);
 });
+
+test("multiple units: Oil in bottles — 2 cartons of 12 + 6 loose bottles = 30 bottles, Rs. 12,120, recipes cost Rs. 404 a bottle", async () => {
+  const { buyOptions, buyAmount, buyStockMilli, averageMainPrice } = await import('./index');
+  const oil = { purchaseUnit: 'bottle' as const, stockUnit: 'bottle' as const, packSizeMilli: null, purchasePrice: 42_000, loosePrice: null, packings: [{ id: 'c', kind: 'carton' as const, sizeMilli: 12_000, pricePaisa: 480_000 }, { id: 'p', kind: 'pack' as const, sizeMilli: 6_000, pricePaisa: 250_000 }] };
+  const options = buyOptions(oil);
+  assert.deepEqual(options.map((o) => o.key), ['main', 'pack:c', 'pack:p'], 'bottle is the main unit; no second loose bottle');
+  const carton = options[1]!;
+  const lines = [
+    { amount: buyAmount(2_000, 480_000), stockMilli: buyStockMilli(2_000, carton.sizeMilli) },
+    { amount: buyAmount(6_000, 42_000), stockMilli: buyStockMilli(6_000, options[0]!.sizeMilli) },
+  ];
+  assert.deepEqual(lines, [{ amount: 960_000, stockMilli: 24_000 }, { amount: 252_000, stockMilli: 6_000 }]);
+  assert.equal(lines[0]!.amount + lines[1]!.amount, 1_212_000);
+  assert.equal(lines[0]!.stockMilli + lines[1]!.stockMilli, 30_000, '30 bottles');
+  assert.equal(averageMainPrice(lines, MILLI_ONE), 40_400, 'Rs. 12,120 / 30 = Rs. 404 a bottle');
+});
+
+const MILLI_ONE = 1_000;
+
+test('multiple units: Rice in kg — 1 bag of 25 kg + 5 kg loose = 30 kg; 500 g of chicken at Rs. 650 / kg = Rs. 325; same unit twice refused', async () => {
+  const { buyOptions, buyAmount, buyStockMilli, checkPackings } = await import('./index');
+  const rice = { purchaseUnit: 'kg' as const, stockUnit: 'g' as const, packSizeMilli: null, purchasePrice: 38_000, loosePrice: null, packings: [{ id: 'b', kind: 'bag' as const, sizeMilli: 25_000_000, pricePaisa: 900_000 }] };
+  const [kg, g, bag] = buyOptions(rice);
+  assert.deepEqual([kg!.key, g!.key, bag!.key], ['main', 'loose:g', 'pack:b']);
+  assert.equal(buyStockMilli(1_000, bag!.sizeMilli) + buyStockMilli(5_000, kg!.sizeMilli), 30_000_000, '30 kg in grams');
+  assert.equal(buyAmount(500_000, 65_000, g!.rateDivisor), 32_500, 'grams are priced per kg');
+  assert.equal(g!.pricePaisa, 38_000, 'loose price per kg follows the main kg price');
+  const atta = { purchaseUnit: 'bag' as const, stockUnit: 'g' as const, packSizeMilli: 20_000_000, purchasePrice: 260_000, loosePrice: null, packings: [] };
+  assert.equal(buyOptions(atta).find((o) => o.key === 'loose:kg')!.pricePaisa, 13_000, 'Rs. 2,600 a 20 kg bag = Rs. 130 a kg loose');
+  const products = [{ id: 'rice', isActive: true, kind: 'BOUGHT' as const, ...rice }];
+  const line = (unitKey: string) => ({ ingredientId: 'rice', unitKey, quantityMilli: 1_000, ratePaisa: 100 });
+  assert.equal(checkReceipt({ lines: [line('pack:b'), line('main')], note: '' }, products), null, 'a bag and loose kg in one bill');
+  assert.deepEqual(checkReceipt({ lines: [line('main'), line('main')], note: '' }, products), { line: 1, problem: 'DUPLICATE_PRODUCT' });
+  assert.deepEqual(checkReceipt({ lines: [line('pack:x')], note: '' }, products), { line: 0, problem: 'UNITS_INVALID' });
+  assert.equal(checkPackings([{ kind: 'tray', sizeMilli: 30_000, pricePaisa: 105_000 }, { kind: 'carton', sizeMilli: 360_000, pricePaisa: 1_200_000 }]), null);
+  assert.deepEqual(checkPackings([{ kind: 'tray', sizeMilli: 0, pricePaisa: 1 }]), { index: 0, problem: 'SIZE_INVALID' });
+  assert.deepEqual(checkPackings([{ kind: 'bag', sizeMilli: 1, pricePaisa: 1 }, { kind: 'bag', sizeMilli: 1, pricePaisa: 2 }]), { index: 1, problem: 'DUPLICATE' });
+});
