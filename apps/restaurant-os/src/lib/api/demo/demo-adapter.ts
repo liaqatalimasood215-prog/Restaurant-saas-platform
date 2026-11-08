@@ -201,6 +201,10 @@ import {
   balancesAfter,
   type StockLedgerQuery,
   type StockLedgerView,
+  checkPortion,
+  portionLines,
+  sameDish,
+  sameName,
 } from '@restaurant-saas/shared';
 import {
   ApiError,
@@ -228,6 +232,7 @@ import {
   type StockAdjustInput,
   type RecipeInput,
   type ScaledRecipeInput,
+  type SellPreparedInput,
   type SupplierInput,
   type KhataPeriod,
   type PurchaseBillInput,
@@ -1937,7 +1942,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
   getMenuSetup(): Promise<MenuSetup> {
     return this.request(() => {
       const data = this.store.read();
-      this.require(data, 'menu.view');
+      const user = this.require(data, 'menu.view');
       const items = data.items.filter((i) => !i.archivedAt).sort((a, b) => a.sort - b.sort);
       return {
         categories: [...data.categories]
@@ -1946,6 +1951,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         items,
         addonGroups: data.modifierGroups.map((group) => ({ group, itemCount: items.filter((i) => i.modifierGroupIds.includes(group.id)).length })),
         stations: [...data.stations].sort((a, b) => a.sort - b.sort),
+        ...(this.permissionsOf(data, user).includes('inventory.view') ? { recipes: this.menuRecipeStates(data, items) } : {}),
       };
     });
   }
@@ -2027,9 +2033,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
           throw new ApiError('VALIDATION', 'Unknown add-on group.');
         }
         const name = cleanName(input.name);
-        const taken = data.items.filter((i) => i.categoryId === category.id && !i.archivedAt && i.id !== input.id).map((i) => i.name);
-        const check = checkMenuItem({ name, description: input.description, price: input.price, sizes: input.sizes }, taken);
-        if (check) throw new ApiError('VALIDATION', menuMessage(check, name, category.name));
+        // One product once in the whole menu (owner, 2026-11-08), not only once per category
+        const clash = data.items.find((i) => !i.archivedAt && i.id !== input.id && sameName(i.name, name));
+        const check = checkMenuItem({ name, description: input.description, price: input.price, sizes: input.sizes }, clash ? [clash.name] : []);
+        if (check) throw new ApiError('VALIDATION', menuMessage(check, name, (clash && data.categories.find((c) => c.id === clash.categoryId)?.name) || category.name));
 
         // Sizes keep their id when only renamed or repriced, so a held bill still finds its size.
         const variants: ItemVariant[] = input.sizes.map((size, index) => ({
@@ -2673,6 +2680,21 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return data.inventory.recipes.find((r) => sameTarget(r.target, target)) ?? null;
   }
 
+  /** The Menu's recipe badge per item: VERIFIED when every size's current recipe is, NONE when no size has one, else DRAFT. */
+  private menuRecipeStates(data: DemoData, items: readonly MenuItem[]): NonNullable<MenuSetup['recipes']> {
+    return Object.fromEntries(
+      items.map((item) => {
+        const states = (item.variants.length ? item.variants.map((v) => v.id) : [null]).map((variantId) => {
+          const recipe = this.recipeFor(data, { kind: 'ITEM', menuItemId: item.id, variantId });
+          return recipe ? (currentVersion(recipe)?.status ?? 'NONE') : 'NONE';
+        });
+        const state = states.every((s) => s === 'VERIFIED') ? 'VERIFIED' : states.every((s) => s === 'NONE') ? 'NONE' : 'DRAFT';
+        const prepared = item.preparedItemId ? data.inventory.ingredients.find((i) => i.id === item.preparedItemId) : undefined;
+        return [item.id, { state, preparedName: prepared?.name ?? null }] as const;
+      }),
+    );
+  }
+
   /**
    * What a size costs: under Auto Scale an automatic size is the base cost × its share (so the sizes match the base
    * exactly); a custom size, or a size without Auto Scale, costs its own lines.
@@ -2736,6 +2758,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
             recipe,
             batchCost: version ? linesCost(book, version.lines).total : null,
             unitCost: ingredientCost(book, ingredient.id, displayFactorMilli(ingredient)),
+            soldAs: data.items.filter((i) => !i.archivedAt && i.preparedItemId === ingredient.id).map((i) => ({ menuItemId: i.id, name: i.name })),
           };
         });
       const people = new Set(inv.recipes.flatMap((r) => r.versions.flatMap((v) => [v.savedBy, v.verifiedBy ?? ''])).values());
@@ -2909,6 +2932,100 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const user = this.require(data, 'inventory.manage');
         const scale = (data.inventory.recipeScales ?? []).find((s) => s.menuItemId === menuItemId);
         if (scale) Object.assign(scale, { enabled: false, updatedBy: user.id, updatedAt: nowIso() });
+      }),
+    );
+  }
+
+  /**
+   * A cooked dish on the POS, in one step like one database transaction (owner, 2026-11-08): (1) the menu product: the one
+   * chosen to link, or a new one (never a second product with the same name, a new category when asked); (2) its link to the
+   * dish; (3) each size's recipe = its portion of the dish, VERIFIED (a new version when it changed, old versions stay). Auto
+   * Scale is turned off for a linked product: its sizes now come from the dish. Nothing is saved while one part is wrong.
+   */
+  sellPreparedItem(input: SellPreparedInput): Promise<MenuItem> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'menu.manage');
+        const user = this.require(data, 'inventory.manage');
+        const prepared = data.inventory.ingredients.find((i) => i.id === input.preparedId && i.kind === 'PREPARED');
+        if (!prepared) throw new ApiError('NOT_FOUND', 'This prepared item was not found.');
+        if (input.sizes.length === 0 || input.sizes.some((s) => !checkPortion(s.portionMilli))) {
+          throw new ApiError('VALIDATION', 'Type how much of the dish each size takes (more than 0).');
+        }
+
+        let item: MenuItem;
+        let rows = input.sizes;
+        if (input.menuItemId) {
+          const existing = data.items.find((i) => i.id === input.menuItemId && !i.archivedAt);
+          if (!existing) throw new ApiError('NOT_FOUND', 'Menu item not found.');
+          // His sizes and prices as typed here go to the Menu too (owner, 2026-11-08); a size keeps its id when only renamed or
+          // repriced, so held bills still find it; old bills keep their own copies of the prices
+          const one = input.sizes.length === 1 ? input.sizes[0]! : null;
+          const sizes = one ? [] : input.sizes.map((s) => ({ name: s.name, price: s.price }));
+          const check = checkMenuItem({ name: existing.name, description: existing.description, price: one ? one.price : null, sizes }, []);
+          if (check) throw new ApiError('VALIDATION', menuMessage(check, existing.name, data.categories.find((c) => c.id === existing.categoryId)?.name ?? ''));
+          const variants: ItemVariant[] = one
+            ? []
+            : input.sizes.map((s, index) => ({
+                id: s.variantId && existing.variants.some((v) => v.id === s.variantId) ? s.variantId : newId(),
+                name: cleanName(s.name),
+                price: s.price ?? 0,
+                sort: index + 1,
+              }));
+          Object.assign(existing, { variants, basePrice: variants.length > 0 ? Math.min(...variants.map((v) => v.price)) : (one?.price ?? 0) });
+          rows = input.sizes.map((s, index) => ({ ...s, variantId: variants[index]?.id ?? null }));
+          item = existing;
+        } else {
+          const name = cleanName(input.name);
+          const clash = data.items.find((i) => !i.archivedAt && (sameName(i.name, name) || sameDish(i.name, name)));
+          if (clash) throw new ApiError('CONFLICT', `${clash.name} is already on the menu. Link it instead of making it again.`);
+          let category = input.categoryId ? data.categories.find((c) => c.id === input.categoryId) : undefined;
+          if (input.categoryId && !category) throw new ApiError('VALIDATION', 'Choose a category.');
+          if (!category) {
+            const categoryName = cleanName(input.newCategoryName);
+            const problem = checkName(categoryName, data.categories.map((c) => c.name));
+            if (problem) throw new ApiError('VALIDATION', menuMessage({ problem: problem as MenuProblem }, categoryName, 'category'));
+            category = { id: newId(), restaurantId: data.restaurant.id, branchId: null, name: categoryName, sort: Math.max(0, ...data.categories.map((c) => c.sort)) + 1, isActive: true };
+            data.categories.push(category);
+          }
+          if (!data.stations.some((s) => s.id === input.stationId)) throw new ApiError('VALIDATION', 'Choose a kitchen station.');
+          // One row = one price per plate; two or more = sizes (Full plate, Half plate)
+          const one = input.sizes.length === 1 ? input.sizes[0]! : null;
+          const sizes = one ? [] : input.sizes.map((s) => ({ name: s.name, price: s.price }));
+          const check = checkMenuItem({ name, description: '', price: one ? one.price : null, sizes }, []);
+          if (check) throw new ApiError('VALIDATION', menuMessage(check, name, category.name));
+          const variants: ItemVariant[] = sizes.map((s, index) => ({ id: newId(), name: cleanName(s.name), price: s.price ?? 0, sort: index + 1 }));
+          item = {
+            id: newId(),
+            restaurantId: data.restaurant.id,
+            branchId: null,
+            categoryId: category.id,
+            stationId: input.stationId,
+            name,
+            description: '',
+            basePrice: variants.length > 0 ? Math.min(...variants.map((v) => v.price)) : (one?.price ?? 0),
+            unit: 'plate',
+            isAvailable: true,
+            isOnline: input.isOnline,
+            sort: Math.max(0, ...data.items.map((i) => i.sort)) + 1,
+            variants,
+            modifierGroupIds: [],
+            archivedAt: null,
+          };
+          data.items.push(item);
+          // The rows now point at the sizes just made, in the same order
+          rows = input.sizes.map((s, index) => ({ ...s, variantId: variants[index]?.id ?? null }));
+        }
+
+        item.preparedItemId = prepared.id;
+        const scale = (data.inventory.recipeScales ?? []).find((s) => s.menuItemId === item.id && s.enabled);
+        if (scale) Object.assign(scale, { enabled: false, updatedBy: user.id, updatedAt: nowIso() });
+        const book = this.costBook(data);
+        for (const size of rows) {
+          const target: RecipeTarget = { kind: 'ITEM', menuItemId: item.id, variantId: size.variantId };
+          this.writeRecipe(data, user, book, target, portionLines(prepared.id, size.portionMilli), null, `Sold from ${prepared.name}`, true);
+        }
+        return item;
       }),
     );
   }

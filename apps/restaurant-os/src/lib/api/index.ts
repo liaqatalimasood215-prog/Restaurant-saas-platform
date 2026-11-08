@@ -9,6 +9,7 @@ export type {
   AddonGroupInput,
   CounterOrderInput,
   MenuItemInput,
+  SellPreparedInput,
   DemoControls,
   HeldBillInput,
   KhataPeriod,

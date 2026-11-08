@@ -50,3 +50,22 @@ test('not a mix: one size, a repeated or unknown size, a bad quantity, or sizes 
   assert.equal(sizeMixFor(karahi, [{ variantId: 'kg', quantity: 51 }, { variantId: 'half', quantity: 1 }]), null);
   assert.equal(sizeMixFor(pizza, [{ variantId: 's', quantity: 1 }, { variantId: 'm', quantity: 1 }]), null);
 });
+
+test('plates and packings mix too (owner, 2026-11-08): Full plate + Half plate is one line; kg and plates mix; Small / Medium do not', () => {
+  const daal = {
+    variants: [
+      { id: 'full', name: 'Full plate', price: 20_000, sort: 1 },
+      { id: 'half', name: 'Half plate', price: 15_000, sort: 2 },
+    ],
+  };
+  assert.equal(canMixSizes(daal), true);
+  assert.deepEqual(sizeMixFor(daal, [{ variantId: 'half', quantity: 1 }, { variantId: 'full', quantity: 2 }]), {
+    label: '2 × Full plate + Half plate',
+    grams: 0,
+    price: 55_000,
+  });
+  const biryani = { variants: [...karahi.variants.slice(0, 2), ...daal.variants.map((v) => ({ ...v, sort: v.sort + 2 }))] };
+  assert.equal(canMixSizes(biryani), true);
+  assert.equal(sizeMixFor(biryani, [{ variantId: 'kg', quantity: 1 }, { variantId: 'full', quantity: 1 }])?.label, '1 kg + Full plate');
+  assert.equal(canMixSizes({ variants: [...daal.variants, { id: 's', name: 'Small', price: 1, sort: 3 }] }), false);
+});

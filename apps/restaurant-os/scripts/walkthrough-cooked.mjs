@@ -286,6 +286,8 @@ try {
   await cook(owner).locator('[data-scaled-lines] li', { hasText: 'Cooking oil' }).getByText('1.5 litres').waitFor();
   await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
   await builder(owner).waitFor({ state: 'detached' });
+  // A new prepared item: the screen asks whether it is sold on the POS (owner, 2026-11-08); walkthrough:integration says yes
+  await owner.getByRole('dialog', { name: 'Cooked Chana Pulao is saved. Do you sell it on the POS?' }).getByRole('button', { name: 'Not now' }).click();
   const pulaoCard = card(owner, 'Cooked Chana Pulao');
   assert.equal(await pulaoCard.locator('[data-raw-stock]').innerText(), '10 kg*', 'shared with Daal Chana');
   await pulaoCard.locator('[data-shared]').getByText('Daal chana (Shared)').waitFor();

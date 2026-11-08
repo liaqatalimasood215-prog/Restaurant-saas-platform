@@ -260,6 +260,8 @@ await builder(owner).getByLabel('One batch makes').fill('1');
 await shot(owner, '04-desktop-owner-prepared-item');
 await builder(owner).getByRole('button', { name: 'Verify Recipe' }).click();
 await saveDone(owner);
+// A new prepared item: the screen asks whether it is sold on the POS (owner, 2026-11-08); a sauce is not
+await owner.getByRole('dialog', { name: 'Spicy mayo is saved. Do you sell it on the POS?' }).getByRole('button', { name: 'Not now' }).click();
 // 950 g mayo Rs. 617.50 + 50 g chilli Rs. 45 = Rs. 662.50 for 1 kg
 await owner.locator('main [data-prepared-item="Spicy mayo"]').getByText('Rs. 662.50 / kg').waitFor();
 await owner.getByRole('tab', { name: 'Menu items' }).click();

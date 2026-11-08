@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { LayoutList, Pencil, Plus, Puzzle, Search, Tags, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { BookOpen, LayoutList, Pencil, Plus, Puzzle, Search, Tags, Trash2 } from 'lucide-react';
 import type { MenuItem, MenuSetup } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +25,8 @@ import { AddonGroupsPanel, CategoriesPanel, priceText } from './menu-parts';
 type Tab = 'items' | 'categories' | 'addons';
 type StockFilter = 'ALL' | 'AVAILABLE' | 'OUT' | 'NOT_ONLINE';
 const ALL = 'ALL';
+const RECIPE_TONE = { NONE: 'grey', DRAFT: 'amber', VERIFIED: 'green' } as const;
+const recipeLink = (menuItemId: string) => `/inventory?recipe=${encodeURIComponent(menuItemId)}`;
 
 /**
  * Menu (Preview 5, MASTER_PROMPT.md §7.1): categories, items with one price or sizes, add-on groups,
@@ -40,9 +44,13 @@ export function MenuScreen() {
   const [size, setSize] = useState(ALL);
   const [editing, setEditing] = useState<MenuItem | 'new' | null>(null);
   const [removing, setRemoving] = useState<MenuItem | null>(null);
+  /** A product just added: offer its recipe now (owner's integration brief, 2026-11-08) */
+  const [added, setAdded] = useState<MenuItem | null>(null);
   const [busy, setBusy] = useState(false);
+  const router = useRouter();
   const canManage = allowed('menu.manage');
   const canStock = allowed('item.outOfStock');
+  const canRecipes = allowed('inventory.manage');
 
   const header = (
     <ScreenHeader
@@ -149,6 +157,18 @@ export function MenuScreen() {
       {tab === 'addons' && <AddonGroupsPanel setup={data} canManage={canManage} />}
       {tab === 'items' && (
         <>
+        {added && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-brand/30 bg-brand-soft/60 px-4 py-3" data-recipe-prompt={added.name}>
+            <BookOpen className="size-5 shrink-0 text-brand" aria-hidden />
+            <p className="min-w-48 flex-1 text-sm text-slate-800">
+              <span className="font-extrabold text-slate-900">{t('menuSetup.recipe.askTitle', { name: added.name })}</span> {t('menuSetup.recipe.askBody')}
+            </p>
+            <Button variant="ghost" onClick={() => setAdded(null)}>
+              {t('menuSetup.recipe.later')}
+            </Button>
+            <Button onClick={() => router.push(recipeLink(added.id))}>{t('menuSetup.recipe.addNow')}</Button>
+          </div>
+        )}
         <div role="group" aria-label={t('menuSetup.categoryCards')} className="mb-4 flex gap-3 overflow-x-auto p-0.5 pb-1.5 sm:grid sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] sm:overflow-visible">
           {categoryCard(ALL, t('menuSetup.allMenu'), data.items.length)}
           {data.categories.map(({ category: c }) => categoryCard(c.id, c.name, data.items.filter((i) => i.categoryId === c.id).length, !c.isActive))}
@@ -200,6 +220,7 @@ export function MenuScreen() {
             <ul className="divide-y divide-slate-100">
               {visible.map((item) => {
                 const cat = categoryOf(item.categoryId);
+                const recipe = data.recipes?.[item.id];
                 return (
                   <li key={item.id} className={cn('flex flex-wrap items-center gap-3 px-3 py-2.5 lg:grid lg:grid-cols-[3.5rem_minmax(0,1fr)_minmax(0,1.15fr)_10.5rem_5.75rem]', !cat?.isActive && 'bg-slate-50/70')} data-menu-item={item.name}>
                     <ProductArt name={item.name} categoryName={cat?.name ?? ''} className="size-14 shrink-0 rounded-xl" emojiClassName="text-3xl" />
@@ -219,6 +240,22 @@ export function MenuScreen() {
                         {item.unit !== 'piece' && ` · ${t('menuSetup.perUnit', { unit: t(`menuSetup.units.${item.unit}`) })}`}
                       </p>
                       {item.description && <p className="truncate text-xs text-slate-500">{item.description}</p>}
+                      {recipe && (
+                        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs" data-menu-recipe={recipe.state}>
+                          <Badge tone={RECIPE_TONE[recipe.state]}>{t(`menuSetup.recipe.state.${recipe.state}`)}</Badge>
+                          {recipe.preparedName && <span className="font-semibold text-slate-600">{t('menuSetup.recipe.from', { name: recipe.preparedName })}</span>}
+                          {canRecipes && (
+                            <Link
+                              href={recipeLink(item.id)}
+                              aria-label={t(recipe.state === 'NONE' ? 'menuSetup.recipe.addFor' : 'menuSetup.recipe.openFor', { name: item.name })}
+                              className="inline-flex min-h-8 items-center gap-1 rounded-lg px-1.5 font-bold text-brand hover:bg-brand-soft"
+                            >
+                              <BookOpen className="size-3.5" aria-hidden />
+                              {recipe.state === 'NONE' ? t('menuSetup.recipe.add') : t('menuSetup.recipe.open')}
+                            </Link>
+                          )}
+                        </p>
+                      )}
                     </div>
                     <div className="min-w-40 text-sm font-extrabold text-slate-900 lg:min-w-0">
                       {priceText(item)}
@@ -266,8 +303,10 @@ export function MenuScreen() {
           canStock={canStock}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {
+            const isNew = editing === 'new';
             setEditing(null);
             toast.show({ tone: 'success', title: t('menuSetup.item.saved', { name: saved.name }) });
+            if (isNew && canRecipes) setAdded(saved);
           }}
         />
       )}

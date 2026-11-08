@@ -4,17 +4,21 @@ import { useEffect, useState } from 'react';
 import { BookOpen, CakeSlice, ChefHat, ChevronLeft, CircleCheck, CircleX, Layers, LayoutGrid, List, Pencil, Percent, Plus, Search, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { formatBps, formatPaisa, summarizeFoodCost, type FoodCost, type MenuRecipeRow, type RecipesView } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Dialog } from '@/components/ui/dialog';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
+import { useSession } from '@/lib/session';
 import { bookOf, stateOf, type RecipeState } from './recipe-draft';
 import { CookedCard, PreparedCard, cookedDishes, dishState, type CardLayout, type CookedDish, type DishState } from './cooked-card';
 import { RecentPurchases } from './purchase-recipes';
 import { RecipeBuilder, type EditorSubject } from './recipe-builder';
 import { LEVEL_TONE } from './recipe-lines';
+import { SellDialog } from './sell-dialog';
 
 type Section = 'menu' | 'addons' | 'prepared';
 /** Prepared items: everything, cooked food by its stock state, or the other prepared items (dough, sauces) */
@@ -53,7 +57,8 @@ function subjectOf(ref: EditingRef, view: RecipesView): EditorSubject | null {
       categoryName: first.categoryName,
       unit: first.unit,
       sizes: rows.map((r) => ({ variantId: r.variantId, name: r.variantName, price: r.costing.price, recipe: r.recipe })),
-      startVariantId: ref.variantId,
+      // No size asked (opened from the Menu): the first size
+      startVariantId: ref.variantId ?? first.variantId,
     };
   }
   if (ref.kind === 'ADDON') {
@@ -100,16 +105,23 @@ function matches(group: MenuItemGroup, filter: Filter): boolean {
  * Recipes & Food Cost (Inventory Step B, DEMO): every menu item and size, add-on and prepared item with its recipe,
  * cost, food cost % and status. Tap a card to open it in the Recipe Builder, which takes the whole screen.
  */
-export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBuilder?: (open: boolean) => void }) {
+export function RecipesTab({ canManage, onBuilder, openItemId }: { canManage: boolean; onBuilder?: (open: boolean) => void; openItemId?: string }) {
+  const { allowed } = useSession();
   const recipes = useApiQuery(() => getApi().getRecipes(), []);
   // null = the Recipes overview; a chosen section takes the whole screen (owner, 2026-11-08: open it fully, no scrolling)
-  const [section, setSection] = useState<Section | null>(null);
+  const [section, setSection] = useState<Section | null>(openItemId ? 'menu' : null);
   const [filter, setFilter] = useState<Filter>('ALL');
   const [query, setQuery] = useState('');
-  const [editing, setEditing] = useState<EditingRef | null>(null);
+  // Opened from the Menu (/inventory?recipe=…): that product's recipe, at its first size
+  const [editing, setEditing] = useState<EditingRef | null>(openItemId && canManage ? { kind: 'ITEM', menuItemId: openItemId, variantId: null } : null);
   const [preparedFilter, setPreparedFilter] = useState<PreparedFilter>('ALL');
   const [preparedQuery, setPreparedQuery] = useState('');
   const [preparedLayout, setPreparedLayout] = useState<CardLayout>('grid');
+  /** Sell on POS for this prepared item; asked = right after its recipe was saved for the first time */
+  const [selling, setSelling] = useState<{ preparedId: string; asked: boolean } | null>(null);
+  /** Add Recipe on Menu items: the menu product chosen from the list */
+  const [picking, setPicking] = useState<string | null>(null);
+  const canSell = canManage && allowed('menu.manage');
   // The builder and an open section take the whole screen: the Inventory title and sections step aside while one is open.
   useEffect(() => {
     onBuilder?.(editing !== null || section !== null);
@@ -121,6 +133,7 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
   if (!recipes.data) return <ErrorState message={recipes.error?.message} onRetry={recipes.reload} />;
   const view = recipes.data;
   const subject = editing ? subjectOf(editing, view) : null;
+  const sellRow = selling ? view.prepared.find((p) => p.ingredient.id === selling.preparedId) : undefined;
   const summary = summarizeFoodCost(view.menu);
   const groups: MenuItemGroup[] = [];
   for (const row of view.menu) {
@@ -133,7 +146,16 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
   const shown = searched.filter((g) => matches(g, filter));
   const openItem = (group: MenuItemGroup, variantId: string | null) =>
     setEditing({ kind: 'ITEM', menuItemId: group.menuItemId, variantId });
-  if (subject) return <RecipeBuilder key={versionsKey(subject, view)} subject={subject} view={view} onClose={() => setEditing(null)} />;
+  if (subject)
+    return (
+      <RecipeBuilder
+        key={versionsKey(subject, view)}
+        subject={subject}
+        view={view}
+        onClose={() => setEditing(null)}
+        onNewPrepared={canSell ? (preparedId) => setSelling({ preparedId, asked: true }) : undefined}
+      />
+    );
   // Cooked food follows the raw stock that supplier bills bring in
   const book = bookOf(view);
   const byId = new Map(view.ingredients.map((i) => [i.id, i]));
@@ -220,6 +242,12 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
                 </button>
               ))}
             </div>
+            {canManage && groups.length > 0 && (
+              <Button className="ml-auto" onClick={() => setPicking((groups.find((g) => groupState(g.rows) === 'NONE') ?? groups[0])!.menuItemId)}>
+                <Plus className="size-4" aria-hidden />
+                {t('inventory.recipes.pick.button')}
+              </Button>
+            )}
           </div>
 
           {shown.length === 0 ? (
@@ -382,6 +410,7 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
             <ul className={cn('grid grid-cols-1 items-start gap-3', preparedLayout === 'grid' && 'md:grid-cols-2 lg:grid-cols-3')}>
               {shownPrepared.map(({ row, dish }) => {
                 const edit = () => setEditing({ kind: 'PREPARED', ingredientId: row.ingredient.id });
+                const sell = canSell ? () => setSelling({ preparedId: row.ingredient.id, asked: false }) : undefined;
                 return (
                   <li key={row.ingredient.id} data-prepared-item={row.ingredient.name}>
                     {dish ? (
@@ -391,11 +420,12 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
                         byId={byId}
                         canManage={canManage}
                         onEdit={edit}
+                        onSell={sell}
                         layout={preparedLayout}
                         purchases={(view.purchaseRecipes ?? []).filter((p) => p.preparedId === row.ingredient.id)}
                       />
                     ) : (
-                      <PreparedCard row={row} canManage={canManage} onEdit={edit} layout={preparedLayout} />
+                      <PreparedCard row={row} canManage={canManage} onEdit={edit} onSell={sell} layout={preparedLayout} />
                     )}
                   </li>
                 );
@@ -413,6 +443,44 @@ export function RecipesTab({ canManage, onBuilder }: { canManage: boolean; onBui
 
       <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{t('inventory.recipes.demoNote')}</p>
       <p className="text-xs text-slate-500">{t('inventory.recipes.guide')}</p>
+
+      {picking !== null && (
+        <Dialog
+          open
+          onClose={() => setPicking(null)}
+          title={t('inventory.recipes.pick.title')}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setPicking(null)}>
+                {t('inventory.form.cancel')}
+              </Button>
+              <Button
+                onClick={() => {
+                  const group = groups.find((g) => g.menuItemId === picking);
+                  setPicking(null);
+                  if (group) openItem(group, group.rows[0]?.variantId ?? null);
+                }}
+              >
+                {t('inventory.recipes.pick.open')}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-slate-600">{t('inventory.recipes.pick.hint')}</p>
+          <label className="mt-3 block">
+            <span className="mb-1 block text-sm font-bold text-slate-900">{t('inventory.recipes.pick.label')}</span>
+            <select value={picking} onChange={(e) => setPicking(e.target.value)} aria-label={t('inventory.recipes.pick.label')} className="min-h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-base">
+              {/* Products without a recipe first, then the rest, each in menu order */}
+              {[...groups.filter((g) => groupState(g.rows) === 'NONE'), ...groups.filter((g) => groupState(g.rows) !== 'NONE')].map((g) => (
+                <option key={g.menuItemId} value={g.menuItemId}>
+                  {`${g.name} · ${g.categoryName} — ${t(`inventory.recipes.status.${groupState(g.rows)}`)}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        </Dialog>
+      )}
+      {selling && sellRow && <SellDialog prepared={sellRow.ingredient} view={view} asked={selling.asked} onClose={() => setSelling(null)} />}
 
     </div>
   );

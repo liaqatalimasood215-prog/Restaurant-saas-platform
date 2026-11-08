@@ -45,11 +45,12 @@ const STOCK_TABS: { key: StockTab; icon: LucideIcon; phase?: number }[] = [
  * sections that later inventory phases build (Purchasing, Reports, Wastage, Counts), each with a clear placeholder.
  * Stock is the sum of stock movements; a change is a correction with a reason. Owner / Manager.
  */
-export function InventoryScreen() {
+export function InventoryScreen({ recipeItemId }: { recipeItemId?: string } = {}) {
   const { allowed } = useSession();
   const inventory = useApiQuery(() => getApi().getInventory(), []);
   const order = useSectionOrder();
-  const [chosen, setSection] = useState<Section | null>(null);
+  // Opened from the Menu with a product's recipe: Recipes first
+  const [chosen, setSection] = useState<Section | null>(recipeItemId ? 'recipes' : null);
   // Inventory opens on the first section of his order.
   const section = chosen ?? order[0]!;
   /** Edit order: the sections he has tapped so far, in that order */
@@ -196,7 +197,7 @@ export function InventoryScreen() {
         </div>
       )}
 
-      {section === 'recipes' && <RecipesTab canManage={canManage} onBuilder={setBuilding} />}
+      {section === 'recipes' && <RecipesTab canManage={canManage} onBuilder={setBuilding} openItemId={recipeItemId} />}
       {section === 'purchasing' && <SuppliersTab canManage={canManage} onFocus={setBilling} />}
       {section === 'reports' && <PlannedPanel icon={ChartColumn} title="inventory.planned.reports.title" items="inventory.planned.reports.items" phase={6} />}
 

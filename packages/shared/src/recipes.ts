@@ -478,6 +478,40 @@ export function platesIn(yieldMilli: number, plateMilli: number = DEFAULT_PLATE_
   return plateMilli > 0 ? Math.floor(yieldMilli / plateMilli) : 0;
 }
 
+// ── Menu products sold from a cooked dish (owner's integration brief, 2026-11-08) ─────────────
+
+/**
+ * A cooked dish (Cooked Chicken Biryani) is the kitchen's stock; the menu product (Chicken Biryani: Full plate, Half plate)
+ * is what the POS sells. Each size's recipe is ONE line: its portion of the cooked dish, so the dish's own recipe says what
+ * the raw ingredients are and nothing is counted twice.
+ * Roman Urdu: Degh ek, plate us mein se — har size ki recipe sirf itne gram pakki dish.
+ */
+/** The owner's P4 estimates: half plate 125 g, full packing 500 g, half packing 250 g; anything else a full plate (250 g). */
+const PORTION_GUESSES: [RegExp, number][] = [
+  [/\bhalf\s*pack/i, 250],
+  [/\bpack/i, 500],
+  [/\bhalf\b/i, 125],
+];
+export const MAX_PORTION_MILLI = 50_000 * MILLI;
+
+/** A starting portion for a size (stock-unit thousandths): its weight when the name says one (½ kg = 500 g), else a guess. */
+export function guessPortionMilli(sizeName: string | null): number {
+  // Thousandths of a gram: the stock unit of cooked food
+  const weight = sizeName ? guessSizeQuantity(sizeName, 'g') : null;
+  if (weight) return weight;
+  const guess = sizeName ? PORTION_GUESSES.find(([pattern]) => pattern.test(sizeName))?.[1] : undefined;
+  return guess !== undefined ? guess * MILLI : DEFAULT_PLATE_MILLI;
+}
+
+export function checkPortion(portionMilli: number): boolean {
+  return Number.isInteger(portionMilli) && portionMilli > 0 && portionMilli <= MAX_PORTION_MILLI;
+}
+
+/** The recipe of a size sold from a cooked dish: one line, its portion. */
+export function portionLines(preparedId: Uuid, portionMilli: number): RecipeLine[] {
+  return [{ ingredientId: preparedId, quantityMilli: portionMilli, lossBps: 0, optional: false, substituteId: null }];
+}
+
 // ── Auto Scale (Recipe Builder R2, owner 2026-11-05) ──────────────────────────────────────────
 
 /**
@@ -619,6 +653,8 @@ export interface PreparedRow {
   batchCost: Paisa | null;
   /** Cost of 1 kg, 1 litre or 1 piece of it */
   unitCost: Paisa | null;
+  /** The menu products sold from it (MenuItem.preparedItemId); empty = not on the POS */
+  soldAs?: { menuItemId: Uuid; name: string }[];
 }
 
 export interface RecipesView {

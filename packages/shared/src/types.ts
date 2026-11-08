@@ -199,6 +199,11 @@ export interface MenuItem extends RestaurantScoped {
   modifierGroupIds: Uuid[];
   /** Removed from the menu but kept because old orders or held bills point at it; hidden everywhere */
   archivedAt: IsoDateTime | null;
+  /**
+   * The cooked dish (prepared item) this product is sold from (owner, 2026-11-08): Chicken Biryani is sold from Cooked
+   * Chicken Biryani, each size's recipe is its portion of it. Missing = cooked to order, or not linked.
+   */
+  preparedItemId?: Uuid | null;
 }
 
 /** Snapshot of the chosen add-on, copied at order time */
@@ -485,6 +490,11 @@ export interface MenuSetup {
   items: MenuItem[];
   addonGroups: { group: ModifierGroup; itemCount: number }[];
   stations: KitchenStation[];
+  /**
+   * Each item's recipe (only for people who may see recipes): VERIFIED when every size is, NONE when no size has one, else
+   * DRAFT; and the cooked dish it is sold from.
+   */
+  recipes?: Record<Uuid, { state: 'NONE' | 'DRAFT' | 'VERIFIED'; preparedName: string | null }>;
 }
 
 /** Everything a staff order screen needs to show the menu. */

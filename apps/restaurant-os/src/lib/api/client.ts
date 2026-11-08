@@ -333,6 +333,27 @@ export interface RecipeInput {
   verify: boolean;
 }
 
+/**
+ * Sell a cooked dish on the POS (owner's integration brief, 2026-11-08): link it to the menu product that is the same dish, or
+ * make that product once. Each size's recipe becomes its portion of the dish (old recipe versions stay).
+ */
+export interface SellPreparedInput {
+  preparedId: Uuid;
+  /** Link to this menu product; null = a new product with the fields below */
+  menuItemId: Uuid | null;
+  name: string;
+  /** null = a new category called newCategoryName */
+  categoryId: Uuid | null;
+  newCategoryName: string;
+  stationId: Uuid;
+  isOnline: boolean;
+  /**
+   * One row per size: one row = one price, two or more = sizes (Full plate, Half plate). Linking: the product's sizes as he
+   * changed them (variantId of a size kept, null = new); names and prices go to the Menu in the same step.
+   */
+  sizes: { variantId: Uuid | null; name: string; price: number | null; portionMilli: number }[];
+}
+
 /** One size in Auto Scale (Recipe Builder R2). */
 export interface ScaledSizeInput {
   /** null = a new size: added to the Menu with this name and price (only with updateMenu) */
@@ -669,6 +690,8 @@ export interface ApiClient {
   saveScaledRecipe(input: ScaledRecipeInput): Promise<RecipeScale>;
   /** Auto Scale off: every size keeps the recipe it has and is edited on its own again. */
   turnOffRecipeScale(menuItemId: Uuid): Promise<void>;
+  /** A cooked dish on the POS: the same menu product linked, or made once; each size's recipe = its portion (one step). */
+  sellPreparedItem(input: SellPreparedInput): Promise<MenuItem>;
   /** A supplier added from the ingredient form (name + phone). */
   addSupplier(input: SupplierInput): Promise<Supplier>;
   /** Suppliers S1: every supplier with today's purchases, what we owe and the status. */

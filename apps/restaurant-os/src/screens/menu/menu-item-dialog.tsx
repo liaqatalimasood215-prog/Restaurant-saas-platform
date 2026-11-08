@@ -10,6 +10,7 @@ import {
   cleanName,
   paisaToInput,
   parseRupees,
+  sameName,
   type MenuItem,
   type MenuSetup,
 } from '@restaurant-saas/shared';
@@ -86,9 +87,10 @@ export function MenuItemDialog({
       isOnline,
       position: /^\d+$/.test(position.trim()) ? Number(position) : null,
     };
-    const taken = inCategory(categoryId).filter((i) => i.id !== item?.id).map((i) => i.name);
-    const check = checkMenuItem({ name, description, price: input.price, sizes: input.sizes }, taken);
-    if (check) return setError(menuProblemText(check, cleanName(name), category?.name ?? ''));
+    // One product once in the whole menu (owner, 2026-11-08): the message names the category that already has it
+    const clash = setup.items.find((i) => i.id !== item?.id && sameName(i.name, name));
+    const check = checkMenuItem({ name, description, price: input.price, sizes: input.sizes }, clash ? [clash.name] : []);
+    if (check) return setError(menuProblemText(check, cleanName(name), (clash && categories.find((c) => c.id === clash.categoryId)?.name) || (category?.name ?? '')));
     setBusy(true);
     setError(null);
     try {

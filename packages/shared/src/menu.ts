@@ -81,6 +81,33 @@ export function checkMenuItem(item: MenuItemRule, takenNamesInCategory: readonly
   return null;
 }
 
+// ── One product, made once (owner's integration brief, 2026-11-08) ──────────────────────────
+
+/** Words that say how the kitchen keeps a dish, not which dish it is */
+const KEEP_WORDS = new Set(['cooked', 'prepared']);
+
+/**
+ * The dish a name means, to find the same product twice: case, brackets and punctuation do not count, and neither do
+ * "Cooked" / "Prepared" ("Cooked Chicken Biryani" and "chicken biryani" are one dish).
+ */
+export function dishKey(name: string): string {
+  return name
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word && !KEEP_WORDS.has(word))
+    .join(' ');
+}
+
+export function sameDish(a: string, b: string): boolean {
+  const key = dishKey(a);
+  return key !== '' && key === dishKey(b);
+}
+
+/** The name a cooked dish gets on the menu: "Cooked Chicken Biryani" → "Chicken Biryani". */
+export function menuNameFor(preparedName: string): string {
+  return cleanName(preparedName.replace(/^\s*(cooked|prepared)\s+/i, '')) || cleanName(preparedName);
+}
+
 export interface AddonGroupRule {
   name: string;
   minSelect: number;

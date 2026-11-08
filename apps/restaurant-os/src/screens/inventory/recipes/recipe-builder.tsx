@@ -124,7 +124,18 @@ function sizeQuantity(name: string, unit: ScaleUnit, baseMilli: number): number 
  * size (½ kg = half of every line); a size can get its own quantities ("Custom") and go back to Auto. Prices typed here
  * reach the Menu only after the owner confirms (new bills only).
  */
-export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubject; view: RecipesView; onClose: () => void }) {
+export function RecipeBuilder({
+  subject,
+  view,
+  onClose,
+  onNewPrepared,
+}: {
+  subject: EditorSubject;
+  view: RecipesView;
+  onClose: () => void;
+  /** A new prepared item was saved: the Recipes screen asks whether it is sold on the POS */
+  onNewPrepared?: (preparedId: string) => void;
+}) {
   const toast = useToast();
   const { allowed } = useSession();
   const canEditMenu = allowed('menu.manage');
@@ -509,6 +520,7 @@ export function RecipeBuilder({ subject, view, onClose }: { subject: EditorSubje
         title: verify ? t('inventory.recipes.editor.savedVerified') : t('inventory.recipes.editor.saved'),
       });
       onClose();
+      if (subject.kind === 'PREPARED' && !prepared) onNewPrepared?.(preparedId);
     } catch (err) {
       setError({
         key: active,

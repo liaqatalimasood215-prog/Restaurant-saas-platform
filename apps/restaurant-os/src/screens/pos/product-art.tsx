@@ -10,6 +10,7 @@ const ART: { match: RegExp; icon: typeof Pizza; emoji: string; tone: string }[] 
   { match: /pizza/i, icon: Pizza, emoji: '🍕', tone: 'from-orange-100 to-red-100' },
   { match: /burger/i, icon: Hamburger, emoji: '🍔', tone: 'from-amber-100 to-orange-100' },
   { match: /karahi|handi|salan/i, icon: Soup, emoji: '🍲', tone: 'from-orange-100 to-red-50' },
+  { match: /biryani|pulao|rice/i, icon: Soup, emoji: '🍛', tone: 'from-amber-100 to-yellow-50' },
   { match: /tikka|kabab|kebab|boti|bbq|seekh/i, icon: Drumstick, emoji: '🍢', tone: 'from-orange-100 to-amber-50' },
   { match: /fish/i, icon: Fish, emoji: '🐟', tone: 'from-sky-100 to-orange-50' },
   { match: /daal|lentil/i, icon: Soup, emoji: '🍛', tone: 'from-amber-100 to-yellow-50' },

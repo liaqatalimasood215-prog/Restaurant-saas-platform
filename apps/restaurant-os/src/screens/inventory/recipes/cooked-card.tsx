@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { BadgeCheck, ChevronDown, ChevronRight, Coins, Eye, Link2, Package, Pencil, Receipt, TriangleAlert, CircleCheck, CircleX } from 'lucide-react';
+import { BadgeCheck, ChevronDown, ChevronRight, Coins, Eye, Link2, Package, Pencil, Receipt, Store, TriangleAlert, CircleCheck, CircleX } from 'lucide-react';
 import {
   MILLI,
   currentVersion,
@@ -116,6 +116,38 @@ function InfoLine({ icon: Icon, label, children, title }: { icon: typeof Package
   );
 }
 
+/**
+ * Where the dish is sold (owner's integration brief, 2026-11-08): the menu products made from it, or "Not on POS". Tapping it
+ * opens Sell on POS (link the same menu product, or make it once; change the portions).
+ */
+function PosLine({ row, onSell }: { row: PreparedRow; onSell?: () => void }) {
+  const names = (row.soldAs ?? []).map((s) => s.name);
+  const value = names.length ? (
+    <span className="text-green-700" data-on-pos>
+      {names.join(', ')}
+    </span>
+  ) : (
+    <span className="text-slate-500" data-on-pos="none">
+      {t('inventory.recipes.sell.notOnPos')}
+    </span>
+  );
+  if (!onSell) return <InfoLine icon={Store} label={t('inventory.recipes.sell.line')}>{value}</InfoLine>;
+  return (
+    <button
+      type="button"
+      onClick={onSell}
+      aria-label={t('inventory.recipes.sell.buttonFor', { name: row.ingredient.name })}
+      className="press -mx-1 flex w-[calc(100%+0.5rem)] items-center gap-1.5 rounded-md px-1 text-left text-[13px] leading-snug text-slate-600 hover:bg-brand-soft/50"
+      data-sell-line
+    >
+      <Store className="size-3.5 shrink-0 text-brand" aria-hidden />
+      <span className="shrink-0">{t('inventory.recipes.sell.line')}</span>
+      <span className="min-w-0 truncate font-bold">{value}</span>
+      {names.length === 0 && <span className="ml-auto shrink-0 font-bold text-brand">{t('inventory.recipes.sell.button')}</span>}
+    </button>
+  );
+}
+
 const BUTTON = 'press flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-3 text-[13px] font-bold';
 
 function EditButton({ name, onEdit }: { name: string; onEdit: () => void }) {
@@ -140,6 +172,7 @@ export function CookedCard({
   byId,
   canManage,
   onEdit,
+  onSell,
   layout = 'grid',
   purchases = [],
 }: {
@@ -149,6 +182,8 @@ export function CookedCard({
   byId: ReadonlyMap<string, Ingredient>;
   canManage: boolean;
   onEdit: () => void;
+  /** Sell on POS (Owner / Manager with the Menu too) */
+  onSell?: () => void;
   layout?: CardLayout;
   /** P3: each supplier purchase of its main ingredient with its own recipe, newest first */
   purchases?: PurchaseRecipeRow[];
@@ -209,6 +244,7 @@ export function CookedCard({
         </span>
         <ChevronDown className={cn('ml-auto size-3.5 shrink-0 text-slate-400 transition-transform', showPurchases && 'rotate-180')} aria-hidden />
       </button>
+      <PosLine row={row} onSell={onSell} />
     </div>
   );
 
@@ -299,7 +335,7 @@ export function CookedCard({
 }
 
 /** Any other prepared item (naan dough, sauces) in the same compact card: what one batch makes and what it costs. */
-export function PreparedCard({ row, canManage, onEdit, layout = 'grid' }: { row: PreparedRow; canManage: boolean; onEdit: () => void; layout?: CardLayout }) {
+export function PreparedCard({ row, canManage, onEdit, onSell, layout = 'grid' }: { row: PreparedRow; canManage: boolean; onEdit: () => void; onSell?: () => void; layout?: CardLayout }) {
   const yieldMilli = row.recipe ? currentVersion(row.recipe)?.yieldMilli : null;
   const unit = displayUnitOf(row.ingredient);
   const list = layout === 'list';
@@ -320,6 +356,7 @@ export function PreparedCard({ row, canManage, onEdit, layout = 'grid' }: { row:
               <InfoLine icon={Coins} label={t('inventory.recipes.cooked.recipeCost')}>
                 <span data-unit-cost>{row.unitCost === null ? '—' : t('inventory.recipes.unitCost', { price: formatPaisa(row.unitCost), unit: unitLabel(unit, MILLI) })}</span>
               </InfoLine>
+              <PosLine row={row} onSell={onSell} />
             </div>
           </div>
         </div>

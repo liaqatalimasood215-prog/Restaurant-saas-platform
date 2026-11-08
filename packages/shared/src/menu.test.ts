@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cardPrice, checkAddonGroup, checkMenuItem, paisaToInput, parseRupees } from './index';
+import { cardPrice, checkAddonGroup, checkMenuItem, dishKey, guessPortionMilli, menuNameFor, paisaToInput, parseRupees, portionLines, sameDish } from './index';
 
 test('prices are typed in rupees and kept in paisa', () => {
   assert.equal(parseRupees('850'), 85_000);
@@ -38,4 +38,26 @@ test('a product card shows the first size (1 kg), not the cheapest (Pao); no siz
   const karahi = { basePrice: 80_000, variants: [{ name: 'Pao', price: 80_000, sort: 3 }, { name: '1 kg', price: 280_000, sort: 1 }, { name: '½ kg', price: 150_000, sort: 2 }] };
   assert.deepEqual(cardPrice(karahi), { price: 280_000, sizeName: '1 kg' });
   assert.deepEqual(cardPrice({ basePrice: 45_000, variants: [] }), { price: 45_000, sizeName: null });
+});
+
+test('one dish, one product: "Cooked Chicken Biryani" is the menu\'s Chicken Biryani, never a second product', () => {
+  assert.equal(dishKey('Cooked Chicken Biryani'), 'chicken biryani');
+  assert.equal(dishKey(' Cooked Rice (zeera) '), 'rice zeera');
+  assert.ok(sameDish('Cooked Daal Mash', 'daal  mash'));
+  assert.ok(!sameDish('Cooked Daal Mash', 'Daal Chana'));
+  assert.ok(!sameDish('Cooked', 'Prepared'), 'a name of only these words is no dish');
+  assert.equal(menuNameFor('Cooked Chicken Biryani'), 'Chicken Biryani');
+  assert.equal(menuNameFor('Naan dough'), 'Naan dough');
+});
+
+test('a size sold from a cooked dish takes its portion: weights by name, plates and packings by the owner\'s estimates', () => {
+  assert.equal(guessPortionMilli('Full plate'), 250_000);
+  assert.equal(guessPortionMilli('Half plate'), 125_000);
+  assert.equal(guessPortionMilli('Full packing'), 500_000);
+  assert.equal(guessPortionMilli('Half packing'), 250_000);
+  assert.equal(guessPortionMilli('½ kg'), 500_000);
+  assert.equal(guessPortionMilli('1 kg'), 1_000_000);
+  assert.equal(guessPortionMilli('Pao'), 250_000);
+  assert.equal(guessPortionMilli(null), 250_000, 'no sizes: one plate');
+  assert.deepEqual(portionLines('biryani', 250_000), [{ ingredientId: 'biryani', quantityMilli: 250_000, lossBps: 0, optional: false, substituteId: null }]);
 });
