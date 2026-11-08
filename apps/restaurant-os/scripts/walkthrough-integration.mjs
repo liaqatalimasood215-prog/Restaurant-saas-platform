@@ -289,6 +289,50 @@ try {
   await builder(owner).waitFor({ state: 'detached' });
   ok('Add Recipe lists the menu products (no recipe first) and opens the builder on Chicken White Karahi');
 
+  console.log('\nI2. Order lines keep the size id, add-on ids and recipe versions; the kitchen sees the whole pot');
+  await pos.goto(`${BASE_URL}/pos`, { waitUntil: 'networkidle' });
+  const addKarahi = async (name, size, note, addon) => {
+    await pos.getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
+    await dialog(pos).getByRole('button', { name: new RegExp(`^${size}`) }).click();
+    if (addon) await dialog(pos).getByRole('button', { name: /^Extra makhan/ }).click();
+    if (note) await dialog(pos).getByPlaceholder('e.g. no onion').fill(note);
+    await dialog(pos).getByRole('button', { name: /^Add ·/ }).click();
+    await dialog(pos).waitFor({ state: 'detached' });
+  };
+  await addKarahi('Chicken Karahi', '1 kg', 'less spicy', true);
+  await addKarahi('Chicken Karahi', '½ kg', 'extra spicy', false);
+  await addKarahi('Mutton Karahi', 'Pao', '', false);
+  await bill(pos).getByRole('button', { name: 'Send to Kitchen' }).click();
+  await pos.getByText(/Order #\d+/).first().waitFor();
+  data = await saved(pos);
+  const order = data.orders.at(-1);
+  const chickenLines = order.items.filter((i) => i.name === 'Chicken Karahi');
+  const karahiItem = data.items.find((i) => i.name === 'Chicken Karahi');
+  const verified = (target) => {
+    const recipe = data.inventory.recipes.find((r) => JSON.stringify(r.target) === JSON.stringify(target));
+    return [...(recipe?.versions ?? [])].reverse().find((v) => v.status === 'VERIFIED')?.version;
+  };
+  const kg = karahiItem.variants.find((v) => v.name === '1 kg');
+  const makhan = data.modifierGroups.flatMap((g) => g.modifiers).find((m) => m.name.startsWith('Extra makhan'));
+  assert.equal(chickenLines.length, 2, 'two lines: each keeps its own note');
+  assert.equal(chickenLines[0].variantId, kg.id);
+  assert.deepEqual(chickenLines[0].modifierIds, [makhan.id]);
+  assert.equal(chickenLines[0].recipeVersions[`item:${kg.id}`], verified({ kind: 'ITEM', menuItemId: karahiItem.id, variantId: kg.id }));
+  assert.ok(chickenLines[0].recipeVersions[`item:${kg.id}`] >= 1, 'Chicken Karahi 1 kg has a verified recipe');
+  assert.equal(chickenLines[0].recipeVersions[`addon:${makhan.id}`], verified({ kind: 'ADDON', modifierId: makhan.id }));
+  const mutton = order.items.find((i) => i.name === 'Mutton Karahi');
+  assert.deepEqual(mutton.recipeVersions, {}, 'Mutton Karahi\'s recipe is a draft: Not tracked');
+  const kitchen = await openAs(USER.owner, '/kitchen', DESKTOP);
+  const total = kitchen.locator('main [data-dish-total="Chicken Karahi"]').first();
+  await total.waitFor({ timeout: 6_000 });
+  assert.equal(await total.innerText(), 'Total Chicken Karahi: 1.5 kg');
+  await kitchen.locator('main').getByText('“less spicy”').first().waitFor();
+  await kitchen.locator('main').getByText('“extra spicy”').first().waitFor();
+  assert.equal(await kitchen.locator('main [data-dish-total="Mutton Karahi"]').count(), 0, 'one line: no total');
+  await total.scrollIntoViewIfNeeded();
+  await shot(kitchen, '10-desktop-kitchen-total');
+  ok('lines keep size id, add-on ids and verified recipe versions (Mutton Karahi draft = Not tracked); kitchen: two notes apart and "Total Chicken Karahi: 1.5 kg"');
+
   console.log('\n   Manager, phone and laptop');
   const manager = await openAs(USER.manager, '/inventory', DESKTOP);
   await openPrepared(manager);
@@ -311,7 +355,7 @@ try {
   ok('Manager may Sell on POS; phone 390 × 844 and laptop 1278 × 627 without sideways scroll');
 
   assert.deepEqual(errors, [], 'no page errors');
-  console.log('\nAll integration (I1) checks passed.');
+  console.log('\nAll integration (I1, I2) checks passed.');
 } catch (err) {
   console.error('\nFAILED:', err);
   process.exitCode = 1;

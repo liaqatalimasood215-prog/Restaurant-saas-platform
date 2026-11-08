@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canMixSizes, formatKg, sizeGrams, sizeMixFor } from './index';
+import { canMixSizes, dishTotals, formatKg, lineRecipeTargets, sizeGrams, sizeMixFor } from './index';
 
 const karahi = {
   variants: [
@@ -68,4 +68,29 @@ test('plates and packings mix too (owner, 2026-11-08): Full plate + Half plate i
   assert.equal(canMixSizes(biryani), true);
   assert.equal(sizeMixFor(biryani, [{ variantId: 'kg', quantity: 1 }, { variantId: 'full', quantity: 1 }])?.label, '1 kg + Full plate');
   assert.equal(canMixSizes({ variants: [...daal.variants, { id: 's', name: 'Small', price: 1, sort: 3 }] }), false);
+});
+
+test('kitchen total of one dish in several lines: weights add up, plates are counted, voids do not count (owner, 2026-11-08)', () => {
+  const line = (variantName: string | null, quantity = 1, extra: object = {}) => ({ menuItemId: 'karahi', name: 'Chicken Karahi', variantName, quantity, unit: 'piece' as const, isVoid: false, ...extra });
+  assert.deepEqual(dishTotals([line('1 kg'), line('½ kg')]), [{ menuItemId: 'karahi', name: 'Chicken Karahi', kind: 'WEIGHT', grams: 1500 }]);
+  // A mixed line and a plain one: 1.5 kg + 2 × Pao = 2 kg
+  assert.deepEqual(dishTotals([line('1.5 kg: 1 kg + ½ kg', 1, { sizeMix: [{ variantId: 'a', quantity: 1 }, { variantId: 'b', quantity: 1 }] }), line('Pao', 2)]), [
+    { menuItemId: 'karahi', name: 'Chicken Karahi', kind: 'WEIGHT', grams: 2000 },
+  ]);
+  assert.deepEqual(dishTotals([line('Full plate', 2), line('2 × Full plate + Half plate', 1, { sizeMix: [{ variantId: 'f', quantity: 2 }, { variantId: 'h', quantity: 1 }] })]), [
+    { menuItemId: 'karahi', name: 'Chicken Karahi', kind: 'SIZES', sizes: [{ name: 'Full plate', count: 4 }, { name: 'Half plate', count: 1 }] },
+  ]);
+  assert.deepEqual(dishTotals([line(null, 2), line(null, 3)]), [{ menuItemId: 'karahi', name: 'Chicken Karahi', kind: 'COUNT', quantity: 5, unit: 'piece' }]);
+  assert.deepEqual(dishTotals([line('1 kg'), line('½ kg', 1, { isVoid: true })]), [], 'one line left: no total');
+  assert.deepEqual(dishTotals([line('1 kg')]), []);
+});
+
+test('an order line names the recipes it uses: its size(s) or the item, then each add-on', () => {
+  assert.deepEqual(
+    lineRecipeTargets({ menuItemId: 'k', variantId: 'kg', modifierIds: ['makhan'] }).map((r) => r.key),
+    ['item:kg', 'addon:makhan'],
+  );
+  assert.deepEqual(lineRecipeTargets({ menuItemId: 'k', variantId: null, sizeMix: [{ variantId: 'kg' }, { variantId: 'half' }] }).map((r) => r.key), ['item:kg', 'item:half']);
+  assert.deepEqual(lineRecipeTargets({ menuItemId: 'roti' })[0], { key: 'item:base', target: { kind: 'ITEM', menuItemId: 'roti', variantId: null } });
+  assert.deepEqual(lineRecipeTargets({ menuItemId: null }), []);
 });

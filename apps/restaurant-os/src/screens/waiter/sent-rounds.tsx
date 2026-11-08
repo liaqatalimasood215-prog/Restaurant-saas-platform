@@ -3,10 +3,10 @@
 import type { KitchenStation, Order, OrderItem } from '@restaurant-saas/shared';
 import { formatPaisa, formatQuantity } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { clockTime } from '@/lib/format';
+import { PickupControls } from './pickup-controls';
 import { TICKET_TONES } from '@/lib/tones';
 
 /** Rounds already sent: one block per kitchen ticket, with its live status, Served and Void. */
@@ -17,6 +17,8 @@ export function SentRounds({
   canVoid,
   busy,
   onServe,
+  onPickUp,
+  onUndoPickup,
   onVoid,
 }: {
   order: Order;
@@ -25,6 +27,9 @@ export function SentRounds({
   canVoid: boolean;
   busy: boolean;
   onServe: (ticketId: string) => void;
+  /** Picked up at the pass and its Undo (owner, 2026-11-09) */
+  onPickUp: (ticketId: string) => void;
+  onUndoPickup: (ticketId: string) => void;
   onVoid: (item: OrderItem) => void;
 }) {
   const rounds = [...new Set(order.tickets.map((tk) => tk.roundNo))].sort((a, b) => a - b);
@@ -78,9 +83,9 @@ export function SentRounds({
                       ))}
                   </ul>
                   {canServe && ticket.status === 'READY' && order.type === 'DINE_IN' && (
-                    <Button variant="outline" className="mt-3 w-full" disabled={busy} onClick={() => onServe(ticket.id)}>
-                      {t('waiter.served')}
-                    </Button>
+                    <div className="mt-3">
+                      <PickupControls ticket={ticket} busy={busy} size="md" onPickUp={onPickUp} onUndo={onUndoPickup} onServe={onServe} />
+                    </div>
                   )}
                 </li>
               ))}

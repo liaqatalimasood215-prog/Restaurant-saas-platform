@@ -36,6 +36,8 @@ const shot = async (page, name) => {
   console.log(`    screenshot ${name}.png`);
 };
 const waitText = (scope, text, timeout = 6_000) => scope.getByText(text).first().waitFor({ timeout });
+// Kitchen ticket of an order (owner's KDS picture, 2026-11-08): "#2" with its type (Takeaway, Delivery) beside it
+const kdsTicket = (page, type, n) => page.locator(`main [data-kds-order="${n}"]`, { hasText: type }).first();
 const card = (page, n) => page.locator(`[data-order-number="${n}"]`);
 const waitStatus = (page, n, status) => card(page, n).getByText(status, { exact: true }).first().waitFor({ timeout: 6_000 });
 const ok = (message) => console.log(`  ✓ ${message}`);
@@ -60,7 +62,7 @@ await waitStatus(cashier, 1, 'Accepted');
 ok('accepted with 30 minutes (double tap safe)');
 
 const pizzaChef = await openAs(USER.pizzaChef, '/kitchen', TABLET);
-await waitText(pizzaChef, 'Delivery #1');
+await kdsTicket(pizzaChef, 'Delivery', 1).waitFor({ timeout: 6_000 });
 await shot(pizzaChef, '02-tablet-pizza-chef-delivery-ticket');
 await pizzaChef.getByRole('button', { name: 'Start', exact: true }).click();
 await cashier.bringToFront();
@@ -98,9 +100,9 @@ await cashier.getByRole('dialog').last().getByRole('button', { name: /^Add ·/ }
 await cashier.getByRole('dialog').first().getByRole('button', { name: 'Send to kitchen' }).click();
 await card(cashier, 2).waitFor();
 const burgerChef = await openAs(USER.burgerChef, '/kitchen', TABLET);
-await waitText(burgerChef, 'Takeaway #2');
+await kdsTicket(burgerChef, 'Takeaway', 2).waitFor({ timeout: 6_000 });
 await burgerChef.getByRole('button', { name: 'Start', exact: true }).click();
-await burgerChef.locator('article', { hasText: 'Takeaway #2' }).getByRole('button', { name: 'Ready', exact: true }).click();
+await kdsTicket(burgerChef, 'Takeaway', 2).getByRole('button', { name: 'Ready', exact: true }).click();
 await cashier.bringToFront();
 await waitStatus(cashier, 2, 'Ready');
 await card(cashier, 2).getByRole('button', { name: 'Record Payment' }).click();

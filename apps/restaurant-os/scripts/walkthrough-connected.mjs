@@ -193,7 +193,8 @@ await superWaiter.getByRole('dialog').getByRole('button', { name: /^Add ·/ }).c
 await superWaiter.getByRole('tab', { name: /^Order/ }).click();
 await superWaiter.getByRole('button', { name: 'Send to kitchen' }).click();
 await chef.bringToFront();
-await see(chef, '1 × Classic Pizza');
+// Kitchen card (owner's KDS picture, 2026-11-08): name, size chip, "×1"
+await chef.locator('main [data-kds-line="Classic Pizza"]', { hasText: '×1' }).first().waitFor({ timeout: 10_000 });
 await heard(chef, 'Kitchen mein naya order');
 ok('Send to kitchen: the chef sees the ticket without a reload and hears "Kitchen mein naya order aaya hai"');
 await shot(chef, '06-tablet-chef-table-ticket');

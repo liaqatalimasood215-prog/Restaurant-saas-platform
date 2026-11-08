@@ -157,3 +157,74 @@ export function ticketTimerLevel(
   if (minutes >= warnMinutes) return 'WARN';
   return 'ON_TIME';
 }
+
+// ── Pickup at the pass (owner, 2026-11-09) ─────────────────────────────────────────────────────
+
+/**
+ * Three separate steps: the kitchen marks Ready; the waiter (dine-in), the rider (delivery) or the counter (takeaway) picks the
+ * food up; the waiter serves it at the table. A picked-up card stays on the KDS for PICKUP_VISIBLE_MS (with Undo for a dine-in
+ * pickup), then hides; nothing is deleted. Food nobody picks up stays, with a reminder after READY_REMINDER_MS. Both times are
+ * named here so a branch setting can change them later.
+ * Roman Urdu: Ready → Picked up → Served, teen alag qadam. Utha liya to 5 minute baad card chhup jata hai; 10 minute tak koi
+ * na aaye to yaad-dihani.
+ */
+export const PICKUP_VISIBLE_MS = 5 * 60 * 1000;
+export const READY_REMINDER_MS = 10 * 60 * 1000;
+
+/** Delivery and takeaway food leaves the pass with these order steps: the rider's "On the way", the counter's "Picked up". */
+const ORDER_PICKUP_STATUSES: readonly OrderStatus[] = ['OUT_FOR_DELIVERY', 'DELIVERED', 'PICKED_UP'];
+
+export interface TicketPickup {
+  at: string;
+  byId: string | null;
+  /** TICKET = a waiter's Picked up (may be undone for 5 minutes); SERVED = served without a pickup first; ORDER = the rider or counter step */
+  source: 'TICKET' | 'SERVED' | 'ORDER';
+}
+
+/** When and how a ticket's food left the pass, or null while it is still there. */
+export function ticketPickup(
+  ticket: { status: TicketStatus; servedAt: string | null; pickedUpAt?: string | null; pickedUpBy?: string | null },
+  order: { type: OrderType; history: readonly { toStatus: OrderStatus; changedBy: string | null; changedAt: string }[] },
+): TicketPickup | null {
+  if (ticket.pickedUpAt) return { at: ticket.pickedUpAt, byId: ticket.pickedUpBy ?? null, source: 'TICKET' };
+  if (ticket.status === 'SERVED' && ticket.servedAt) return { at: ticket.servedAt, byId: null, source: 'SERVED' };
+  if (order.type !== 'DINE_IN') {
+    const step = order.history.find((h) => ORDER_PICKUP_STATUSES.includes(h.toStatus));
+    if (step) return { at: step.changedAt, byId: step.changedBy, source: 'ORDER' };
+  }
+  return null;
+}
+
+/** On the KDS: still to do or waiting at the pass (ACTIVE), picked up in the last 5 minutes (PICKED_UP), or gone (HIDDEN). */
+export function kdsState(pickup: Pick<TicketPickup, 'at'> | null, now: number): 'ACTIVE' | 'PICKED_UP' | 'HIDDEN' {
+  if (!pickup) return 'ACTIVE';
+  return now - Date.parse(pickup.at) < PICKUP_VISIBLE_MS ? 'PICKED_UP' : 'HIDDEN';
+}
+
+/** Ready and still at the pass for READY_REMINDER_MS or longer. */
+export function waitingTooLong(ticket: { status: TicketStatus; readyAt: string | null }, pickedUp: boolean, now: number): boolean {
+  return ticket.status === 'READY' && !pickedUp && ticket.readyAt !== null && now - Date.parse(ticket.readyAt) >= READY_REMINDER_MS;
+}
+
+export type PickupFailure = 'WRONG_ROLE' | 'DINE_IN_ONLY' | 'NOT_READY' | 'NOT_PICKED_UP' | 'ALREADY_SERVED' | 'UNDO_EXPIRED' | 'NOT_OWN_STATION';
+
+/**
+ * Picked up: a dine-in ticket that is READY, by someone who may serve food (Owner, Manager, waiters). Delivery and takeaway are
+ * picked up by the rider's and the counter's own order steps.
+ */
+export function checkPickup(input: { role: StaffRole; orderType: OrderType; status: TicketStatus }): PickupFailure | null {
+  if (!can(input.role, 'ticket.serve')) return 'WRONG_ROLE';
+  if (input.orderType !== 'DINE_IN') return 'DINE_IN_ONLY';
+  if (input.status !== 'READY') return input.status === 'SERVED' ? 'ALREADY_SERVED' : 'NOT_READY';
+  return null;
+}
+
+/** Undo a waiter's pickup while the card is still on the KDS (5 minutes) and the food is not served; the kitchen may too (own stations). */
+export function checkUndoPickup(input: { role: StaffRole; status: TicketStatus; pickedUpAt: string | null | undefined; isOwnStation?: boolean; now: number }): PickupFailure | null {
+  if (!can(input.role, 'ticket.serve') && !can(input.role, 'ticket.update')) return 'WRONG_ROLE';
+  if (input.role === 'KITCHEN' && !input.isOwnStation) return 'NOT_OWN_STATION';
+  if (!input.pickedUpAt) return 'NOT_PICKED_UP';
+  if (input.status === 'SERVED') return 'ALREADY_SERVED';
+  if (input.now - Date.parse(input.pickedUpAt) >= PICKUP_VISIBLE_MS) return 'UNDO_EXPIRED';
+  return null;
+}

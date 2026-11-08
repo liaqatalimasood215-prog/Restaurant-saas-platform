@@ -11,6 +11,7 @@ import { playTone, speak, unlockSound, vibrate, type AlertTone } from '@/lib/sou
 
 const NotificationsContext = createContext<StaffNotification[]>([]);
 const ALARM_REPEAT_MS = 5000;
+const REMINDER_CHECK_MS = 30_000;
 
 export function itemsText(items: NotificationItem[]): string {
   return items
@@ -21,7 +22,7 @@ export function itemsText(items: NotificationItem[]): string {
 export function notificationTitle(n: StaffNotification): string {
   switch (n.kind) {
     case 'FOOD_READY':
-      return t('alerts.foodReady', { table: n.tableName, station: n.stationName });
+      return n.reminder ? t('alerts.foodWaiting', { table: n.tableName, station: n.stationName }) : t('alerts.foodReady', { table: n.tableName, station: n.stationName });
     case 'BILL_REQUESTED':
       return t('alerts.billRequested', { table: n.tableName });
     case 'BILL_ACCEPTED':
@@ -64,7 +65,7 @@ const ALERT_ORDER: StaffNotification['kind'][] = ['ONLINE_ORDER', 'WAITER_CALLED
 
 /** What the device says aloud: Roman Urdu, and Urdu or Hindi for devices with that voice (lib/sound.ts). */
 function notificationSpeech(n: StaffNotification): { roman: string; urdu: string; hindi: string } {
-  const say = (key: 'onlineOrder' | 'waiterCalled' | 'bill' | 'billAccepted' | 'foodReady' | 'counterReady', vars?: Record<string, string | number>) => ({
+  const say = (key: 'onlineOrder' | 'waiterCalled' | 'bill' | 'billAccepted' | 'foodReady' | 'foodWaiting' | 'counterReady', vars?: Record<string, string | number>) => ({
     roman: t(`alerts.speech.${key}.roman`, vars),
     urdu: t(`alerts.speech.${key}.urdu`, vars),
     hindi: t(`alerts.speech.${key}.hindi`, vars),
@@ -79,7 +80,7 @@ function notificationSpeech(n: StaffNotification): { roman: string; urdu: string
     case 'BILL_ACCEPTED':
       return say('billAccepted', { table: n.tableName });
     case 'FOOD_READY':
-      return say('foodReady', { table: n.tableName });
+      return say(n.reminder ? 'foodWaiting' : 'foodReady', { table: n.tableName });
     case 'COUNTER_READY':
       return say('counterReady', { n: n.dailyNumber });
   }
@@ -125,7 +126,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
 /** Keyed by user: after a login the notifications that already exist are not announced again. */
 function NotificationsWatcher({ onChange }: { onChange: (list: StaffNotification[]) => void }) {
-  const { data } = useApiQuery(() => getApi().listNotifications(), []);
+  const { data, reload } = useApiQuery(() => getApi().listNotifications(), []);
+  // Some alerts come with time (food still at the pass after 10 minutes, owner 2026-11-09): look again every 30 seconds
+  useEffect(() => {
+    const id = setInterval(reload, REMINDER_CHECK_MS);
+    return () => clearInterval(id);
+  }, [reload]);
   const seen = useRef<Set<string> | null>(null);
   const toast = useToast();
 

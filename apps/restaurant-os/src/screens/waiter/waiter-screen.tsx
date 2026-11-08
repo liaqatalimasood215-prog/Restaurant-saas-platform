@@ -368,6 +368,8 @@ function OrderWorkspace({
                   canVoid={allowed('item.void')}
                   busy={busy}
                   onServe={(ticketId) => run(() => getApi().updateTicket(ticketId, 'SERVED'))}
+                  onPickUp={(ticketId) => run(() => getApi().pickUpTicket(ticketId))}
+                  onUndoPickup={(ticketId) => run(() => getApi().undoPickup(ticketId))}
                   onVoid={setVoidTarget}
                 />
               ) : (

@@ -51,6 +51,8 @@ const shot = async (page, name) => {
 };
 // Screens reload after each change (simulated network delay), so checks wait for the new state.
 const waitText = (page, text, timeout = 6_000) => page.getByText(text).first().waitFor({ timeout });
+// Kitchen card line (owner's KDS picture, 2026-11-08): item name, size chip, then "×2" or "1 kg"
+const kdsLine = (page, name, quantity) => page.locator(`main [data-kds-line="${name}"]`, { hasText: quantity }).first();
 const expectBill = (page, total) =>
   page.locator('dt:has-text("Running bill") + dd', { hasText: total }).waitFor({ timeout: 6_000 });
 
@@ -106,13 +108,14 @@ await shot(superWaiter, '02-phone-super-waiter-round-1-sent');
 
 console.log('2. Each chef sees only their own station');
 const pizzaChef = await openAs(USER.pizzaChef, '/kitchen', TABLET);
-await waitText(pizzaChef, '2 × Classic Pizza');
+await kdsLine(pizzaChef, 'Classic Pizza', '×2').waitFor({ timeout: 6_000 });
 const pizzaText = await pizzaChef.locator('main').innerText();
 assert.ok(!pizzaText.includes('Zinger') && pizzaText.includes('T5') && pizzaText.includes('#1'));
 const burgerChef = await openAs(USER.burgerChef, '/kitchen', TABLET);
-await waitText(burgerChef, '4 × Zinger Burger');
+await kdsLine(burgerChef, 'Zinger Burger', '×4').waitFor({ timeout: 6_000 });
+await kdsLine(burgerChef, 'Loaded Fries', '×2').waitFor();
 const burgerText = await burgerChef.locator('main').innerText();
-assert.ok(burgerText.includes('2 × Loaded Fries') && !burgerText.includes('Classic Pizza') && burgerText.includes('T5') && burgerText.includes('#1'));
+assert.ok(!burgerText.includes('Classic Pizza') && burgerText.includes('T5') && burgerText.includes('#1'));
 ok('Pizza Chef: only pizzas; Burger Chef: only burgers + fries; both show T5, order #1');
 await shot(pizzaChef, '03-tablet-pizza-chef');
 
@@ -148,7 +151,7 @@ await sendRound(superWaiter);
 await expectBill(superWaiter, 'Rs. 5,900');
 ok('running bill Rs. 5,900');
 const headChef = await openAs(USER.headChef, '/kitchen', TABLET);
-await waitText(headChef, '2 × Alfredo Pasta');
+await kdsLine(headChef, 'Alfredo Pasta', '×2').waitFor({ timeout: 6_000 });
 await headChef.locator('article', { hasText: 'Alfredo Pasta' }).getByRole('button', { name: 'Start', exact: true }).click();
 await headChef.locator('article', { hasText: 'Alfredo Pasta' }).getByRole('button', { name: 'Ready', exact: true }).click();
 await serviceWaiter.bringToFront();
@@ -168,12 +171,12 @@ await addItem(superWaiter, 'Zinger Burger');
 await sendRound(superWaiter);
 await expectBill(superWaiter, 'Rs. 3,050');
 const chickenChef = await openAs(USER.chickenChef, '/kitchen', TABLET);
-await waitText(chickenChef, '1 kg Chicken Karahi');
+await kdsLine(chickenChef, 'Chicken Karahi', '1 kg').waitFor({ timeout: 6_000 });
 const chickenText = await chickenChef.locator('main').innerText();
 assert.ok(!chickenText.includes('Zinger') && chickenText.includes('T1') && chickenText.includes('#2'));
 await burgerChef.bringToFront();
-await waitText(burgerChef, '1 × Zinger Burger');
-assert.ok((await burgerChef.locator('article', { hasText: '1 × Zinger Burger' }).innerText()).includes('#2'));
+await kdsLine(burgerChef, 'Zinger Burger', '×1').waitFor({ timeout: 6_000 });
+assert.ok((await burgerChef.locator('main article').filter({ has: burgerChef.locator('[data-kds-line="Zinger Burger"]', { hasText: '×1' }) }).first().innerText()).includes('#2'));
 ok('Chicken Chef: "1 kg Chicken Karahi" (T1, #2); Burger Chef: "1 × Zinger Burger" (T1, #2); one bill Rs. 3,050');
 await shot(chickenChef, '06-tablet-chicken-chef-1-kg');
 

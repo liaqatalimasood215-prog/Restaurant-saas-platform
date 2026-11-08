@@ -1,7 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  PICKUP_VISIBLE_MS,
+  READY_REMINDER_MS,
   TICKET_UNDO_WINDOW_MS,
+  checkPickup,
+  checkUndoPickup,
+  kdsState,
+  ticketPickup,
+  waitingTooLong,
   automaticOrderSteps,
   checkTicketTransition,
   findTransition,
@@ -139,4 +146,41 @@ test('ticket timer turns orange at 10 minutes and red at 20 minutes by default',
   assert.equal(ticketTimerLevel(sentAt, 10 * 60_000), 'WARN');
   assert.equal(ticketTimerLevel(sentAt, 20 * 60_000), 'LATE');
   assert.equal(ticketTimerLevel(sentAt, 6 * 60_000, 5, 8), 'WARN');
+});
+
+test('pickup at the pass (owner, 2026-11-09): Ready, Picked up, Served apart; card stays 5 minutes; reminder after 10', () => {
+  const at = '2026-11-09T10:00:00.000Z';
+  const t0 = Date.parse(at);
+  const ready = { status: 'READY' as const, servedAt: null, readyAt: at };
+  const dineIn = { type: 'DINE_IN' as const, history: [] };
+  assert.equal(ticketPickup(ready, dineIn), null, 'still at the pass');
+  assert.deepEqual(ticketPickup({ ...ready, pickedUpAt: at, pickedUpBy: 'imran' }, dineIn), { at, byId: 'imran', source: 'TICKET' });
+  assert.deepEqual(ticketPickup({ status: 'SERVED', servedAt: at }, dineIn), { at, byId: null, source: 'SERVED' });
+  // Delivery: the rider's "On the way"; takeaway: the counter's "Picked up"
+  const delivery = {
+    type: 'DELIVERY' as const,
+    history: [
+      { toStatus: 'READY' as const, changedBy: null, changedAt: at },
+      { toStatus: 'OUT_FOR_DELIVERY' as const, changedBy: 'faisal', changedAt: at },
+    ],
+  };
+  assert.equal(ticketPickup(ready, delivery)?.source, 'ORDER');
+  assert.equal(ticketPickup(ready, { type: 'TAKEAWAY', history: [{ toStatus: 'READY', changedBy: null, changedAt: at }] }), null);
+
+  assert.equal(kdsState(null, t0 + 60 * 60_000), 'ACTIVE', 'uncollected food never hides');
+  assert.equal(kdsState({ at }, t0 + PICKUP_VISIBLE_MS - 1), 'PICKED_UP');
+  assert.equal(kdsState({ at }, t0 + PICKUP_VISIBLE_MS), 'HIDDEN');
+  assert.equal(waitingTooLong(ready, false, t0 + READY_REMINDER_MS - 1), false);
+  assert.equal(waitingTooLong(ready, false, t0 + READY_REMINDER_MS), true);
+  assert.equal(waitingTooLong(ready, true, t0 + READY_REMINDER_MS), false, 'picked up: no reminder');
+
+  assert.equal(checkPickup({ role: 'SERVICE_WAITER', orderType: 'DINE_IN', status: 'READY' }), null);
+  assert.equal(checkPickup({ role: 'WAITER', orderType: 'DINE_IN', status: 'READY' }), null);
+  assert.equal(checkPickup({ role: 'KITCHEN', orderType: 'DINE_IN', status: 'READY' }), 'WRONG_ROLE', 'the kitchen marks Ready, the waiter picks up');
+  assert.equal(checkPickup({ role: 'WAITER', orderType: 'TAKEAWAY', status: 'READY' }), 'DINE_IN_ONLY');
+  assert.equal(checkPickup({ role: 'WAITER', orderType: 'DINE_IN', status: 'PREPARING' }), 'NOT_READY');
+  assert.equal(checkUndoPickup({ role: 'KITCHEN', status: 'READY', pickedUpAt: at, isOwnStation: true, now: t0 + 60_000 }), null);
+  assert.equal(checkUndoPickup({ role: 'SERVICE_WAITER', status: 'READY', pickedUpAt: at, now: t0 + PICKUP_VISIBLE_MS }), 'UNDO_EXPIRED');
+  assert.equal(checkUndoPickup({ role: 'SERVICE_WAITER', status: 'SERVED', pickedUpAt: at, now: t0 + 60_000 }), 'ALREADY_SERVED');
+  assert.equal(checkUndoPickup({ role: 'CASHIER', status: 'READY', pickedUpAt: at, now: t0 + 60_000 }), 'WRONG_ROLE');
 });

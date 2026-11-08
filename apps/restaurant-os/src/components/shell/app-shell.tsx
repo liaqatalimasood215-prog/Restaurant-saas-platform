@@ -45,14 +45,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ToastProvider>
       <NotificationsProvider>
         <div className="flex min-h-dvh bg-surface text-slate-900">
-          <Sidebar />
+          {/* The Kitchen Display's full screen folds the sidebar, top bar and bottom bar away (globals.css, kds-chrome) */}
+          <div className="kds-chrome contents">
+            <Sidebar />
+          </div>
           <div className="flex min-w-0 flex-1 flex-col">
-            <Header />
+            <div className="kds-chrome contents">
+              <Header />
+            </div>
             <main id="main" className="mx-auto w-full max-w-[96rem] flex-1 px-4 pb-28 pt-4 md:px-5 md:pb-6 short:pt-3 md:short:pb-3">
               {children}
             </main>
           </div>
-          <BottomNav />
+          <div className="kds-chrome contents">
+            <BottomNav />
+          </div>
         </div>
       </NotificationsProvider>
     </ToastProvider>

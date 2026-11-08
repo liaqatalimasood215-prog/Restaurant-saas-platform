@@ -205,6 +205,14 @@ import {
   portionLines,
   sameDish,
   sameName,
+  lineRecipeTargets,
+  verifiedVersion,
+  checkPickup,
+  checkUndoPickup,
+  kdsState,
+  ticketPickup,
+  waitingTooLong,
+  type PickupFailure,
 } from '@restaurant-saas/shared';
 import {
   ApiError,
@@ -295,6 +303,17 @@ const RULE_MESSAGES: Record<TransitionFailure | TicketTransitionFailure, string>
   DINE_IN_ONLY: 'Served is used for dine-in only.',
   UNDO_EXPIRED: 'Undo is only possible within 2 minutes of Ready.',
   ORDER_CLOSED: 'The order has already left the kitchen.',
+};
+
+/** Picked up at the pass (owner, 2026-11-09) */
+const PICKUP_MESSAGES: Record<PickupFailure, string> = {
+  WRONG_ROLE: 'Your role is not allowed to do this.',
+  DINE_IN_ONLY: 'Delivery and takeaway food is picked up by the rider or at the counter.',
+  NOT_READY: 'This food is not ready yet.',
+  NOT_PICKED_UP: 'This food was not picked up.',
+  ALREADY_SERVED: 'This food is already served.',
+  UNDO_EXPIRED: 'Undo is only possible within 5 minutes of the pickup.',
+  NOT_OWN_STATION: 'This ticket belongs to another kitchen station.',
 };
 
 const PIN_MESSAGES: Record<PinProblem, string> = {
@@ -1076,6 +1095,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
       name: menuItem.name,
       variantName: mix?.label ?? variant?.name ?? null,
       ...(mix && draft.sizes ? { sizeMix: draft.sizes.map((s) => ({ variantId: s.variantId, quantity: s.quantity })) } : {}),
+      // I2: the ids and the verified recipe versions of that day, for stock use later (old lines have none)
+      variantId: variant?.id ?? null,
+      modifierIds: chosen.map((m) => m.id),
+      recipeVersions: this.recipeVersionsOf(data, { menuItemId: menuItem.id, variantId: variant?.id ?? null, sizeMix: draft.sizes, modifierIds: chosen.map((m) => m.id) }),
       modifiers: chosen.map((m) => ({ name: m.name, price: m.price })),
       unitPrice,
       quantity: draft.quantity,
@@ -1870,12 +1893,19 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const ownStation = (stationId: string) =>
         user.role !== 'KITCHEN' || user.stationIds.length === 0 || user.stationIds.includes(stationId);
       const views: KitchenTicketView[] = [];
+      const now = Date.now();
       for (const order of data.orders) {
-        if (!KITCHEN_ORDER_STATUSES.includes(order.status)) continue;
+        if (order.status === 'CANCELLED' || order.status === 'REJECTED') continue;
+        const active = KITCHEN_ORDER_STATUSES.includes(order.status);
         for (const ticket of order.tickets) {
-          if (ticket.status === 'SERVED' || !ownStation(ticket.stationId)) continue;
+          if (!ownStation(ticket.stationId)) continue;
           const voidedAt = voidedTicketAt(order, ticket);
-          if (voidedAt !== null && Date.now() - voidedAt > VOID_TICKET_VISIBLE_MS) continue;
+          if (voidedAt !== null && now - voidedAt > VOID_TICKET_VISIBLE_MS) continue;
+          // Owner, 2026-11-09: food that left the pass stays 5 minutes, then hides (from the saved time: no coming back after a
+          // refresh); food still at the pass stays while its order is open
+          const pickup = ticketPickup(ticket, order);
+          const state = kdsState(pickup, now);
+          if (state === 'HIDDEN' || (state === 'ACTIVE' && (!active || ticket.status === 'SERVED'))) continue;
           views.push({
             ticket,
             orderType: order.type,
@@ -1884,6 +1914,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
             tableName: order.tableId ? this.orderPlace(data, order) : null,
             waiterName: this.staffName(data, order.waiterId),
             items: order.items.filter((i) => i.ticketId === ticket.id),
+            pickup: pickup ? { at: pickup.at, byName: pickup.byId ? this.staffName(data, pickup.byId) : null, source: pickup.source } : null,
           });
         }
       }
@@ -1922,6 +1953,41 @@ export class DemoAdapter implements ApiClient, DemoControls {
         ticket.status = to;
 
         applyAutomaticSteps(order);
+      }),
+    );
+  }
+
+  /** A waiter took a dine-in ticket's food from the pass (owner, 2026-11-09). A second tap changes nothing. Not Served. */
+  pickUpTicket(ticketId: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.requireUser(data);
+        const { order, ticket } = findTicket(data, ticketId);
+        if (ticket.pickedUpAt) return;
+        if (!worksOnTable(user, order.tableId)) throw new ApiError('FORBIDDEN', 'This table is not assigned to you.');
+        const problem = checkPickup({ role: user.role, orderType: order.type, status: ticket.status });
+        if (problem) throw new ApiError(problem === 'WRONG_ROLE' ? 'FORBIDDEN' : 'CONFLICT', PICKUP_MESSAGES[problem]);
+        Object.assign(ticket, { pickedUpAt: nowIso(), pickedUpBy: user.id });
+      }),
+    );
+  }
+
+  /** Undo a pickup while its card is still on the KDS (5 minutes): the food is back at the pass, still READY. */
+  undoPickup(ticketId: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.requireUser(data);
+        const { ticket } = findTicket(data, ticketId);
+        if (!ticket.pickedUpAt) return;
+        const problem = checkUndoPickup({
+          role: user.role,
+          status: ticket.status,
+          pickedUpAt: ticket.pickedUpAt,
+          isOwnStation: user.stationIds.length === 0 || user.stationIds.includes(ticket.stationId),
+          now: Date.now(),
+        });
+        if (problem) throw new ApiError(problem === 'WRONG_ROLE' || problem === 'NOT_OWN_STATION' ? 'FORBIDDEN' : 'CONFLICT', PICKUP_MESSAGES[problem]);
+        Object.assign(ticket, { pickedUpAt: null, pickedUpBy: null });
       }),
     );
   }
@@ -2678,6 +2744,17 @@ export class DemoAdapter implements ApiClient, DemoControls {
 
   private recipeFor(data: DemoData, target: RecipeTarget): Recipe | null {
     return data.inventory.recipes.find((r) => sameTarget(r.target, target)) ?? null;
+  }
+
+  /** The verified recipe version of each part of an order line; a part without one is left out (Not tracked). */
+  private recipeVersionsOf(data: DemoData, line: Parameters<typeof lineRecipeTargets>[0]): Record<string, number> {
+    return Object.fromEntries(
+      lineRecipeTargets(line).flatMap(({ key, target }) => {
+        const recipe = this.recipeFor(data, target);
+        const version = recipe ? verifiedVersion(recipe) : null;
+        return version ? [[key, version.version] as const] : [];
+      }),
+    );
   }
 
   /** The Menu's recipe badge per item: VERIFIED when every size's current recipe is, NONE when no size has one, else DRAFT. */
@@ -3488,17 +3565,14 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const data = this.store.read();
       const user = this.currentUser(data);
       if (!user) return [];
-      const serviceWaiterCovers = (tableId: string) =>
-        data.staff.some(
-          (s) => s.isActive && s.role === 'SERVICE_WAITER' && (s.tableIds.length === 0 || s.tableIds.includes(tableId)),
-        );
       const getsFoodReady = (order: Order, tableId: string) => {
         if (user.role === 'OWNER' || user.role === 'MANAGER') return true;
         if (user.role === 'SERVICE_WAITER') return worksOnTable(user, tableId);
-        // The Super Waiter is told only when no Service Waiter covers the table.
-        if (user.role === 'WAITER') return order.waiterId === user.id && !serviceWaiterCovers(tableId);
+        // Owner, 2026-11-09: the Super Waiter who took the order is told too, also when a Service Waiter covers the table
+        if (user.role === 'WAITER') return order.waiterId === user.id;
         return false;
       };
+      const now = Date.now();
 
       const list: StaffNotification[] = [];
       if (this.permissionsOf(data, user).includes('order.manage')) {
@@ -3521,9 +3595,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
 
         if (getsFoodReady(order, tableId)) {
           for (const ticket of order.tickets) {
-            if (ticket.status !== 'READY' || !ticket.readyAt || voidedTicketAt(order, ticket) !== null) continue;
-            list.push({
-              kind: 'FOOD_READY',
+            // Picked up: nothing to tell any more (owner, 2026-11-09)
+            if (ticket.status !== 'READY' || !ticket.readyAt || ticket.pickedUpAt || voidedTicketAt(order, ticket) !== null) continue;
+            const ready = {
+              kind: 'FOOD_READY' as const,
               id: `ready:${ticket.id}`,
               orderId: order.id,
               tableId,
@@ -3533,7 +3608,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
                 .filter((i) => i.ticketId === ticket.id && !i.isVoid)
                 .map((i) => ({ quantity: i.quantity, unit: i.unit, name: i.name, variantName: i.variantName })),
               at: ticket.readyAt,
-            });
+            };
+            list.push(ready);
+            // Still on the pass after 10 minutes: said once more
+            if (waitingTooLong(ticket, false, now)) list.push({ ...ready, id: `ready-reminder:${ticket.id}`, reminder: true });
           }
         }
 

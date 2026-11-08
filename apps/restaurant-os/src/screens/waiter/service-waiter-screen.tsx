@@ -13,7 +13,6 @@ import {
 } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
@@ -22,6 +21,7 @@ import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { TICKET_TONES } from '@/lib/tones';
+import { PickupControls } from './pickup-controls';
 import { BillRequestControl } from './bill-request';
 
 /**
@@ -75,6 +75,16 @@ export function ServiceWaiterScreen({ tableId }: { tableId?: string }) {
       fail(err);
     }
   };
+  // Picked up at the pass and its Undo (owner, 2026-11-09): the button is free again once the ticket shows the change
+  const pickUp = async (ticketId: string, undo = false) => {
+    setPending(ticketId);
+    try {
+      await (undo ? getApi().undoPickup(ticketId) : getApi().pickUpTicket(ticketId));
+    } catch (err) {
+      fail(err);
+    }
+    setPending(null);
+  };
   const requestBill = async (orderId: string) => {
     try {
       await getApi().requestBill(orderId);
@@ -107,6 +117,8 @@ export function ServiceWaiterScreen({ tableId }: { tableId?: string }) {
               stations={menu.data?.stations ?? []}
               pending={pending}
               onServe={serve}
+              onPickUp={(id) => void pickUp(id)}
+              onUndoPickup={(id) => void pickUp(id, true)}
               onRequestBill={requestBill}
             />
           ))}
@@ -121,12 +133,16 @@ function TableCard({
   stations,
   pending,
   onServe,
+  onPickUp,
+  onUndoPickup,
   onRequestBill,
 }: {
   entry: TableBoardEntry & { order: Order };
   stations: KitchenStation[];
   pending: string | null;
   onServe: (ticketId: string) => void;
+  onPickUp: (ticketId: string) => void;
+  onUndoPickup: (ticketId: string) => void;
   onRequestBill: (orderId: string) => void;
 }) {
   const { order } = entry;
@@ -171,10 +187,7 @@ function TableCard({
                 </li>
               ))}
             </ul>
-            <Button size="lg" className="w-full bg-green-600 text-lg hover:bg-green-700" disabled={pending === ticket.id} onClick={() => onServe(ticket.id)}>
-              <CheckCircle2 className="size-6" aria-hidden />
-              {t('waiter.served')}
-            </Button>
+            <PickupControls ticket={ticket} busy={pending === ticket.id} onPickUp={onPickUp} onUndo={onUndoPickup} onServe={onServe} />
           </div>
         ))}
 

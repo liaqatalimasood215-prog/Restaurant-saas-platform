@@ -1,11 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { PackageX, Volume2, VolumeX } from 'lucide-react';
-import { type KitchenStation, type TicketStatus } from '@restaurant-saas/shared';
-import { ScreenHeader } from '@/components/screen-header';
+import { Bell, ChefHat, CircleCheck, CookingPot, Maximize, Minimize, PackageX, Volume2, VolumeX } from 'lucide-react';
+import { kdsState, type KitchenStation, type TicketStatus } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
@@ -16,15 +14,15 @@ import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useNow } from '@/lib/hooks/use-now';
 import { useSession } from '@/lib/session';
 import { playTone, speak, unlockSound } from '@/lib/sound';
-import { TICKET_TONES } from '@/lib/tones';
 import { TicketCard } from './ticket-card';
 
 const ALL = 'ALL';
 const STATION_KEY = 'lala-os-kds-station';
+/** Three columns with the owner's colours (2026-11-08): New red, Preparing amber, Ready green. */
 const COLUMNS = [
-  { status: 'NEW', label: 'kitchen.columnNew' },
-  { status: 'PREPARING', label: 'kitchen.columnPreparing' },
-  { status: 'READY', label: 'kitchen.columnReady' },
+  { status: 'NEW', label: 'kitchen.columnNew', icon: Bell, bar: 'bg-brand-gradient' },
+  { status: 'PREPARING', label: 'kitchen.columnPreparing', icon: CookingPot, bar: 'bg-amber-500' },
+  { status: 'READY', label: 'kitchen.columnReady', icon: CircleCheck, bar: 'bg-green-600' },
 ] as const;
 
 /** Each kitchen tablet remembers its own station. */
@@ -55,7 +53,8 @@ export function KitchenScreen() {
     (s) => !user || user.role !== 'KITCHEN' || user.stationIds.length === 0 || user.stationIds.includes(s.id),
   );
   const selected = stations.some((s) => s.id === stationId) ? stationId : ALL;
-  const visible = (tickets.data ?? []).filter((v) => selected === ALL || v.ticket.stationId === selected);
+  // A picked-up card hides 5 minutes after the pickup, right on time (owner, 2026-11-09)
+  const visible = (tickets.data ?? []).filter((v) => (selected === ALL || v.ticket.stationId === selected) && kdsState(v.pickup ?? null, now) !== 'HIDDEN');
 
   // New-ticket sound (browsers allow it only after "Tap to enable sound").
   useEffect(() => {
@@ -98,26 +97,67 @@ export function KitchenScreen() {
     }
   };
 
+  const undoPickup = async (ticketId: string) => {
+    try {
+      await getApi().undoPickup(ticketId);
+    } catch (err) {
+      toast.show({ tone: 'error', title: err instanceof Error ? err.message : t('states.errorBody') });
+    }
+  };
+
+  // Full screen (owner, 2026-11-09): tap to enter, tap again to leave; the sidebar and top bar fold away (globals.css). Android
+  // tablets are asked to stay in landscape; a browser that refuses gets a clear message.
+  const fullScreen = useFullScreen();
+  const toggleFullScreen = async () => {
+    if (fullScreen) {
+      await document.exitFullscreen?.().catch(() => undefined);
+      return;
+    }
+    try {
+      if (!document.fullscreenEnabled || !document.documentElement.requestFullscreen) throw new Error('unsupported');
+      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      await (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.('landscape').catch(() => undefined);
+    } catch {
+      toast.show({ tone: 'info', title: t('kitchen.fullScreenBlocked'), body: t('kitchen.fullScreenTip') });
+    }
+  };
+  const clock = new Date(now);
+  const roundButton = 'press grid size-10 shrink-0 place-items-center rounded-xl bg-white/15 text-white hover:bg-white/25';
+
+  // Red title bar of the owner's picture (2026-11-08): name, sound, out of stock, full screen and the time
   const header = (
-    <ScreenHeader
-      title={t('nav.kitchen')}
-      status="DEMO_PROTOTYPE"
-      description={t('kitchen.description')}
-      actions={
-        <div className="flex flex-wrap gap-2">
-          <Button variant={soundOn ? 'secondary' : 'outline'} onClick={enableSound}>
-            {soundOn ? <Volume2 className="size-5" aria-hidden /> : <VolumeX className="size-5" aria-hidden />}
-            {soundOn ? t('kitchen.soundOn') : t('kitchen.enableSound')}
-          </Button>
-          {user && allowed('item.outOfStock') && (
-            <Button variant="secondary" onClick={() => setStockOpen(true)} disabled={!menu.data}>
-              <PackageX className="size-5" aria-hidden />
-              {t('kitchen.outOfStock')}
-            </Button>
-          )}
-        </div>
-      }
-    />
+    <div className="bg-brand-gradient mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-xl px-3 py-1.5 text-white shadow-brand">
+      <ChefHat className="size-7 shrink-0" aria-hidden />
+      <div className="mr-auto min-w-0">
+        <h1 className="text-lg leading-tight font-extrabold">{t('kitchen.title')}</h1>
+        <p className="hidden text-xs text-white/85 xl:block">{t('kitchen.subtitle')}</p>
+      </div>
+      <button type="button" onClick={enableSound} className="press flex min-h-10 items-center gap-2 rounded-xl bg-white px-3 text-sm font-bold text-brand shadow-sm">
+        {soundOn ? <Volume2 className="size-5" aria-hidden /> : <VolumeX className="size-5" aria-hidden />}
+        {soundOn ? t('kitchen.soundOn') : t('kitchen.enableSound')}
+      </button>
+      {user && allowed('item.outOfStock') && (
+        <button type="button" onClick={() => setStockOpen(true)} disabled={!menu.data} className="press flex min-h-10 items-center gap-2 rounded-xl bg-white/15 px-3 text-sm font-bold text-white hover:bg-white/25 disabled:opacity-60">
+          <PackageX className="size-5" aria-hidden />
+          {t('kitchen.outOfStock')}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => void toggleFullScreen()}
+        aria-label={fullScreen ? t('kitchen.exitFullScreen') : t('kitchen.fullScreen')}
+        aria-pressed={fullScreen}
+        title={fullScreen ? t('kitchen.exitFullScreen') : t('kitchen.fullScreen')}
+        className={roundButton}
+        data-fullscreen-toggle
+      >
+        {fullScreen ? <Minimize className="size-5" aria-hidden /> : <Maximize className="size-5" aria-hidden />}
+      </button>
+      <p className="text-right leading-tight tabular-nums" suppressHydrationWarning>
+        <span className="block text-base font-black">{clock.toLocaleTimeString('en-PK', { hour: 'numeric', minute: '2-digit' })}</span>
+        <span className="block text-xs text-white/85">{clock.toLocaleDateString('en-PK', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+      </p>
+    </div>
   );
 
   if ((tickets.loading && !tickets.data) || (menu.loading && !menu.data)) return (<>{header}<LoadingState /></>);
@@ -137,7 +177,7 @@ export function KitchenScreen() {
         <ErrorState message={(tickets.error ?? menu.error)?.message} onRetry={() => (tickets.reload(), menu.reload())} />
       )}
 
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1" role="tablist">
+      <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1" role="tablist">
         {[{ id: ALL, name: t('kitchen.allStations') }, ...stations].map((s) => {
           const count = (tickets.data ?? []).filter(
             (v) => v.ticket.status !== 'READY' && (s.id === ALL || v.ticket.stationId === s.id),
@@ -150,34 +190,36 @@ export function KitchenScreen() {
               aria-selected={selected === s.id}
               onClick={() => chooseStation(s.id)}
               className={cn(
-                'flex min-h-12 shrink-0 items-center gap-2 rounded-xl px-4 text-base font-bold',
-                selected === s.id ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-700',
+                'press flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-[15px] font-bold',
+                selected === s.id ? 'bg-brand-gradient text-white shadow-brand' : 'border border-slate-200 bg-white text-slate-800 shadow-sm',
               )}
             >
               {s.name}
-              {count > 0 && <span className="rounded-full bg-brand px-2 text-xs text-white">{count}</span>}
+              {count > 0 && <span className={cn('min-w-6 rounded-full px-1.5 text-center text-xs font-black', selected === s.id ? 'bg-white text-brand' : 'bg-brand text-white')}>{count}</span>}
             </button>
           );
         })}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-2.5 md:grid-cols-3">
         {COLUMNS.map((column) => {
-          const columnTickets = visible.filter((v) => v.ticket.status === column.status);
+          // Ready also holds food served in the last 5 minutes; cards still waiting at the pass come first, picked-up ones last
+          const columnTickets = visible
+            .filter((v) => v.ticket.status === column.status || (column.status === 'READY' && v.ticket.status === 'SERVED'))
+            .sort((a, b) => Number(Boolean(a.pickup)) - Number(Boolean(b.pickup)));
           return (
             <section key={column.status} aria-label={t(column.label)} className="min-w-0">
-              <h2 className="mb-3 flex items-center gap-2 text-lg font-extrabold text-slate-900">
-                <Badge tone={TICKET_TONES[column.status]} className="text-sm">
-                  {t(column.label)}
-                </Badge>
-                <span className="tabular-nums text-slate-500">{columnTickets.length}</span>
+              <h2 className={cn('mb-1.5 flex min-h-10 items-center gap-2 rounded-xl px-3 text-base font-extrabold text-white shadow-sm', column.bar)}>
+                <column.icon className="size-5" aria-hidden />
+                {t(column.label)}
+                <span className="ml-auto min-w-7 rounded-full bg-white px-2 text-center text-sm font-black text-slate-900 tabular-nums">{columnTickets.length}</span>
               </h2>
               {columnTickets.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+                <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">
                   {t('kitchen.empty')}
                 </p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-1.5">
                   {columnTickets.map((v) => (
                     <TicketCard
                       key={v.ticket.id}
@@ -187,6 +229,7 @@ export function KitchenScreen() {
                       now={now}
                       busy={pending?.ticketId === v.ticket.id && pending.from === v.ticket.status}
                       onMove={(to) => move(v.ticket.id, v.ticket.status, to)}
+                      onUndoPickup={allowed('ticket.update') || allowed('ticket.serve') ? () => void undoPickup(v.ticket.id) : undefined}
                     />
                   ))}
                 </div>
@@ -255,4 +298,23 @@ function StockDialog({
       )}
     </Dialog>
   );
+}
+
+/** Whether the page is in full screen; leaving the Kitchen Display ends it, so the other screens keep their bars. */
+function useFullScreen(): boolean {
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    const sync = () => {
+      const on = document.fullscreenElement !== null;
+      setFull(on);
+      document.documentElement.toggleAttribute('data-kds-fullscreen', on);
+    };
+    document.addEventListener('fullscreenchange', sync);
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      document.documentElement.removeAttribute('data-kds-fullscreen');
+      if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => undefined);
+    };
+  }, []);
+  return full;
 }

@@ -107,3 +107,12 @@ body {
     padding: 0;
   }
 }
+
+/* Kitchen Display in full screen (owner, 2026-11-09): only the tickets, the whole screen */
+html[data-kds-fullscreen] .kds-chrome {
+  display: none;
+}
+html[data-kds-fullscreen] main#main {
+  max-width: none;
+  padding: 0.5rem 0.75rem;
+}

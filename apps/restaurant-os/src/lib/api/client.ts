@@ -587,6 +587,10 @@ export interface ApiClient {
   listKitchenTickets(): Promise<KitchenTicketView[]>;
   /** Start / Ready / Undo / Served, checked with the shared ticket rules. */
   updateTicket(ticketId: Uuid, to: TicketStatus): Promise<void>;
+  /** Picked up at the pass by the waiter (dine-in; owner, 2026-11-09): a time and a name, the ticket stays READY until Served. */
+  pickUpTicket(ticketId: Uuid): Promise<void>;
+  /** Undo a pickup within 5 minutes (waiter, Owner / Manager, or the kitchen of that station). */
+  undoPickup(ticketId: Uuid): Promise<void>;
   /** Out of stock ON/OFF for a menu item (Owner, Manager, Cashier, Kitchen). */
   setItemAvailable(menuItemId: Uuid, available: boolean): Promise<void>;
 

@@ -503,6 +503,20 @@ export function guessPortionMilli(sizeName: string | null): number {
   return guess !== undefined ? guess * MILLI : DEFAULT_PLATE_MILLI;
 }
 
+/**
+ * The recipes an order line uses (I2, owner's integration plan): its size, every size of a mixed line, or the item itself,
+ * then each add-on — with the key the line keeps the recipe version under (`OrderItem.recipeVersions`).
+ */
+export function lineRecipeTargets(line: { menuItemId: Uuid | null; variantId?: Uuid | null; sizeMix?: readonly { variantId: Uuid }[]; modifierIds?: readonly Uuid[] }): { key: string; target: RecipeTarget }[] {
+  if (!line.menuItemId) return [];
+  const menuItemId = line.menuItemId;
+  const sizes = line.sizeMix?.length ? line.sizeMix.map((s) => s.variantId) : [line.variantId ?? null];
+  return [
+    ...sizes.map((variantId) => ({ key: `item:${variantId ?? 'base'}`, target: { kind: 'ITEM' as const, menuItemId, variantId } })),
+    ...(line.modifierIds ?? []).map((modifierId) => ({ key: `addon:${modifierId}`, target: { kind: 'ADDON' as const, modifierId } })),
+  ];
+}
+
 export function checkPortion(portionMilli: number): boolean {
   return Number.isInteger(portionMilli) && portionMilli > 0 && portionMilli <= MAX_PORTION_MILLI;
 }

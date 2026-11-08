@@ -71,11 +71,12 @@ try {
   await cashier.getByText(/Order #\d+/).first().waitFor();
   await bill(cashier).getByText('(1.5 kg: 1 kg + ½ kg)', { exact: false }).first().waitFor();
   const kitchen = await openAs(USER.owner, '/kitchen', TABLET);
-  await kitchen.locator('main').getByText('(1.5 kg: 1 kg + ½ kg)').first().waitFor({ timeout: 6_000 });
-  assert.equal(await kitchen.locator('main li', { hasText: 'Chicken Karahi' }).count(), 1, 'the kitchen gets one karahi line');
-  await kitchen.locator('main li', { hasText: '1 × Chicken Karahi' }).waitFor();
+  // Kitchen card (owner's KDS picture, 2026-11-08): name, the size chip "1.5 kg: 1 kg + ½ kg", then "×1"
+  await kitchen.locator('main [data-kds-line="Chicken Karahi"]').getByText('1.5 kg: 1 kg + ½ kg', { exact: true }).first().waitFor({ timeout: 6_000 });
+  assert.equal(await kitchen.locator('main [data-kds-line="Chicken Karahi"]').count(), 1, 'the kitchen gets one karahi line');
+  await kitchen.locator('main [data-kds-line="Chicken Karahi"]', { hasText: '×1' }).waitFor();
   await shot(kitchen, '03-tablet-kitchen-one-pot');
-  ok('sent: the kitchen ticket says "1 × Chicken Karahi (1.5 kg: 1 kg + ½ kg)", one pot');
+  ok('sent: the kitchen ticket says "Chicken Karahi [1.5 kg: 1 kg + ½ kg] ×1", one pot');
 
   console.log('\n2. Waiter phone: 2 × 1 kg + ½ kg + Pao Mutton Karahi');
   const waiter = await openAs(USER.superWaiter, `/waiter?table=${TABLE(2)}`, PHONE);
@@ -94,7 +95,7 @@ try {
   await waiter.getByRole('button', { name: 'Send to kitchen' }).click();
   await waiter.getByText(/sent to the kitchen/).last().waitFor();
   await shot(waiter, '05-phone-waiter-sent');
-  await kitchen.locator('main').getByText('(2.75 kg: 2 × 1 kg + ½ kg + Pao)').first().waitFor({ timeout: 6_000 });
+  await kitchen.locator('main [data-kds-line="Mutton Karahi"]').getByText('2.75 kg: 2 × 1 kg + ½ kg + Pao', { exact: true }).first().waitFor({ timeout: 6_000 });
   ok('waiter: 4800 × 2 + 2500 + 1300 = Rs. 13,400, one "2.75 kg" line, sent; the kitchen sees it');
 
   assert.deepEqual(errors, [], `page errors: ${errors.join(' | ')}`);

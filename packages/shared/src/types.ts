@@ -1,4 +1,4 @@
-import type { TicketStatus } from './kitchen';
+import type { TicketPickup, TicketStatus } from './kitchen';
 import type { OrderChannel, OrderStatus, OrderType, TableStatus } from './order-status';
 import type { PaymentKind, PaymentMethod } from './payments';
 import type { BillTotals, DiscountInput, TaxSettings } from './pricing';
@@ -222,6 +222,16 @@ export interface OrderItem extends BranchScoped {
   variantName: string | null;
   /** The sizes of a mixed line (one pot for the kitchen), kept for stock use later */
   sizeMix?: SizePick[];
+  /** The one size chosen; null without sizes or on a mixed line (its sizes are in sizeMix). Kept for stock use (I2, 2026-11-08) */
+  variantId?: Uuid | null;
+  /** The add-ons chosen, by id (their names and prices are copied in modifiers) */
+  modifierIds?: Uuid[];
+  /**
+   * The VERIFIED recipe version each part of the line used when it was ordered ("item:<size id | base>", "addon:<id>",
+   * `lineRecipeTargets`), so stock is later taken by the recipe of that day. A part without a verified recipe is missing:
+   * Not tracked. Lines from before I2 have none of these three fields.
+   */
+  recipeVersions?: Record<string, number>;
   modifiers: OrderItemModifier[];
   unitPrice: Paisa;
   quantity: number;
@@ -247,6 +257,12 @@ export interface KitchenTicket extends BranchScoped {
   startedAt: IsoDateTime | null;
   readyAt: IsoDateTime | null;
   servedAt: IsoDateTime | null;
+  /**
+   * A waiter took the food from the pass (owner, 2026-11-09): Ready, Picked up and Served are three separate steps. A time and
+   * a name, not a status: the ticket stays READY until Served. Missing on older tickets.
+   */
+  pickedUpAt?: IsoDateTime | null;
+  pickedUpBy?: Uuid | null;
 }
 
 export interface PaymentEntry extends BranchScoped {
@@ -514,6 +530,8 @@ export interface KitchenTicketView {
   tableName: string | null;
   waiterName: string | null;
   items: OrderItem[];
+  /** Picked up, by whom and how (owner, 2026-11-09): the card stays PICKUP_VISIBLE_MS, then hides; null = still on the pass */
+  pickup?: { at: IsoDateTime; byName: string | null; source: TicketPickup['source'] } | null;
 }
 
 /** An item line inside a notification, e.g. "2 × Classic Pizza (Medium)" or "1 kg Chicken Karahi". */
@@ -544,6 +562,8 @@ export type StaffNotification =
       stationName: string;
       items: NotificationItem[];
       at: IsoDateTime;
+      /** Still on the pass after READY_REMINDER_MS: said once more (owner, 2026-11-09) */
+      reminder?: boolean;
     }
   | { kind: 'BILL_REQUESTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; total: Paisa; requestedByName: string; at: IsoDateTime }
   | { kind: 'BILL_ACCEPTED'; id: string; orderId: Uuid; tableId: Uuid; tableName: string; acceptedByName: string; at: IsoDateTime }

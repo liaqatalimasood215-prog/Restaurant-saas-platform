@@ -1,6 +1,6 @@
 import { MAX_QUANTITY_PER_LINE } from './money';
 import { guessSizeQuantity } from './recipes';
-import type { ItemVariant, SizePick } from './types';
+import type { ItemVariant, OrderItem, SizePick } from './types';
 
 /**
  * Mixed sizes on one line (owner, 2026-11-07): a customer asks for "dedh kg" Chicken Karahi, the cashier
@@ -67,4 +67,53 @@ export function sizeMixFor(item: { variants: readonly ItemVariant[] }, picks: re
     grams,
     price: rows.reduce((sum, r) => sum + r.variant.price * r.quantity, 0),
   };
+}
+
+/** One dish's total on a kitchen ticket: its weight, its sizes counted, or its plain quantity. */
+export type DishTotal =
+  | { menuItemId: string; name: string; kind: 'WEIGHT'; grams: number }
+  | { menuItemId: string; name: string; kind: 'SIZES'; sizes: { name: string; count: number }[] }
+  | { menuItemId: string; name: string; kind: 'COUNT'; quantity: number; unit: OrderItem['unit'] };
+
+type TotalLine = Pick<OrderItem, 'menuItemId' | 'name' | 'variantName' | 'sizeMix' | 'quantity' | 'unit' | 'isVoid'>;
+
+/** The sizes in a line's size text: "1.5 kg: 2 × ½ kg + Pao" → ½ kg ×2, Pao ×1; "Half plate" → Half plate ×1. */
+function sizesOf(line: TotalLine): { name: string; count: number }[] {
+  if (!line.variantName) return [];
+  const text = line.sizeMix?.length ? line.variantName.replace(/^[\d.]+ kg: /, '') : line.variantName;
+  return text.split(' + ').map((part) => {
+    const many = /^(\d+) × (.+)$/.exec(part);
+    return { name: many ? many[2]! : part, count: (many ? Number(many[1]) : 1) * line.quantity };
+  });
+}
+
+/**
+ * The kitchen's total of a dish that is on a ticket in two or more lines (owner, 2026-11-08): lines with their own notes stay
+ * apart, and the cook still sees the whole pot — "1.5 kg" when every size is a weight, else the sizes counted ("3 × Full plate
+ * + 1 × Half plate"), or the plain quantity for items without sizes. Voided lines do not count.
+ */
+export function dishTotals(items: readonly TotalLine[]): DishTotal[] {
+  const groups = new Map<string, TotalLine[]>();
+  for (const line of items) {
+    if (line.isVoid || !line.menuItemId) continue;
+    groups.set(line.menuItemId, [...(groups.get(line.menuItemId) ?? []), line]);
+  }
+  return [...groups.entries()]
+    .filter(([, lines]) => lines.length > 1)
+    .map(([menuItemId, lines]) => {
+      const name = lines[0]!.name;
+      const sizes = lines.flatMap(sizesOf);
+      if (sizes.length === 0) return { menuItemId, name, kind: 'COUNT' as const, quantity: lines.reduce((sum, l) => sum + l.quantity, 0), unit: lines[0]!.unit };
+      // A weight only when every line has a size and every size is a weight
+      if (lines.every((l) => l.variantName) && sizes.every((s) => (sizeGrams(s.name) ?? 0) > 0)) {
+        return { menuItemId, name, kind: 'WEIGHT' as const, grams: sizes.reduce((sum, s) => sum + (sizeGrams(s.name) ?? 0) * s.count, 0) };
+      }
+      const counted: { name: string; count: number }[] = [];
+      for (const size of sizes) {
+        const seen = counted.find((c) => c.name === size.name);
+        if (seen) seen.count += size.count;
+        else counted.push({ ...size });
+      }
+      return { menuItemId, name, kind: 'SIZES' as const, sizes: counted };
+    });
 }

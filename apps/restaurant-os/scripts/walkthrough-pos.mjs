@@ -41,6 +41,9 @@ const shot = async (page, name) => {
   console.log(`    screenshot ${name}.png`);
 };
 const waitText = (scope, text, timeout = 6_000) => scope.getByText(text).first().waitFor({ timeout });
+// Kitchen ticket of an order (owner's KDS picture, 2026-11-08): "#2" with its type (Takeaway, Delivery) beside it
+const kdsTicket = (page, type, n) => page.locator(`main [data-kds-order="${n}"]`, { hasText: type }).first();
+const kdsLine = (page, name, quantity) => page.locator(`main [data-kds-line="${name}"]`, { hasText: quantity }).first();
 const ok = (message) => console.log(`  ✓ ${message}`);
 const bill = (page) => page.locator('main [data-pos-bill]');
 // The customer box of a Takeaway bill is folded ("Customer (optional)"): open it before typing.
@@ -79,7 +82,7 @@ await bill(cashier).getByRole('button', { name: 'Send to kitchen' }).dblclick();
 await waitText(cashier, 'T3 · Order #1');
 ok('sent to the kitchen once (double tap safe) — the bill is now order #1 of T3');
 const pizzaChef = await openAs(USER.pizzaChef, '/kitchen', TABLET);
-await waitText(pizzaChef, '1 × Classic Pizza');
+await kdsLine(pizzaChef, 'Classic Pizza', '×1').waitFor({ timeout: 6_000 });
 assert.ok((await pizzaChef.locator('main').innerText()).includes('T3'));
 ok('Pizza Chef sees T3 · Classic Pizza (Large) + Extra cheese');
 
@@ -165,7 +168,7 @@ await cashier.getByRole('dialog').getByRole('button', { name: 'Pay later (pendin
 await waitText(bill(cashier), 'Payment pending');
 ok('sent to the kitchen as order #2; held bill gone; payment left pending');
 const burgerChef = await openAs(USER.burgerChef, '/kitchen', TABLET);
-await waitText(burgerChef, 'Takeaway #2');
+await kdsTicket(burgerChef, 'Takeaway', 2).waitFor({ timeout: 6_000 });
 await burgerChef.getByRole('button', { name: 'Start', exact: true }).click();
 await burgerChef.getByRole('button', { name: 'Ready', exact: true }).click();
 await cashier.bringToFront();

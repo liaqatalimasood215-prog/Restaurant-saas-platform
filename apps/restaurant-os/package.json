@@ -29,6 +29,7 @@
     "walkthrough:sizes": "node scripts/walkthrough-sizes.mjs",
     "walkthrough:cooked": "node scripts/walkthrough-cooked.mjs",
     "walkthrough:integration": "node scripts/walkthrough-integration.mjs",
+    "walkthrough:kds": "node scripts/walkthrough-kds.mjs",
     "walkthrough:connected": "node scripts/walkthrough-connected.mjs",
     "walkthrough:sub-orders": "node scripts/walkthrough-sub-orders.mjs",
     "walkthrough:previews": "node scripts/walkthrough-previews.mjs"
