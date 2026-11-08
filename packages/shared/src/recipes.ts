@@ -1,4 +1,5 @@
 import { MILLI, purchaseConversion, mulDivRound, type Ingredient, type StockUnit } from './inventory';
+import type { CookingBatch } from './cooking';
 import type { TaxSettings } from './pricing';
 import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
 
@@ -690,6 +691,8 @@ export interface RecipesView {
   lastPurchases?: Record<Uuid, { quantityMilli: number; at: IsoDateTime }>;
   /** P3: every supplier purchase's own recipe for cooked food, newest first */
   purchaseRecipes?: PurchaseRecipeRow[];
+  /** I3: cooking batches, newest first */
+  cookingBatches?: CookingBatch[];
 }
 
 export interface FoodCostSummary {

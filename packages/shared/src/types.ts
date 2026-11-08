@@ -571,7 +571,9 @@ export type StaffNotification =
   /** A customer order waiting for Accept / Reject (repeating alarm until answered) */
   | { kind: 'ONLINE_ORDER'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; total: Paisa; customerName: string; at: IsoDateTime }
   /** A delivery or takeaway order is READY: assign a rider or hand it over */
-  | { kind: 'COUNTER_READY'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; customerName: string; at: IsoDateTime };
+  | { kind: 'COUNTER_READY'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; customerName: string; at: IsoDateTime }
+  /** I3 (owner, 2026-11-09): the stock check before cooking found what the plan of a day is short of (Owner / Manager) */
+  | { kind: 'COOKING_SHORTAGE'; id: string; planDate: string; forDay: 'TODAY' | 'TOMORROW'; time: string; count: number; names: string[]; at: IsoDateTime };
 
 /** The cashier called a waiter from the POS ("Call Waiter"); tableId is null for the counter. */
 export interface WaiterCall extends BranchScoped {

@@ -4,6 +4,9 @@ import {
   businessDate,
   displayFactorMilli,
   rupeesToPaisa,
+  type CookingBatch,
+  type CookingCheckTime,
+  type CookingPlan,
   type Ingredient,
   type KhataEntry,
   type PurchaseRecipe,
@@ -41,6 +44,12 @@ export interface DemoInventory {
   purchaseDrafts?: PurchaseDraft[];
   /** P3 (2026-11-08): each supplier purchase's own recipe for cooked food, fixed on the bill's day (missing before) */
   purchaseRecipes?: PurchaseRecipe[];
+  /** I3 (2026-11-09): every cooking batch, never deleted (a mistake is reversed); missing before */
+  cookingBatches?: CookingBatch[];
+  /** I3: what is cooked each day and on given dates; missing = nothing planned */
+  cookingPlan?: CookingPlan;
+  /** I3: when the plan is checked against the stock; missing = 8 pm for tomorrow, 7 am for today */
+  cookingChecks?: CookingCheckTime[];
   expiringSoonDays: number;
 }
 

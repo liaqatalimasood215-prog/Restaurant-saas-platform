@@ -19,6 +19,7 @@ import { RecentPurchases } from './purchase-recipes';
 import { RecipeBuilder, type EditorSubject } from './recipe-builder';
 import { LEVEL_TONE } from './recipe-lines';
 import { SellDialog } from './sell-dialog';
+import { CookDialog } from './cooking-dialog';
 
 type Section = 'menu' | 'addons' | 'prepared';
 /** Prepared items: everything, cooked food by its stock state, or the other prepared items (dough, sauces) */
@@ -119,6 +120,8 @@ export function RecipesTab({ canManage, onBuilder, openItemId }: { canManage: bo
   const [preparedLayout, setPreparedLayout] = useState<CardLayout>('grid');
   /** Sell on POS for this prepared item; asked = right after its recipe was saved for the first time */
   const [selling, setSelling] = useState<{ preparedId: string; asked: boolean } | null>(null);
+  /** I3: the dish being cooked (Cook dialog) */
+  const [cooking, setCooking] = useState<string | null>(null);
   /** Add Recipe on Menu items: the menu product chosen from the list */
   const [picking, setPicking] = useState<string | null>(null);
   const canSell = canManage && allowed('menu.manage');
@@ -411,6 +414,12 @@ export function RecipesTab({ canManage, onBuilder, openItemId }: { canManage: bo
               {shownPrepared.map(({ row, dish }) => {
                 const edit = () => setEditing({ kind: 'PREPARED', ingredientId: row.ingredient.id });
                 const sell = canSell ? () => setSelling({ preparedId: row.ingredient.id, asked: false }) : undefined;
+                const cookingInfo = {
+                  cookedMilli: view.onHand?.[row.ingredient.id] ?? 0,
+                  batches: (view.cookingBatches ?? []).filter((b) => b.preparedId === row.ingredient.id),
+                  staffNames: view.staffNames,
+                  onCook: canManage ? () => setCooking(row.ingredient.id) : undefined,
+                };
                 return (
                   <li key={row.ingredient.id} data-prepared-item={row.ingredient.name}>
                     {dish ? (
@@ -421,11 +430,12 @@ export function RecipesTab({ canManage, onBuilder, openItemId }: { canManage: bo
                         canManage={canManage}
                         onEdit={edit}
                         onSell={sell}
+                        cooking={cookingInfo}
                         layout={preparedLayout}
                         purchases={(view.purchaseRecipes ?? []).filter((p) => p.preparedId === row.ingredient.id)}
                       />
                     ) : (
-                      <PreparedCard row={row} canManage={canManage} onEdit={edit} onSell={sell} layout={preparedLayout} />
+                      <PreparedCard row={row} canManage={canManage} onEdit={edit} onSell={sell} cooking={cookingInfo} layout={preparedLayout} />
                     )}
                   </li>
                 );
@@ -481,6 +491,9 @@ export function RecipesTab({ canManage, onBuilder, openItemId }: { canManage: bo
         </Dialog>
       )}
       {selling && sellRow && <SellDialog prepared={sellRow.ingredient} view={view} asked={selling.asked} onClose={() => setSelling(null)} />}
+      {cooking && view.prepared.some((p) => p.ingredient.id === cooking) && (
+        <CookDialog dish={view.prepared.find((p) => p.ingredient.id === cooking)!.ingredient} view={view} onClose={() => setCooking(null)} />
+      )}
 
     </div>
   );

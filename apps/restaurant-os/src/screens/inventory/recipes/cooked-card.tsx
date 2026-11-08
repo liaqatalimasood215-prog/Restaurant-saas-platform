@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { BadgeCheck, ChevronDown, ChevronRight, Coins, Eye, Link2, Package, Pencil, Receipt, Store, TriangleAlert, CircleCheck, CircleX } from 'lucide-react';
+import { BadgeCheck, ChevronDown, ChevronRight, Coins, CookingPot, Eye, Link2, Package, Pencil, Receipt, Store, TriangleAlert, CircleCheck, CircleX } from 'lucide-react';
 import {
   MILLI,
   currentVersion,
@@ -15,6 +15,7 @@ import {
   type PurchaseRecipeRow,
   type RecipesView,
   type StockPlan,
+  type CookingBatch,
 } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { t } from '@/i18n';
@@ -23,6 +24,7 @@ import { amountText, quantityText, stockText, toDisplayMilli, unitLabel } from '
 import { stateOf } from './recipe-draft';
 import { ingredientArt } from './recipe-lines';
 import { DishPurchases } from './purchase-recipes';
+import { BatchList, cookedText } from './cooking-dialog';
 
 /** A food picture for a prepared item on a round plate (real photos come in Phase 7). */
 const PREPARED_ART: [RegExp, string][] = [
@@ -148,6 +150,49 @@ function PosLine({ row, onSell }: { row: PreparedRow; onSell?: () => void }) {
   );
 }
 
+/** What a cooking batch adds to the card (owner's I3 brief, 2026-11-09). */
+export interface CookingInfo {
+  /** Cooked stock on hand (the dish's stock-unit thousandths) */
+  cookedMilli: number;
+  batches: CookingBatch[];
+  staffNames: Record<string, string>;
+  onCook?: () => void;
+}
+
+/** "Cooked stock: 12.5 kg ≈ 50 plates", the Cook button, and the batches when opened. */
+function CookedStock({ row, cooking, canManage }: { row: PreparedRow; cooking: CookingInfo; canManage: boolean }) {
+  const [open, setOpen] = useState(false);
+  const done = cooking.batches.filter((b) => b.status === 'DONE').length;
+  return (
+    <div className="space-y-1">
+      <p className="flex min-w-0 items-center gap-1.5 text-[13px] leading-snug text-slate-600">
+        <CookingPot className="size-3.5 shrink-0 text-brand" aria-hidden />
+        <span className="shrink-0">{t('inventory.cooking.stockLine')}</span>
+        <span className={cn('min-w-0 truncate font-bold', cooking.cookedMilli > 0 ? 'text-green-700' : 'text-slate-500')} data-cooked-stock>
+          {cookedText(cooking.cookedMilli, row.ingredient)}
+        </span>
+        {cooking.batches.length > 0 && (
+          <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="press shrink-0 rounded-md px-1 text-xs font-bold text-slate-500 hover:text-brand" data-batches-toggle>
+            {t('inventory.cooking.batchesCount', { n: done })}
+          </button>
+        )}
+        {canManage && cooking.onCook && (
+          <button
+            type="button"
+            onClick={cooking.onCook}
+            aria-label={t('inventory.cooking.cookFor', { name: row.ingredient.name })}
+            className="press bg-brand-gradient ml-auto inline-flex min-h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-xs font-extrabold text-white shadow-brand"
+          >
+            <CookingPot className="size-3.5" aria-hidden />
+            {t('inventory.cooking.cook')}
+          </button>
+        )}
+      </p>
+      {open && <BatchList dish={row.ingredient} batches={cooking.batches} canManage={canManage} staffNames={cooking.staffNames} />}
+    </div>
+  );
+}
+
 const BUTTON = 'press flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-3 text-[13px] font-bold';
 
 function EditButton({ name, onEdit }: { name: string; onEdit: () => void }) {
@@ -173,6 +218,7 @@ export function CookedCard({
   canManage,
   onEdit,
   onSell,
+  cooking,
   layout = 'grid',
   purchases = [],
 }: {
@@ -184,6 +230,8 @@ export function CookedCard({
   onEdit: () => void;
   /** Sell on POS (Owner / Manager with the Menu too) */
   onSell?: () => void;
+  /** I3: cooked stock, batches and Cook */
+  cooking?: CookingInfo;
   layout?: CardLayout;
   /** P3: each supplier purchase of its main ingredient with its own recipe, newest first */
   purchases?: PurchaseRecipeRow[];
@@ -245,6 +293,7 @@ export function CookedCard({
         <ChevronDown className={cn('ml-auto size-3.5 shrink-0 text-slate-400 transition-transform', showPurchases && 'rotate-180')} aria-hidden />
       </button>
       <PosLine row={row} onSell={onSell} />
+      {cooking && <CookedStock row={row} cooking={cooking} canManage={canManage} />}
     </div>
   );
 
@@ -335,7 +384,7 @@ export function CookedCard({
 }
 
 /** Any other prepared item (naan dough, sauces) in the same compact card: what one batch makes and what it costs. */
-export function PreparedCard({ row, canManage, onEdit, onSell, layout = 'grid' }: { row: PreparedRow; canManage: boolean; onEdit: () => void; onSell?: () => void; layout?: CardLayout }) {
+export function PreparedCard({ row, canManage, onEdit, onSell, cooking, layout = 'grid' }: { row: PreparedRow; canManage: boolean; onEdit: () => void; onSell?: () => void; cooking?: CookingInfo; layout?: CardLayout }) {
   const yieldMilli = row.recipe ? currentVersion(row.recipe)?.yieldMilli : null;
   const unit = displayUnitOf(row.ingredient);
   const list = layout === 'list';
@@ -357,6 +406,7 @@ export function PreparedCard({ row, canManage, onEdit, onSell, layout = 'grid' }
                 <span data-unit-cost>{row.unitCost === null ? '—' : t('inventory.recipes.unitCost', { price: formatPaisa(row.unitCost), unit: unitLabel(unit, MILLI) })}</span>
               </InfoLine>
               <PosLine row={row} onSell={onSell} />
+              {cooking && <CookedStock row={row} cooking={cooking} canManage={canManage} />}
             </div>
           </div>
         </div>

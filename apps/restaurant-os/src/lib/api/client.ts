@@ -71,6 +71,10 @@ import type {
   InventoryView,
   PurchaseUnit,
   StockUnit,
+  CookingBatch,
+  CookingCheckTime,
+  CookMode,
+  PlanRow,
 } from '@restaurant-saas/shared';
 
 /**
@@ -352,6 +356,38 @@ export interface SellPreparedInput {
    * changed them (variantId of a size kept, null = new); names and prices go to the Menu in the same step.
    */
   sizes: { variantId: Uuid | null; name: string; price: number | null; portionMilli: number }[];
+}
+
+/** A cooking batch as recorded (I3, owner 2026-11-09). */
+export interface CookingBatchInput {
+  /** One per Cook dialog: a double tap or retry saves once */
+  idempotencyKey: string;
+  preparedId: Uuid;
+  mode: CookMode;
+  /** MAIN: the main raw ingredient used (stock-unit thousandths); BATCHES: thousandths of a recipe batch */
+  amountMilli: number;
+  /** What was actually made (the dish's stock-unit thousandths) */
+  actualMilli: number;
+  /** Grams in one plate; remembered on the dish */
+  plateMilli: number;
+  /** The plan day it was cooked for; null = today */
+  planDate: string | null;
+  note: string;
+}
+
+/** A day's cooking plan and its stock check (I3). */
+export interface CookingPlanView {
+  date: string;
+  today: string;
+  /** The date has its own plan (else the daily plan) */
+  ownPlan: boolean;
+  daily: PlanRow[];
+  rows: (PlanRow & { name: string; stockUnit: Ingredient['stockUnit']; mainName: string | null; verified: boolean; expectedMilli: number | null; cooked: boolean })[];
+  /** Every raw ingredient the rows still to cook need, added up */
+  needs: { ingredient: Ingredient; needMilli: number; haveMilli: number; shortMilli: number; low: boolean; expired: boolean; supplierName: string | null }[];
+  /** Dishes that can be planned: cooked food and other prepared items */
+  dishes: { preparedId: Uuid; name: string; mode: CookMode; mainId: Uuid | null; mainName: string | null; verified: boolean; stockUnit: Ingredient['stockUnit'] }[];
+  checks: CookingCheckTime[];
 }
 
 /** One size in Auto Scale (Recipe Builder R2). */
@@ -696,6 +732,23 @@ export interface ApiClient {
   turnOffRecipeScale(menuItemId: Uuid): Promise<void>;
   /** A cooked dish on the POS: the same menu product linked, or made once; each size's recipe = its portion (one step). */
   sellPreparedItem(input: SellPreparedInput): Promise<MenuItem>;
+  /**
+   * I3 (owner, 2026-11-09): cook a batch by the dish's verified recipe in one step: the raw ingredients out once (COOK_USE),
+   * the actual cooked amount in (COOKED), the batch kept. Refused while an ingredient is short; a repeated key returns the first.
+   */
+  recordCookingBatch(input: CookingBatchInput): Promise<CookingBatch>;
+  /** The actual output was wrong: the cooked stock follows (a COOKED correction with the reason). */
+  correctCookingBatch(batchId: Uuid, actualMilli: number, reason: string): Promise<CookingBatch>;
+  /** A batch recorded by mistake: everything goes back with opposite movements, while its cooked food is still in stock. */
+  reverseCookingBatch(batchId: Uuid, reason: string): Promise<CookingBatch>;
+  /** A day's cooking plan (default: tomorrow) with what it needs, the usable stock and what is short. */
+  getCookingPlan(date?: string): Promise<CookingPlanView>;
+  /** date null = the daily plan; a date = that day's own plan (an empty list = nothing cooked that day). */
+  saveCookingPlan(input: { date: string | null; rows: PlanRow[] }): Promise<void>;
+  /** What the plan of a date is short of goes onto each supplier's draft bill (drafts never change stock). */
+  draftShortageBills(date: string): Promise<{ drafts: { supplierId: Uuid; supplierName: string; lines: number }[]; withoutSupplier: string[] }>;
+  /** When the plan is checked against the stock (Owner): e.g. 20:00 for tomorrow, 07:00 for today. */
+  saveCookingChecks(checks: CookingCheckTime[]): Promise<void>;
   /** A supplier added from the ingredient form (name + phone). */
   addSupplier(input: SupplierInput): Promise<Supplier>;
   /** Suppliers S1: every supplier with today's purchases, what we owe and the status. */

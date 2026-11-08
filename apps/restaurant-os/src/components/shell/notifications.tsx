@@ -33,6 +33,8 @@ export function notificationTitle(n: StaffNotification): string {
       return t('alerts.onlineOrder', { n: n.dailyNumber });
     case 'COUNTER_READY':
       return t('alerts.counterReady', { n: n.dailyNumber, type: t(`orderType.${n.orderType}`) });
+    case 'COOKING_SHORTAGE':
+      return t(n.forDay === 'TOMORROW' ? 'alerts.cookingShortTomorrow' : 'alerts.cookingShortToday', { n: n.count, time: n.time });
   }
 }
 
@@ -50,6 +52,8 @@ export function notificationBody(n: StaffNotification): string {
       return t('alerts.onlineOrderBody', { type: t(`orderType.${n.orderType}`), total: formatPaisa(n.total), name: n.customerName });
     case 'COUNTER_READY':
       return n.orderType === 'DELIVERY' ? t('alerts.assignRider', { name: n.customerName || t('pos.walkIn') }) : t('alerts.readyForPickup', { name: n.customerName || t('pos.walkIn') });
+    case 'COOKING_SHORTAGE':
+      return t('alerts.cookingShortBody', { names: n.names.join(', ') + (n.count > n.names.length ? ' …' : '') });
   }
 }
 
@@ -60,12 +64,13 @@ const ALERT_TONES: Record<StaffNotification['kind'], AlertTone> = {
   BILL_ACCEPTED: 'BILL',
   FOOD_READY: 'READY',
   COUNTER_READY: 'READY',
+  COOKING_SHORTAGE: 'BILL',
 };
-const ALERT_ORDER: StaffNotification['kind'][] = ['ONLINE_ORDER', 'WAITER_CALLED', 'BILL_REQUESTED', 'FOOD_READY', 'COUNTER_READY', 'BILL_ACCEPTED'];
+const ALERT_ORDER: StaffNotification['kind'][] = ['ONLINE_ORDER', 'WAITER_CALLED', 'BILL_REQUESTED', 'FOOD_READY', 'COUNTER_READY', 'BILL_ACCEPTED', 'COOKING_SHORTAGE'];
 
 /** What the device says aloud: Roman Urdu, and Urdu or Hindi for devices with that voice (lib/sound.ts). */
 function notificationSpeech(n: StaffNotification): { roman: string; urdu: string; hindi: string } {
-  const say = (key: 'onlineOrder' | 'waiterCalled' | 'bill' | 'billAccepted' | 'foodReady' | 'foodWaiting' | 'counterReady', vars?: Record<string, string | number>) => ({
+  const say = (key: 'onlineOrder' | 'waiterCalled' | 'bill' | 'billAccepted' | 'foodReady' | 'foodWaiting' | 'counterReady' | 'cookingShort', vars?: Record<string, string | number>) => ({
     roman: t(`alerts.speech.${key}.roman`, vars),
     urdu: t(`alerts.speech.${key}.urdu`, vars),
     hindi: t(`alerts.speech.${key}.hindi`, vars),
@@ -83,6 +88,8 @@ function notificationSpeech(n: StaffNotification): { roman: string; urdu: string
       return say(n.reminder ? 'foodWaiting' : 'foodReady', { table: n.tableName });
     case 'COUNTER_READY':
       return say('counterReady', { n: n.dailyNumber });
+    case 'COOKING_SHORTAGE':
+      return say('cookingShort', { n: n.count });
   }
 }
 
@@ -95,6 +102,8 @@ export function notificationLink(n: StaffNotification): string {
     case 'ONLINE_ORDER':
     case 'COUNTER_READY':
       return '/online-orders';
+    case 'COOKING_SHORTAGE':
+      return `/inventory?cooking=${n.planDate}`;
     default:
       return `/waiter?table=${n.tableId}`;
   }

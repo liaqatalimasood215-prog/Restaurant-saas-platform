@@ -9,10 +9,12 @@ import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { STATUS_TONE, expiryLabel, stockText, unitLabel } from './inventory-format';
 
-export const INGREDIENT_FILTERS = ['ALL', 'LOW', 'OUT', 'EXPIRING', 'NOT_IN_USE'] as const;
+/** COOKED = cooked food (prepared items) with its stock, apart from the raw ingredients (I3, owner 2026-11-09) */
+export const INGREDIENT_FILTERS = ['ALL', 'LOW', 'OUT', 'EXPIRING', 'NOT_IN_USE', 'COOKED'] as const;
 export type IngredientFilter = (typeof INGREDIENT_FILTERS)[number];
 
 function matches(row: IngredientRow, filter: IngredientFilter): boolean {
+  if (filter === 'COOKED') return true;
   if (filter === 'NOT_IN_USE') return row.status === 'NOT_IN_USE';
   if (row.status === 'NOT_IN_USE') return false;
   if (filter === 'LOW') return row.status === 'LOW';
@@ -43,10 +45,11 @@ export function IngredientsTab({
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<IngredientCategory | 'ALL'>('ALL');
   const q = query.trim().toLowerCase();
-  const inCategory = view.ingredients.filter(
-    (r) => (category === 'ALL' || r.ingredient.category === category) && (!q || r.ingredient.name.toLowerCase().includes(q) || r.ingredient.code.toLowerCase().includes(q)),
-  );
-  const rows = inCategory.filter((r) => matches(r, filter));
+  const inCategoryOf = (f: IngredientFilter) =>
+    (f === 'COOKED' ? (view.cooked ?? []) : view.ingredients).filter(
+      (r) => (category === 'ALL' || r.ingredient.category === category) && (!q || r.ingredient.name.toLowerCase().includes(q) || r.ingredient.code.toLowerCase().includes(q)),
+    );
+  const rows = inCategoryOf(filter).filter((r) => matches(r, filter));
   const price = (r: IngredientRow) => t('inventory.perUnit', { price: formatPaisa(r.ingredient.purchasePrice), unit: unitLabel(r.ingredient.purchaseUnit, 1000) });
 
   return (
@@ -74,7 +77,7 @@ export function IngredientsTab({
 
       <div className="flex flex-wrap gap-2" role="group" aria-label={t('inventory.filters.label')}>
         {INGREDIENT_FILTERS.map((f) => {
-          const n = inCategory.filter((r) => matches(r, f)).length;
+          const n = inCategoryOf(f).filter((r) => matches(r, f)).length;
           return (
             <button
               key={f}

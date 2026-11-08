@@ -30,6 +30,8 @@ export interface SectionOptions {
   query?: string;
   /** A menu product's recipe, opened from the Menu (/inventory?recipe=…) */
   recipeItemId?: string;
+  /** The Cooking Plan of a date, opened from the stock alert (/inventory?cooking=…) */
+  cookingDate?: string;
 }
 
 function renderSection(section: OsSection, options: SectionOptions) {
@@ -39,7 +41,7 @@ function renderSection(section: OsSection, options: SectionOptions) {
   if (section.key === 'pos') return <PosScreen tableId={options.tableId} />;
   if (section.key === 'staff') return <StaffScreen />;
   if (section.key === 'menu') return <MenuScreen />;
-  if (section.key === 'inventory') return <InventoryScreen key={options.recipeItemId ?? ''} recipeItemId={options.recipeItemId} />;
+  if (section.key === 'inventory') return <InventoryScreen key={`${options.recipeItemId ?? ''}:${options.cookingDate ?? ''}`} recipeItemId={options.recipeItemId} cookingDate={options.cookingDate} />;
   if (section.key === 'settings') return <SettingsScreen />;
   if (section.key === 'summary') return <SummaryScreen />;
   if (section.key === 'online-orders') return <OnlineOrdersScreen />;

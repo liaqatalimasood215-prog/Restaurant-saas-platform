@@ -213,6 +213,26 @@ import {
   ticketPickup,
   waitingTooLong,
   type PickupFailure,
+  DEFAULT_COOKING_CHECKS,
+  MAX_MOVEMENT_NOTE,
+  MAX_COOK_MILLI,
+  MAX_COOKING_CHECKS,
+  batchPlan,
+  checkBatch,
+  dueChecks,
+  isClockTime,
+  localClock,
+  nextDate,
+  paisaToInput,
+  planOf,
+  planUses,
+  stockNeeds,
+  usableMilli,
+  type BatchProblem,
+  type CookingBatch,
+  type CookingCheckTime,
+  type CookMode,
+  type PlanRow,
 } from '@restaurant-saas/shared';
 import {
   ApiError,
@@ -241,6 +261,8 @@ import {
   type RecipeInput,
   type ScaledRecipeInput,
   type SellPreparedInput,
+  type CookingBatchInput,
+  type CookingPlanView,
   type SupplierInput,
   type KhataPeriod,
   type PurchaseBillInput,
@@ -304,6 +326,18 @@ const RULE_MESSAGES: Record<TransitionFailure | TicketTransitionFailure, string>
   UNDO_EXPIRED: 'Undo is only possible within 2 minutes of Ready.',
   ORDER_CLOSED: 'The order has already left the kitchen.',
 };
+
+/** Cooking batches (I3, owner 2026-11-09) */
+const BATCH_MESSAGES: Record<BatchProblem, string> = {
+  AMOUNT_INVALID: 'Type how much was cooked (more than 0).',
+  ACTUAL_INVALID: 'Type how much was actually made (more than 0).',
+  PLATE_INVALID: 'Type the grams in one plate (more than 0).',
+  NOT_VERIFIED: 'Verify the recipe first: only a verified recipe takes stock.',
+  SHORT: 'Not enough in stock.',
+  REASON_REQUIRED: 'Please write a reason.',
+};
+
+const nameOfSupplier = (suppliers: readonly Supplier[], id: string | null) => (id ? (suppliers.find((s) => s.id === id)?.name ?? null) : null);
 
 /** Picked up at the pass (owner, 2026-11-09) */
 const PICKUP_MESSAGES: Record<PickupFailure, string> = {
@@ -2545,21 +2579,24 @@ export class DemoAdapter implements ApiClient, DemoControls {
       this.require(data, 'inventory.view');
       const inv = data.inventory;
       const today = businessDate(new Date(), data.branch.timezone, '00:00');
-      const rows = inv.ingredients
-        .filter((ingredient) => ingredient.kind !== 'PREPARED')
-        .map((ingredient) => {
-          const onHandMilli = onHandOf(ingredient.id, inv.movements);
-          return {
-            ingredient,
-            onHandMilli,
-            status: stockStatus({ onHandMilli, minStockMilli: ingredient.minStockMilli, isActive: ingredient.isActive }),
-            expiry: expiryState(ingredient.expiryDate, today, onHandMilli, inv.expiringSoonDays),
-            value: stockValueOf(ingredient, onHandMilli),
-            supplierName: inv.suppliers.find((s) => s.id === ingredient.preferredSupplierId)?.name ?? null,
-            locationName: inv.locations.find((l) => l.id === ingredient.locationId)?.name ?? null,
-          };
-        })
-        .sort((a, b) => a.ingredient.name.localeCompare(b.ingredient.name));
+      const rowOf = (ingredient: Ingredient) => {
+        const onHandMilli = onHandOf(ingredient.id, inv.movements);
+        return {
+          ingredient,
+          onHandMilli,
+          status: stockStatus({ onHandMilli, minStockMilli: ingredient.minStockMilli, isActive: ingredient.isActive }),
+          expiry: expiryState(ingredient.expiryDate, today, onHandMilli, inv.expiringSoonDays),
+          value: stockValueOf(ingredient, onHandMilli),
+          supplierName: inv.suppliers.find((s) => s.id === ingredient.preferredSupplierId)?.name ?? null,
+          locationName: inv.locations.find((l) => l.id === ingredient.locationId)?.name ?? null,
+        };
+      };
+      const byName = (a: { ingredient: Ingredient }, b: { ingredient: Ingredient }) => a.ingredient.name.localeCompare(b.ingredient.name);
+      const rows = inv.ingredients.filter((ingredient) => ingredient.kind !== 'PREPARED').map(rowOf).sort(byName);
+      // I3: cooked food apart from the raw ingredients, and what today's and tomorrow's plans are short of
+      const cooked = inv.ingredients.filter((ingredient) => ingredient.kind === 'PREPARED' && ingredient.isActive).map(rowOf).sort(byName);
+      const cookingDay = this.cookingToday(data);
+      const shortOf = (date: string) => this.planCheck(data, date).needs.filter((n) => n.shortMilli > 0).length;
       const movements = [...inv.movements]
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .slice(0, 50)
@@ -2578,6 +2615,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
         movements,
         locations: [...inv.locations].sort((a, b) => a.sort - b.sort),
         suppliers: inv.suppliers.filter((s) => s.isActive),
+        cooked,
+        cookingShort: { today: shortOf(cookingDay), tomorrow: shortOf(nextDate(cookingDay)) },
       };
     });
   }
@@ -2852,6 +2891,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
         staffNames: Object.fromEntries([...people].filter(Boolean).map((uid) => [uid, this.staffName(data, uid) ?? ''])),
         onHand: Object.fromEntries(inv.ingredients.map((i) => [i.id, onHandOf(i.id, inv.movements)])),
         purchaseRecipes: this.purchaseRecipeRows(data),
+        // I3: the newest cooking batches (each card shows its own)
+        cookingBatches: [...(inv.cookingBatches ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 200),
         lastPurchases: inv.movements
           .filter((m) => m.type === 'PURCHASE')
           .reduce<Record<string, { quantityMilli: number; at: string }>>((latest, m) => {
@@ -3103,6 +3144,293 @@ export class DemoAdapter implements ApiClient, DemoControls {
           this.writeRecipe(data, user, book, target, portionLines(prepared.id, size.portionMilli), null, `Sold from ${prepared.name}`, true);
         }
         return item;
+      }),
+    );
+  }
+
+  // ── Cooking batches and the cooking plan (I3, owner 2026-11-09) ──────────────────────────────
+
+  /** A dish's verified recipe and how it is cooked: by its main raw ingredient, else by recipe batches (naan dough). */
+  private cookingRecipe(data: DemoData, preparedId: string) {
+    const dish = data.inventory.ingredients.find((i) => i.id === preparedId && i.kind === 'PREPARED');
+    const recipe = dish ? this.recipeFor(data, { kind: 'PREPARED', ingredientId: dish.id }) : null;
+    const version = recipe ? verifiedVersion(recipe) : null;
+    const latest = recipe ? currentVersion(recipe) : null;
+    const mode: CookMode = (version ?? latest)?.mainIngredientId ? 'MAIN' : 'BATCHES';
+    return { dish, recipe, version, mode };
+  }
+
+  /** The branch's calendar date today (the cooking day), not the business day. */
+  private cookingToday(data: DemoData): string {
+    return localClock(new Date(), data.branch.timezone).date;
+  }
+
+  /** Stock that may be cooked with: on hand, nothing when it has expired, never below zero. */
+  private usableStock(data: DemoData): (ingredientId: string) => number {
+    const inv = data.inventory;
+    const today = this.cookingToday(data);
+    return (ingredientId) => {
+      const ingredient = inv.ingredients.find((i) => i.id === ingredientId);
+      const onHand = onHandOf(ingredientId, inv.movements);
+      const expired = ingredient ? expiryState(ingredient.expiryDate, today, onHand, inv.expiringSoonDays) === 'EXPIRED' : false;
+      return usableMilli(onHand, expired);
+    };
+  }
+
+  /** What a day's plan still has to cook (dishes without a done batch for that day) needs, against the usable stock. */
+  private planCheck(data: DemoData, date: string) {
+    const inv = data.inventory;
+    const rows = planOf(inv.cookingPlan, date);
+    const cooked = new Set((inv.cookingBatches ?? []).filter((b) => b.status === 'DONE' && b.planDate === date).map((b) => b.preparedId));
+    const uses = planUses(
+      rows.filter((r) => !cooked.has(r.preparedId)),
+      (preparedId) => this.cookingRecipe(data, preparedId).version,
+    );
+    return { rows, cooked, needs: stockNeeds(uses, this.usableStock(data)) };
+  }
+
+  recordCookingBatch(input: CookingBatchInput): Promise<CookingBatch> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        // A double tap or retry with the same key returns the first batch: the raw stock goes out once
+        const key = 'cooking:' + input.idempotencyKey;
+        const done = data.idempotency[key];
+        if (done) {
+          const first = (inv.cookingBatches ?? []).find((b) => b.id === done);
+          if (first) return first;
+        }
+        const { dish, recipe, version, mode } = this.cookingRecipe(data, input.preparedId);
+        if (!dish || !recipe) throw new ApiError('NOT_FOUND', 'This dish or its recipe was not found.');
+        if (input.mode !== mode) throw new ApiError('VALIDATION', 'Please open the Cook box again: the recipe changed.');
+        const plan = version ? batchPlan(version, mode, input.amountMilli) : null;
+        const needs = plan ? stockNeeds(plan.uses, this.usableStock(data)) : [];
+        const problem = checkBatch({ verified: Boolean(version), plan, actualMilli: input.actualMilli, plateMilli: input.plateMilli, needs });
+        if (problem === 'SHORT') {
+          const names = needs.filter((n) => n.shortMilli > 0).map((n) => inv.ingredients.find((i) => i.id === n.ingredientId)?.name ?? '');
+          throw new ApiError('CONFLICT', `Not enough in stock: ${names.join(', ')}. Receive a purchase bill or correct the stock first.`);
+        }
+        if (problem || !plan || !version) throw new ApiError('VALIDATION', BATCH_MESSAGES[problem ?? 'AMOUNT_INVALID']);
+        const now = nowIso();
+        const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+        const batch: CookingBatch = {
+          id: newId(),
+          ...scope,
+          preparedId: dish.id,
+          recipeId: recipe.id,
+          recipeVersion: version.version,
+          mode,
+          amountMilli: input.amountMilli,
+          uses: plan.uses,
+          expectedMilli: plan.expectedMilli,
+          actualMilli: input.actualMilli,
+          cost: linesCost(this.costBook(data), plan.lines).total,
+          plateMilli: input.plateMilli,
+          planDate: input.planDate ?? this.cookingToday(data),
+          note: input.note.trim().slice(0, MAX_MOVEMENT_NOTE),
+          status: 'DONE',
+          createdBy: user.id,
+          createdAt: now,
+        };
+        const note = `Cooked ${dish.name}`;
+        for (const use of plan.uses) {
+          inv.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'COOK_USE', quantityMilli: -use.quantityMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id });
+        }
+        inv.movements.push({ id: newId(), ...scope, ingredientId: dish.id, type: 'COOKED', quantityMilli: input.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id });
+        (inv.cookingBatches ??= []).push(batch);
+        Object.assign(dish, { plateMilli: input.plateMilli, updatedAt: now });
+        data.idempotency[key] = batch.id;
+        return batch;
+      }),
+    );
+  }
+
+  /** A batch of this branch that is still counted (not reversed), else an error. */
+  private doneBatch(data: DemoData, batchId: string): CookingBatch {
+    const batch = (data.inventory.cookingBatches ?? []).find((b) => b.id === batchId);
+    if (!batch) throw new ApiError('NOT_FOUND', 'This cooking batch was not found.');
+    if (batch.status !== 'DONE') throw new ApiError('CONFLICT', 'This batch was already reversed.');
+    return batch;
+  }
+
+  correctCookingBatch(batchId: string, actualMilli: number, reason: string): Promise<CookingBatch> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        const batch = this.doneBatch(data, batchId);
+        const why = reason.trim();
+        if (!why) throw new ApiError('VALIDATION', BATCH_MESSAGES.REASON_REQUIRED);
+        if (!Number.isInteger(actualMilli) || actualMilli <= 0 || actualMilli > MAX_COOK_MILLI) throw new ApiError('VALIDATION', BATCH_MESSAGES.ACTUAL_INVALID);
+        const delta = actualMilli - batch.actualMilli;
+        if (delta === 0) return batch;
+        if (delta < 0 && onHandOf(batch.preparedId, inv.movements) < -delta) throw new ApiError('CONFLICT', 'Less of this dish is left than the correction takes away.');
+        const now = nowIso();
+        inv.movements.push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: delta, reason: null, note: `Correction: ${why}`.slice(0, MAX_MOVEMENT_NOTE), createdBy: user.id, createdAt: now, batchId: batch.id });
+        (batch.corrections ??= []).push({ fromMilli: batch.actualMilli, toMilli: actualMilli, reason: why, by: user.id, at: now });
+        batch.actualMilli = actualMilli;
+        return batch;
+      }),
+    );
+  }
+
+  reverseCookingBatch(batchId: string, reason: string): Promise<CookingBatch> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        const batch = this.doneBatch(data, batchId);
+        const why = reason.trim();
+        if (!why) throw new ApiError('VALIDATION', BATCH_MESSAGES.REASON_REQUIRED);
+        // Only while what it made is still there: sold or used food cannot go back to raw
+        if (onHandOf(batch.preparedId, inv.movements) < batch.actualMilli) throw new ApiError('CONFLICT', 'Some of this batch is already used, so it cannot be reversed. Correct the stock instead.');
+        const now = nowIso();
+        const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+        const note = `Reversed: ${why}`.slice(0, MAX_MOVEMENT_NOTE);
+        for (const use of batch.uses) {
+          inv.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'COOK_USE', quantityMilli: use.quantityMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id });
+        }
+        inv.movements.push({ id: newId(), ...scope, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: -batch.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id });
+        Object.assign(batch, { status: 'REVERSED', reversedBy: user.id, reversedAt: now, reverseReason: why });
+        return batch;
+      }),
+    );
+  }
+
+  getCookingPlan(date?: string): Promise<CookingPlanView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const inv = data.inventory;
+      const today = this.cookingToday(data);
+      const day = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : nextDate(today);
+      const { rows, cooked, needs } = this.planCheck(data, day);
+      const nameOf = (id: string | null | undefined) => (id ? (inv.ingredients.find((i) => i.id === id)?.name ?? null) : null);
+      const dishes = inv.ingredients
+        .filter((i) => i.kind === 'PREPARED' && i.isActive)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((dish) => {
+          const { version, mode, recipe } = this.cookingRecipe(data, dish.id);
+          const main = (version ?? (recipe ? currentVersion(recipe) : null))?.mainIngredientId;
+          return { preparedId: dish.id, name: dish.name, mode, mainId: main ?? null, mainName: nameOf(main), verified: Boolean(version), stockUnit: dish.stockUnit };
+        });
+      return {
+        date: day,
+        today,
+        ownPlan: (inv.cookingPlan?.days ?? []).some((d) => d.date === day),
+        daily: inv.cookingPlan?.daily ?? [],
+        rows: rows.map((row) => {
+          const dish = dishes.find((d) => d.preparedId === row.preparedId);
+          const { version } = this.cookingRecipe(data, row.preparedId);
+          return {
+            ...row,
+            name: dish?.name ?? '—',
+            stockUnit: dish?.stockUnit ?? 'g',
+            mainName: dish?.mainName ?? null,
+            verified: dish?.verified ?? false,
+            expectedMilli: version ? (batchPlan(version, row.mode, row.amountMilli)?.expectedMilli ?? null) : null,
+            cooked: cooked.has(row.preparedId),
+          };
+        }),
+        needs: needs
+          .map((need) => {
+            const ingredient = inv.ingredients.find((i) => i.id === need.ingredientId)!;
+            const onHand = onHandOf(ingredient.id, inv.movements);
+            const status = stockStatus({ onHandMilli: onHand, minStockMilli: ingredient.minStockMilli, isActive: ingredient.isActive });
+            return {
+              ...need,
+              ingredient,
+              low: status === 'LOW' || status === 'OUT',
+              expired: expiryState(ingredient.expiryDate, today, onHand, inv.expiringSoonDays) === 'EXPIRED',
+              supplierName: nameOfSupplier(inv.suppliers, this.supplierFor(data, ingredient.id)),
+            };
+          })
+          .sort((a, b) => Number(b.shortMilli > 0) - Number(a.shortMilli > 0) || a.ingredient.name.localeCompare(b.ingredient.name)),
+        dishes,
+        checks: inv.cookingChecks ?? [...DEFAULT_COOKING_CHECKS],
+      };
+    });
+  }
+
+  /** Who brings an ingredient: its preferred supplier, else the first supplier who has it on his list. */
+  private supplierFor(data: DemoData, ingredientId: string): string | null {
+    const inv = data.inventory;
+    const preferred = inv.ingredients.find((i) => i.id === ingredientId)?.preferredSupplierId;
+    if (preferred && inv.suppliers.some((s) => s.id === preferred && s.isActive)) return preferred;
+    return inv.suppliers.find((s) => s.isActive && s.productIds.includes(ingredientId))?.id ?? null;
+  }
+
+  saveCookingPlan(input: { date: string | null; rows: PlanRow[] }): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        if (input.date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new ApiError('VALIDATION', 'Choose a date.');
+        const seen = new Set<string>();
+        for (const row of input.rows) {
+          const { dish, mode } = this.cookingRecipe(data, row.preparedId);
+          if (!dish) throw new ApiError('NOT_FOUND', 'A dish of the plan was not found.');
+          if (seen.has(row.preparedId)) throw new ApiError('VALIDATION', `${dish.name} is in the plan twice.`);
+          seen.add(row.preparedId);
+          if (row.mode !== mode || !Number.isInteger(row.amountMilli) || row.amountMilli <= 0 || row.amountMilli > MAX_COOK_MILLI) {
+            throw new ApiError('VALIDATION', `Type how much ${dish.name} is cooked (more than 0).`);
+          }
+        }
+        const plan = (inv.cookingPlan ??= { daily: [], days: [] });
+        const rows = input.rows.map((r) => ({ preparedId: r.preparedId, mode: r.mode, amountMilli: r.amountMilli }));
+        if (input.date === null) plan.daily = rows;
+        else plan.days = [...plan.days.filter((d) => d.date !== input.date), { date: input.date, rows }];
+      }),
+    );
+  }
+
+  draftShortageBills(date: string): Promise<{ drafts: { supplierId: string; supplierName: string; lines: number }[]; withoutSupplier: string[] }> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        const short = this.planCheck(data, date).needs.filter((n) => n.shortMilli > 0);
+        const drafts = new Map<string, number>();
+        const withoutSupplier: string[] = [];
+        for (const need of short) {
+          const ingredient = inv.ingredients.find((i) => i.id === need.ingredientId)!;
+          const supplierId = this.supplierFor(data, ingredient.id);
+          const option = findBuyOption(ingredient, 'main');
+          if (!supplierId || !option) {
+            withoutSupplier.push(ingredient.name);
+            continue;
+          }
+          const supplier = inv.suppliers.find((s) => s.id === supplierId)!;
+          // What is short, rounded up to whole purchase units (0.3 kg short of a 1 kg pack → 1 pack); a draft never changes stock
+          const units = String(Math.ceil(need.shortMilli / option.sizeMilli));
+          const draft =
+            (inv.purchaseDrafts ?? []).find((d) => d.supplierId === supplierId) ??
+            ({ supplierId, billNo: '', date: this.branchToday(data), lines: [], discount: '', discountMode: 'RS', paid: '', method: 'CASH', note: '', savedAt: nowIso() } satisfies PurchaseDraft);
+          const line = draft.lines.find((l) => l.ingredientId === ingredient.id && (l.unitKey ?? 'main') === 'main');
+          const rate = paisaToInput(supplier.rates?.[supplierRateKey(ingredient.id, 'main')] ?? ingredient.purchasePrice);
+          if (line) line.quantity = String(Math.max(Number(line.quantity) || 0, Number(units)));
+          else draft.lines.push({ ingredientId: ingredient.id, unitKey: 'main', quantity: units, rate });
+          inv.purchaseDrafts = [...(inv.purchaseDrafts ?? []).filter((d) => d.supplierId !== supplierId), { ...draft, savedAt: nowIso() }];
+          if (!supplier.productIds.includes(ingredient.id)) supplier.productIds.push(ingredient.id);
+          drafts.set(supplierId, (drafts.get(supplierId) ?? 0) + 1);
+        }
+        return {
+          drafts: [...drafts.entries()].map(([supplierId, lines]) => ({ supplierId, supplierName: inv.suppliers.find((s) => s.id === supplierId)?.name ?? '', lines })),
+          withoutSupplier,
+        };
+      }),
+    );
+  }
+
+  saveCookingChecks(checks: CookingCheckTime[]): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'settings.manage');
+        if (checks.length > MAX_COOKING_CHECKS || checks.some((c) => !isClockTime(c.time) || (c.forDay !== 'TODAY' && c.forDay !== 'TOMORROW'))) {
+          throw new ApiError('VALIDATION', `Type up to ${MAX_COOKING_CHECKS} times like 20:00.`);
+        }
+        data.inventory.cookingChecks = checks.map((c) => ({ time: c.time, forDay: c.forDay }));
       }),
     );
   }
@@ -3575,6 +3903,23 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const now = Date.now();
 
       const list: StaffNotification[] = [];
+      // I3: the stock checks before cooking whose time has come today (8 pm for tomorrow, 7 am for today), while something is short
+      if (this.permissionsOf(data, user).includes('inventory.manage')) {
+        for (const check of dueChecks(data.inventory.cookingChecks ?? DEFAULT_COOKING_CHECKS, new Date(), data.branch.timezone)) {
+          const short = this.planCheck(data, check.planDate).needs.filter((n) => n.shortMilli > 0);
+          if (short.length === 0) continue;
+          list.push({
+            kind: 'COOKING_SHORTAGE',
+            id: `cooking-short:${check.date}:${check.time}`,
+            planDate: check.planDate,
+            forDay: check.forDay,
+            time: check.time,
+            count: short.length,
+            names: short.slice(0, 3).map((n) => data.inventory.ingredients.find((i) => i.id === n.ingredientId)?.name ?? ''),
+            at: new Date().toISOString(),
+          });
+        }
+      }
       if (this.permissionsOf(data, user).includes('order.manage')) {
         for (const order of data.orders) {
           if (order.type === 'DINE_IN') continue;

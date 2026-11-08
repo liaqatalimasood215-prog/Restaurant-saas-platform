@@ -14,6 +14,7 @@ import {
   Trash2,
   TriangleAlert,
   Wallet,
+  CalendarDays,
   type LucideIcon,
 } from 'lucide-react';
 import { formatBps, formatPaisa, type InventoryView } from '@restaurant-saas/shared';
@@ -41,12 +42,15 @@ export function OverviewTab({
   onOpenRecipes,
   onOpenMovements,
   onOpenSuppliers,
+  onOpenCooking,
 }: {
   view: InventoryView;
   onOpen: (filter: IngredientFilter) => void;
   onOpenRecipes: () => void;
   onOpenMovements: () => void;
   onOpenSuppliers: () => void;
+  /** I3: the Cooking Plan (what today's and tomorrow's cooking is short of) */
+  onOpenCooking?: () => void;
 }) {
   const { summary } = view;
   // Suppliers S1 fills today's purchases and what we owe the suppliers.
@@ -76,6 +80,21 @@ export function OverviewTab({
           <StatCard icon={ShoppingCart} tone="slate" label={t('inventory.cards.purchases')} value={formatPaisa(suppliers.todayPurchases)} hint={t('inventory.cardHints.purchases')} onClick={onOpenSuppliers} />
         ) : (
           <SoonCard icon={ShoppingCart} label={t('inventory.cards.purchases')} step="3" />
+        )}
+        {view.cookingShort && onOpenCooking && (
+          <StatCard
+            icon={CalendarDays}
+            tone={view.cookingShort.tomorrow + view.cookingShort.today > 0 ? 'red' : 'slate'}
+            label={t('inventory.cooking.card.title')}
+            value={String(view.cookingShort.tomorrow)}
+            hint={
+              view.cookingShort.tomorrow + view.cookingShort.today > 0
+                ? `${t('inventory.cooking.card.tomorrowShort', { n: view.cookingShort.tomorrow })} · ${t('inventory.cooking.card.todayShort', { n: view.cookingShort.today })}`
+                : t('inventory.cooking.card.none')
+            }
+            alert={view.cookingShort.tomorrow + view.cookingShort.today > 0}
+            onClick={onOpenCooking}
+          />
         )}
         <SoonCard icon={ChefHat} label={t('inventory.cards.consumption')} step="2" />
         <SoonCard icon={Trash2} label={t('inventory.cards.wastage')} step="4" />

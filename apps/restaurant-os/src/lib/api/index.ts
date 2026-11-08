@@ -10,6 +10,8 @@ export type {
   CounterOrderInput,
   MenuItemInput,
   SellPreparedInput,
+  CookingBatchInput,
+  CookingPlanView,
   DemoControls,
   HeldBillInput,
   KhataPeriod,

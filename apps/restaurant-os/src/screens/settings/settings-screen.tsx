@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { CookingChecks } from './cooking-checks';
 import {
   ArrowDown,
   ArrowLeft,
@@ -284,6 +285,7 @@ function InfoPanel({ card, view }: { card: CardId; view: SettingsView }) {
         <Block>
           <p className="text-sm text-slate-700">{t('settings.notificationsPanel')}</p>
           <Soon>{t('settings.notificationsSoon')}</Soon>
+          <CookingChecks />
         </Block>
       );
     case 'system':

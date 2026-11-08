@@ -44,12 +44,22 @@ const newKey = () => crypto.randomUUID();
  * Paid / Partly paid / Unpaid), the chosen supplier beside it: totals, his products with Receive Stock (stock and khata
  * in one step), Settle Payment and today's khata. Phones show the list first, then the supplier with a Back button.
  */
-export function SuppliersTab({ canManage, onFocus }: { canManage: boolean; /** A bill is open: the Inventory header and tabs step aside */ onFocus?: (on: boolean) => void }) {
+export function SuppliersTab({
+  canManage,
+  onFocus,
+  openBill,
+}: {
+  canManage: boolean;
+  /** A bill is open: the Inventory header and tabs step aside */
+  onFocus?: (on: boolean) => void;
+  /** I3: open this supplier's bill (its draft) at once, from the Cooking Plan */
+  openBill?: string;
+}) {
   const toast = useToast();
   const view = useApiQuery(() => getApi().getSuppliers(), []);
-  const [chosen, setChosen] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<string | null>(openBill ?? null);
   /** New Purchase (Bill) of the open supplier; productId = the product tapped to start it */
-  const [bill, setBill] = useState<{ productId: string | null } | null>(null);
+  const [bill, setBill] = useState<{ productId: string | null } | null>(openBill ? { productId: null } : null);
   // The bill gets the whole screen (owner, 2026-11-07: more room for products).
   useEffect(() => {
     onFocus?.(bill !== null);

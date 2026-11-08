@@ -196,6 +196,8 @@ export interface Ingredient extends BranchScoped {
   packings?: Packing[];
   /** Loose price per kg / litre / one (paisa); missing = worked out from the main price */
   loosePrice?: Paisa | null;
+  /** Cooked food (prepared items): grams (or ml) in one plate, for "12.5 kg ≈ 50 plates" (owner, 2026-11-09); missing = 250 g */
+  plateMilli?: number | null;
 }
 
 // ── Ways to buy one product (owner's multiple-units brief, 2026-11-07) ────────────────────────
@@ -406,7 +408,8 @@ export function suggestIngredientCode(name: string, existingCodes: readonly stri
 
 /** Step A: the opening stock and corrections. Purchases, kitchen use, waste and transfers follow in later steps. */
 /** PURCHASE = received from a supplier (Suppliers S1); the khata entry and supplier are kept on the movement. */
-export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE'] as const;
+/** COOK_USE = raw ingredients taken by a cooking batch, COOKED = the cooked dish it made (I3, owner 2026-11-09; batchId on both). */
+export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE', 'COOK_USE', 'COOKED'] as const;
 export type MovementType = (typeof MOVEMENT_TYPES)[number];
 
 export const ADJUST_REASONS = ['RECOUNT', 'ENTRY_MISTAKE', 'FOUND', 'OTHER'] as const;
@@ -425,6 +428,8 @@ export interface StockMovement extends BranchScoped {
   /** PURCHASE only: who brought it and its khata entry */
   supplierId?: Uuid;
   khataEntryId?: Uuid;
+  /** COOK_USE / COOKED (and their reversal or correction): the cooking batch */
+  batchId?: Uuid;
 }
 
 export const MAX_MOVEMENT_NOTE = 120;
@@ -531,6 +536,10 @@ export interface InventoryView {
   movements: StockMovementRow[];
   locations: StockLocation[];
   suppliers: Supplier[];
+  /** I3: cooked food (prepared items) with its stock, apart from the raw ingredients */
+  cooked?: IngredientRow[];
+  /** I3: how many raw ingredients today's and tomorrow's cooking plans are short of (apart from low stock) */
+  cookingShort?: { today: number; tomorrow: number };
 }
 
 /** The dashboard numbers. Ingredients marked Not in use are left out. */
