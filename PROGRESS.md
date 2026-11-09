@@ -13,7 +13,8 @@ everything in very easy Roman Urdu, code and documents in English)
 ## 0. How to start the new chat
 
 1. Open the folder `C:\Users\ADMIN\Projects\restaurant-saas-platform` (short path on purpose: Windows
-   breaks `node_modules` in long paths). Branch `phase-1/restaurant-os-ui`.
+   breaks `node_modules` in long paths). Work from branch `main`, the same as GitHub `origin/main` (pushed 2026-11-10).
+   `phase-1/restaurant-os-ui` is an older branch (stops at 2026-11-01); the folder itself was still on it on 2026-11-10.
 2. First message to Claude: *"Read PROGRESS.md and CLAUDE.md, then continue the same LALA Restaurant OS
    project. Do not create a new project."*
 3. Claude reads, in this order: `CLAUDE.md` (loads `PROJECT_RULES.md`) → this file → `README.md`
@@ -35,8 +36,9 @@ sync (Socket.IO), Phase 6 security / pilot. Never start a phase or preview witho
 ## 2. Hard rules (never break)
 
 - Do not push to GitHub, deploy, publish, make the repo public or connect a paid service without the
-  owner's explicit approval. Local commits on this branch are allowed (owner authorised); **nothing has
-  been pushed**.
+  owner's explicit approval. Local commits are allowed (owner authorised). **`main` was pushed once, with his approval
+  ("Haan, push karo"), on 2026-11-10** to his private repository `github.com/liaqatalimasood215-prog/Restaurant-saas-platform`
+  (remote `origin`). Every later push needs his approval again. Never force push.
 - Never commit passwords, API keys, database credentials or private customer data. Use environment
   variables and placeholder-only example files.
 - Git identity is the placeholder `liaqat.ali@restaurant-saas-platform.local` — do **not** use the owner's
@@ -214,7 +216,7 @@ vibration; Call Waiter also speaks. DEMO sync: between tabs of one browser only 
 backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.tsx`, `src/lib/sound.ts`.
 
 ## 7. Test status (last run, all green)
-- **2026-11-09 (bug run + phone fixes on this newest version, not committed):** `pnpm test` 189, `pnpm typecheck`, `pnpm lint` and `pnpm build`
+- **2026-11-09 (bug run + phone fixes on this newest version, commit `d026d93`, pushed 2026-11-10):** `pnpm test` 189, `pnpm typecheck`, `pnpm lint` and `pnpm build`
   pass. ALL walkthroughs pass: the 25 Restaurant OS ones, customer, rider, the new rider `walkthrough:phone` (Wi-Fi address, storage blocked), and on
   the Wi-Fi address `walkthrough`, `:pos` and the customer walkthrough (181 checks). `:sales-stock` failed once while two test groups ran at the same
   time (it reads the order number straight after Send) and passed when run again. Not verified: a real phone. Fixes and files: README progress log.
@@ -305,12 +307,16 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
-**Bug run + phone fixes 2026-11-09, on top of `945a363`, NOT committed (owner: "Do not stage, commit, or push anything yet").** In worktree
-`restaurant-software-bugs-571b48` (branch `claude/restaurant-software-bugs-571b48`, fast-forwarded to `945a363`). Five bug fixes and the unsaved phone
-fixes of worktree `restaurant-software-setup-92cf0c` (README progress log 2026-11-09). All tests pass (§7). Waiting for his approval to commit, then
-the GitHub push he asked about: read-only audit done 2026-11-09 — no remote yet, no secrets in files or history, all commits use the placeholder
-email, `backend/api` drafts stay (owner: "Keep them as they are"), push the newest line as `main`. Left untouched on purpose: the unfinished
-Suppliers S2 rules in worktree `restaurant-software-setup-1ed6fb`. The toast move (top centre on every size) is visible to him: easy to change back.
+**On GitHub since 2026-11-10 (owner: "Haan, push karo").** Private repository `liaqatalimasood215-prog/Restaurant-saas-platform`, remote `origin`,
+branch `main` at `d026d93` then this docs update (375 files, 98 commits, placeholder email only). Before the push: read-only audit 2026-11-09 — no
+secrets in files or history; `backend/api` drafts kept (owner: "Keep them as they are"); the GitHub repository was empty. Not on GitHub, still only on
+this computer: the other `claude/*` branches (all contained in `main`), the old stash, the unfinished Suppliers S2 rules in worktree
+`restaurant-software-setup-1ed6fb` (left untouched on purpose) and leftovers in `restaurant-software-setup-92cf0c` / `restaurant-website-chat-699380`
+(their useful parts are now in `main`). Next GitHub step only with his approval: push new work on `main` (no force push).
+
+**Bug run + phone fixes 2026-11-09 (owner approved the fixes, the commit "Yes, commit" and the push), commit `d026d93`.** Five bug fixes and the unsaved
+phone fixes of worktree `restaurant-software-setup-92cf0c` (README progress log 2026-11-09); all tests pass (§7). The toast move (top centre on every
+size) is visible to him: easy to change back. Not verified: a real phone.
 
 **I4 ("Step 14") sales take stock at the kitchen's READY, with Available Prepared Food, built and approved 2026-11-09 (DEMO), committed locally (`3770ae3`), not pushed.** Shared `packages/shared/src/sales-stock.ts` (`saleUses`, `saleParts`, `netTaken`, `ItemStock`, `newItemStock`, `givenPortions`, `ReuseSetting` / `defaultReuse` / `reuseOf`, `AvailableFood`, `availableState`, `checkGive`, `sameOrderDish`, `outcomeChoices`, `checkOutcome`, `FoodWaste`, `WASTE_REASONS`, `closingReviewDue`; 11 unit tests); movements `SALE_USE`, `SALE_RETURN` with `orderId` / `orderItemId`; `OrderItem.stock` (new lines only: older lines never take stock), `KitchenTicket.cancelDecision`, `MenuItem.reuse`; `DemoInventory.availableFood`, `foodWaste`, `closingTime` (optional, no data version change). Server: stock at Ready / auto-ready send / dine-in paid before Ready, returned on kitchen Undo; `voidItem` and `cancelOrder` take each made line's outcome; `getMadeFood`, `giveAvailableFood`, `decideCancelledTicket`, `getAvailableFood`, `closeAvailableFood`, `saveClosingTime`; notifications `COOKED_NEGATIVE`, `FOOD_REVIEW`. Screens: `components/food-outcome.tsx` in the waiter's Void box and the new `online-orders/cancel-order-dialog.tsx`; KDS "Ready: from #n — Give this" with a safety check and cancelled tickets with Finish & keep / Stop; POS "n ready" badge; Stock → Available Food (`available-food-tab.tsx`, closing review, `/inventory?food=review`); Overview cards "Sold today, not tracked" and "Ready food for another order"; Menu item "If cancelled after Ready: give to another order" + safe hours + overnight; Settings closing time; each line's stock on the Orders detail. Tests: 189 unit; new `walkthrough:sales-stock` (karahi 1 kg: 0 at Send, the recipe once at Ready, Undo back, Ready again once; cancel after Ready → the box, safety tick, Available Food, no wastage; POS "1 ready"; "Give this" → Ready at once, 0 raw; a second tablet cannot give it again; another karahi made from raw once; served T3 karahi voided → only Wastage, with reason; naan takes naan dough (prepared, below zero → alert), never its atta; 23:05 closing review → wasted "Time over"; closing time 22:30; Menu switch 3 h; phone); 23 other walkthroughs pass (walkthrough, :online, :pos, :tables, :staff, :menu, :settings, :online-app, :kds, :integration, :cooked, :cooking, :recipes, :suppliers, :inventory, :units, :supplier-order, :auto-scale, :sizes, :sub-orders, :refunds, :connected, :riders). Added at his request: a paid karahi, made, then fully refunded → 0 new stock movements, every ingredient unchanged; cancelled while cooking → KDS "CANCELLED while cooking" → Finish & keep (raw once, Available Food), Stop + spoilt (wastage with reason, raw once, never reused), Stop (nothing taken, no wastage). DEMO limit: two tablets that tap in the very same moment, before the browser sync arrives, could both act; the walkthrough waits for the sync, and the real backend (Phase 4) checks it in one database transaction. **Next after his approval: I5** (wastage of raw and prepared stock, expiry).
 

@@ -19,8 +19,9 @@ Roman Urdu (Urdu script if he asks). Code, comments and documents stay in Englis
 ## Current stage (2026-10-30)
 
 - Phase 0 approved by the owner on 2026-10-27.
-- **Phase 1 — Restaurant OS UI prototype** in progress on branch `phase-1/restaurant-os-ui`
-  (PROJECT_RULES.md §15–§16, MASTER_PROMPT.md §12). Local commits only; **nothing pushed** (see `git log`).
+- **Phase 1 — Restaurant OS UI prototype** in progress; work on branch `main` (`phase-1/restaurant-os-ui` is older)
+  (PROJECT_RULES.md §15–§16, MASTER_PROMPT.md §12). `main` is on his private GitHub repository (remote `origin`, first push
+  2026-11-10 with his approval); every later push needs his approval again, never a force push.
 - **Built (DEMO / PROTOTYPE):** layout and sidebar, DEMO login, Tables, Waiter Orders (Super + Service
   Waiter), Kitchen / KDS, Staff, Online Orders, Orders, installable PWA, notifications (message, beep,
   vibration), the full **POS / New Bill** (see below) and **Tables management** (Manage Areas, Add Table,
