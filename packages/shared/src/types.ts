@@ -8,6 +8,7 @@ import type { Permission } from './permissions';
 import type { DaySummary } from './reports';
 import type { MenuUnit } from './units';
 import type { OnlinePublishing, WebsiteConfig } from './online-app';
+import type { ItemStock, ReuseSetting } from './sales-stock';
 
 /**
  * Data shapes shared by the API contract (MASTER_PROMPT.md §9). Phase 1 screens get these from the
@@ -204,6 +205,8 @@ export interface MenuItem extends RestaurantScoped {
    * Chicken Biryani, each size's recipe is its portion of it. Missing = cooked to order, or not linked.
    */
   preparedItemId?: Uuid | null;
+  /** I4: made and then cancelled, not served and safe: may go to another order of the same dish. Missing = the default by category */
+  reuse?: ReuseSetting | null;
 }
 
 /** Snapshot of the chosen add-on, copied at order time */
@@ -245,6 +248,8 @@ export interface OrderItem extends BranchScoped {
   voidReason: string | null;
   voidedBy: Uuid | null;
   voidedAt: IsoDateTime | null;
+  /** I4 (owner, 2026-11-09): when the line's stock was taken (kitchen READY) and how; missing on lines from before I4 = never taken */
+  stock?: ItemStock;
 }
 
 export interface KitchenTicket extends BranchScoped {
@@ -263,6 +268,8 @@ export interface KitchenTicket extends BranchScoped {
    */
   pickedUpAt?: IsoDateTime | null;
   pickedUpBy?: Uuid | null;
+  /** I4: the order was cancelled while this ticket was cooking: the kitchen finishes and keeps it, or stops (owner, 2026-11-09) */
+  cancelDecision?: 'PENDING' | 'KEEP' | 'STOP' | null;
 }
 
 export interface PaymentEntry extends BranchScoped {
@@ -519,6 +526,8 @@ export interface MenuSnapshot {
   items: MenuItem[];
   modifierGroups: ModifierGroup[];
   stations: KitchenStation[];
+  /** I4: ready food of a dish that is waiting for another order (POS / Waiter badge "1 ready") */
+  readyFood?: { menuItemId: Uuid; variantName: string | null; remaining: number }[];
 }
 
 /** One ticket on a Kitchen Display, with what the kitchen needs to read from 2 metres. */
@@ -532,6 +541,10 @@ export interface KitchenTicketView {
   items: OrderItem[];
   /** Picked up, by whom and how (owner, 2026-11-09): the card stays PICKUP_VISIBLE_MS, then hides; null = still on the pass */
   pickup?: { at: IsoDateTime; byName: string | null; source: TicketPickup['source'] } | null;
+  /** I4: ready food of the same dish that may be given to a line of this ticket, by line id */
+  available?: Record<Uuid, { id: Uuid; remaining: number; fromDailyNumber: number; madeAt: IsoDateTime; safeUntil: IsoDateTime }[]>;
+  /** I4: the order was cancelled while this ticket was cooking: Keep or Stop (kitchen) */
+  cancelled?: { reason: string; canKeep: boolean } | null;
 }
 
 /** An item line inside a notification, e.g. "2 × Classic Pizza (Medium)" or "1 kg Chicken Karahi". */
@@ -573,7 +586,11 @@ export type StaffNotification =
   /** A delivery or takeaway order is READY: assign a rider or hand it over */
   | { kind: 'COUNTER_READY'; id: string; orderId: Uuid; dailyNumber: number; orderType: OrderType; customerName: string; at: IsoDateTime }
   /** I3 (owner, 2026-11-09): the stock check before cooking found what the plan of a day is short of (Owner / Manager) */
-  | { kind: 'COOKING_SHORTAGE'; id: string; planDate: string; forDay: 'TODAY' | 'TOMORROW'; time: string; count: number; names: string[]; at: IsoDateTime };
+  | { kind: 'COOKING_SHORTAGE'; id: string; planDate: string; forDay: 'TODAY' | 'TOMORROW'; time: string; count: number; names: string[]; at: IsoDateTime }
+  /** I4: cooked food sold beyond what was recorded as cooked (Owner / Manager): record the Cooking Batch */
+  | { kind: 'COOKED_NEGATIVE'; id: string; count: number; names: string[]; at: IsoDateTime }
+  /** I4: the closing review of the ready food that is left (Owner / Manager) */
+  | { kind: 'FOOD_REVIEW'; id: string; date: string; count: number; names: string[]; at: IsoDateTime };
 
 /** The cashier called a waiter from the POS ("Call Waiter"); tableId is null for the counter. */
 export interface WaiterCall extends BranchScoped {

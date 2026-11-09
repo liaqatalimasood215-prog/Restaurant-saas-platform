@@ -76,3 +76,44 @@ function ChecksForm({ checks: saved }: { checks: CookingCheckTime[] }) {
     </div>
   );
 }
+
+/**
+ * When the closing review of the ready food that is left is due (owner's I4 rule, 2026-11-09): from this time the Owner and
+ * Manager are asked to keep, give to staff or waste (with a reason) what was made and not sold. Default 23:00. Owner only.
+ */
+export function ClosingTime() {
+  const view = useApiQuery(() => getApi().getAvailableFood(), []);
+  if (!view.data) return <LoadingState />;
+  return <ClosingForm key={view.data.closingTime} saved={view.data.closingTime} />;
+}
+
+function ClosingForm({ saved }: { saved: string }) {
+  const toast = useToast();
+  const [time, setTime] = useState(saved);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    if (!isClockTime(time)) return setError(t('settings.cookingChecksInvalid'));
+    setError(null);
+    try {
+      await getApi().saveClosingTime(time);
+      toast.show({ tone: 'success', title: t('food.closingSaved', { time }) });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('states.errorBody'));
+    }
+  };
+  return (
+    <div className="space-y-2" data-closing-time>
+      <h3 className="text-lg font-extrabold text-slate-900">{t('food.closingTitle')}</h3>
+      <p className="text-sm text-slate-600">{t('food.closingHint')}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label={t('food.closingTitle')} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm" />
+        <Button onClick={() => void save()}>{t('food.closingSave')}</Button>
+      </div>
+      {error && (
+        <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}

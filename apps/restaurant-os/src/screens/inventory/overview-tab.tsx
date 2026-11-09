@@ -8,6 +8,7 @@ import {
   ChevronRight,
   HandCoins,
   History,
+  PackageCheck,
   PackageX,
   Percent,
   ShoppingCart,
@@ -33,6 +34,7 @@ const TONES = {
   amber: 'bg-amber-50 text-amber-700',
   red: 'bg-red-50 text-red-700',
   orange: 'bg-orange-50 text-orange-700',
+  green: 'bg-green-50 text-green-700',
 } as const;
 
 /** Inventory dashboard: live cards (tap = the filtered list or Recipes), cards that later steps fill, and three short lists. */
@@ -43,6 +45,7 @@ export function OverviewTab({
   onOpenMovements,
   onOpenSuppliers,
   onOpenCooking,
+  onOpenFood,
 }: {
   view: InventoryView;
   onOpen: (filter: IngredientFilter) => void;
@@ -51,6 +54,8 @@ export function OverviewTab({
   onOpenSuppliers: () => void;
   /** I3: the Cooking Plan (what today's and tomorrow's cooking is short of) */
   onOpenCooking?: () => void;
+  /** I4: Available Food (made, cancelled, waiting for another order) */
+  onOpenFood?: () => void;
 }) {
   const { summary } = view;
   // Suppliers S1 fills today's purchases and what we owe the suppliers.
@@ -96,7 +101,18 @@ export function OverviewTab({
             onClick={onOpenCooking}
           />
         )}
-        <SoonCard icon={ChefHat} label={t('inventory.cards.consumption')} step="2" />
+        {/* I4: sales take stock at the kitchen's Ready; a sold part without a verified recipe is Not tracked */}
+        <StatCard
+          icon={ChefHat}
+          tone={view.notTrackedToday?.length ? 'amber' : 'slate'}
+          label={t('inventory.cards.notTracked')}
+          value={String((view.notTrackedToday ?? []).reduce((sum, r) => sum + r.count, 0))}
+          hint={view.notTrackedToday?.length ? view.notTrackedToday.slice(0, 3).map((r) => `${r.count} × ${r.name}`).join(', ') : t('inventory.cardHints.notTracked')}
+          onClick={onOpenMovements}
+        />
+        {onOpenFood && (
+          <StatCard icon={PackageCheck} tone={view.availableFood ? 'green' : 'slate'} label={t('inventory.cards.availableFood')} value={String(view.availableFood ?? 0)} hint={t('inventory.cardHints.availableFood')} onClick={onOpenFood} />
+        )}
         <SoonCard icon={Trash2} label={t('inventory.cards.wastage')} step="4" />
         {suppliers ? (
           <StatCard icon={HandCoins} tone={suppliers.totalDue > 0 ? 'red' : 'slate'} label={t('inventory.cards.supplierDue')} value={formatPaisa(suppliers.totalDue)} hint={t('inventory.cardHints.supplierDue')} onClick={onOpenSuppliers} />

@@ -18,6 +18,7 @@ import { useSession } from '@/lib/session';
 import { ORDER_TONES } from '@/lib/tones';
 import { PaymentDialog } from '../pos/payment-dialog';
 import { PrintDialog } from '../pos/print-dialog';
+import { CancelOrderDialog } from './cancel-order-dialog';
 import { CounterOrderDialog } from './counter-order-dialog';
 import { OrderCard, type OrderCardActions } from './order-card';
 
@@ -242,16 +243,28 @@ export function OnlineOrdersScreen() {
           }}
         />
       )}
-      {reasonFor && (
+      {reasonFor?.action === 'reject' && (
         <ReasonDialog
-          title={reasonFor.action === 'reject' ? t('online.rejectTitle') : t('online.cancelTitle')}
-          body={reasonFor.action === 'reject' ? t('online.rejectBody') : t('online.cancelBody')}
-          confirmLabel={reasonFor.action === 'reject' ? t('online.reject') : t('online.cancel')}
+          title={t('online.rejectTitle')}
+          body={t('online.rejectBody')}
+          confirmLabel={t('online.reject')}
           onClose={() => setReasonFor(null)}
           onConfirm={(reason) => {
-            const { orderId, action } = reasonFor;
+            const { orderId } = reasonFor;
             setReasonFor(null);
-            void run(() => (action === 'reject' ? getApi().rejectOnlineOrder(orderId, reason) : getApi().cancelOrder(orderId, reason)));
+            void run(() => getApi().rejectOnlineOrder(orderId, reason));
+          }}
+        />
+      )}
+      {/* I4: food already made gets its outcome: kept for another order, back to stock, or wastage (owner, 2026-11-09) */}
+      {reasonFor?.action === 'cancel' && (
+        <CancelOrderDialog
+          orderId={reasonFor.orderId}
+          onClose={() => setReasonFor(null)}
+          onConfirm={(reason, food) => {
+            const { orderId } = reasonFor;
+            setReasonFor(null);
+            void run(() => getApi().cancelOrder(orderId, reason, food));
           }}
         />
       )}

@@ -32,6 +32,8 @@ export interface SectionOptions {
   recipeItemId?: string;
   /** The Cooking Plan of a date, opened from the stock alert (/inventory?cooking=…) */
   cookingDate?: string;
+  /** Stock → Available Food, opened from the closing review alert (/inventory?food=review) */
+  foodReview?: boolean;
 }
 
 function renderSection(section: OsSection, options: SectionOptions) {
@@ -41,7 +43,7 @@ function renderSection(section: OsSection, options: SectionOptions) {
   if (section.key === 'pos') return <PosScreen tableId={options.tableId} />;
   if (section.key === 'staff') return <StaffScreen />;
   if (section.key === 'menu') return <MenuScreen />;
-  if (section.key === 'inventory') return <InventoryScreen key={`${options.recipeItemId ?? ''}:${options.cookingDate ?? ''}`} recipeItemId={options.recipeItemId} cookingDate={options.cookingDate} />;
+  if (section.key === 'inventory') return <InventoryScreen key={`${options.recipeItemId ?? ''}:${options.cookingDate ?? ''}:${options.foodReview ? 'food' : ''}`} recipeItemId={options.recipeItemId} cookingDate={options.cookingDate} foodReview={options.foodReview} />;
   if (section.key === 'settings') return <SettingsScreen />;
   if (section.key === 'summary') return <SummaryScreen />;
   if (section.key === 'online-orders') return <OnlineOrdersScreen />;

@@ -33,7 +33,8 @@
     "walkthrough:cooking": "node scripts/walkthrough-cooking.mjs",
     "walkthrough:connected": "node scripts/walkthrough-connected.mjs",
     "walkthrough:sub-orders": "node scripts/walkthrough-sub-orders.mjs",
-    "walkthrough:previews": "node scripts/walkthrough-previews.mjs"
+    "walkthrough:previews": "node scripts/walkthrough-previews.mjs",
+    "walkthrough:sales-stock": "node scripts/walkthrough-sales-stock.mjs"
   },
   "dependencies": {
     "@restaurant-saas/shared": "workspace:*",

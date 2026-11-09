@@ -25,5 +25,6 @@ export * from './riders';
 export * from './inventory';
 export * from './recipes';
 export * from './cooking';
+export * from './sales-stock';
 export * from './suppliers';
 export * from './size-mix';

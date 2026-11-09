@@ -409,7 +409,7 @@ export function suggestIngredientCode(name: string, existingCodes: readonly stri
 /** Step A: the opening stock and corrections. Purchases, kitchen use, waste and transfers follow in later steps. */
 /** PURCHASE = received from a supplier (Suppliers S1); the khata entry and supplier are kept on the movement. */
 /** COOK_USE = raw ingredients taken by a cooking batch, COOKED = the cooked dish it made (I3, owner 2026-11-09; batchId on both). */
-export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE', 'COOK_USE', 'COOKED'] as const;
+export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE', 'COOK_USE', 'COOKED', 'SALE_USE', 'SALE_RETURN'] as const;
 export type MovementType = (typeof MOVEMENT_TYPES)[number];
 
 export const ADJUST_REASONS = ['RECOUNT', 'ENTRY_MISTAKE', 'FOUND', 'OTHER'] as const;
@@ -430,6 +430,9 @@ export interface StockMovement extends BranchScoped {
   khataEntryId?: Uuid;
   /** COOK_USE / COOKED (and their reversal or correction): the cooking batch */
   batchId?: Uuid;
+  /** SALE_USE / SALE_RETURN (I4): the order line whose stock it is */
+  orderId?: Uuid;
+  orderItemId?: Uuid;
 }
 
 export const MAX_MOVEMENT_NOTE = 120;
@@ -540,6 +543,9 @@ export interface InventoryView {
   cooked?: IngredientRow[];
   /** I3: how many raw ingredients today's and tomorrow's cooking plans are short of (apart from low stock) */
   cookingShort?: { today: number; tomorrow: number };
+  /** I4: ready food that may still be given to another order, and today's sold lines with a part not tracked (no verified recipe) */
+  availableFood?: number;
+  notTrackedToday?: { name: string; count: number }[];
 }
 
 /** The dashboard numbers. Ingredients marked Not in use are left out. */

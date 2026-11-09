@@ -5,16 +5,19 @@ import Link from 'next/link';
 import { ArrowLeft, Search, Send, Trash2 } from 'lucide-react';
 import {
   cardPrice,
+  checkOutcome,
   formatPaisa,
   formatQuantity,
   orderPlaceName,
   subOrderLabel,
   type DraftItemInput,
+  type FoodOutcome,
   type MenuItem,
   type MenuSnapshot,
   type OrderItem,
   type TableBoardEntry,
 } from '@restaurant-saas/shared';
+import { FoodOutcomeFields } from '@/components/food-outcome';
 import { ScreenHeader } from '@/components/screen-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -458,10 +461,10 @@ function OrderWorkspace({
         <VoidDialog
           item={voidTarget}
           onClose={() => setVoidTarget(null)}
-          onConfirm={(reason) => {
+          onConfirm={(reason, food) => {
             const target = voidTarget;
             setVoidTarget(null);
-            void run(() => getApi().voidItem(target.id, reason));
+            void run(() => getApi().voidItem(target.id, reason, food));
           }}
         />
       )}
@@ -476,10 +479,20 @@ function VoidDialog({
 }: {
   item: OrderItem;
   onClose: () => void;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string, food?: FoodOutcome) => void;
 }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState(false);
+  // I4: food already made needs its outcome (owner, 2026-11-09): kept for another order, back to stock, or wastage
+  const made = useApiQuery(() => getApi().getMadeFood(item.orderId, item.id), [item.id]);
+  const line = made.data?.find((l) => l.made);
+  const [food, setFood] = useState<FoodOutcome | undefined>();
+  const [foodError, setFoodError] = useState(false);
+  const confirm = () => {
+    if (!reason.trim()) return setError(true);
+    if (line && checkOutcome(food, line.choices)) return setFoodError(true);
+    onConfirm(reason.trim(), line ? food : undefined);
+  };
   return (
     <Dialog
       open
@@ -490,10 +503,7 @@ function VoidDialog({
           <Button variant="secondary" onClick={onClose}>
             {t('nav.close')}
           </Button>
-          <Button
-            onClick={() => (reason.trim() ? onConfirm(reason.trim()) : setError(true))}
-            className="bg-red-600 hover:bg-red-700"
-          >
+          <Button onClick={confirm} disabled={made.loading && !made.data} className="bg-red-600 hover:bg-red-700">
             {t('waiter.voidConfirm')}
           </Button>
         </>
@@ -516,6 +526,25 @@ function VoidDialog({
         <p role="alert" className="mt-2 font-semibold text-red-700">
           {t('waiter.voidReasonRequired')}
         </p>
+      )}
+      {line && (
+        <div className="mt-4 space-y-2" data-made-food>
+          <p className="text-sm font-bold text-slate-900">{t('food.title')}</p>
+          <p className="text-xs text-slate-600">{t('food.body')}</p>
+          <FoodOutcomeFields
+            line={line}
+            value={food}
+            onChange={(next) => {
+              setFood(next);
+              setFoodError(false);
+            }}
+          />
+          {foodError && (
+            <p role="alert" className="font-semibold text-red-700">
+              {t('food.chooseError')}
+            </p>
+          )}
+        </div>
       )}
     </Dialog>
   );

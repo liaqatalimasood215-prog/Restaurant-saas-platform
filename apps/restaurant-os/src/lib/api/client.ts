@@ -75,6 +75,12 @@ import type {
   CookingCheckTime,
   CookMode,
   PlanRow,
+  AvailableFood,
+  AvailableState,
+  FoodOutcome,
+  FoodOutcomeKind,
+  FoodWaste,
+  ReuseSetting,
 } from '@restaurant-saas/shared';
 
 /**
@@ -271,6 +277,8 @@ export interface MenuItemInput {
   isOnline: boolean;
   /** Display order inside the category, 1 = first; empty = last (new) or unchanged */
   position: number | null;
+  /** I4: may go to another order after a cancel; missing = unchanged (the default by category) */
+  reuse?: ReuseSetting | null;
 }
 
 export interface AddonGroupInput {
@@ -376,6 +384,40 @@ export interface CookingBatchInput {
 }
 
 /** A day's cooking plan and its stock check (I3). */
+/** I4: one line of an order and what may happen to its food if it is cancelled or voided now. */
+export interface MadeFoodLine {
+  itemId: Uuid;
+  name: string;
+  variantName: string | null;
+  quantity: number;
+  unit: MenuUnit;
+  /** The kitchen made it (its stock was taken) */
+  made: boolean;
+  served: boolean;
+  /** Still cooking: the kitchen decides Keep or Stop */
+  cooking: boolean;
+  /** Empty when nothing was made yet (nothing to choose) */
+  choices: FoodOutcomeKind[];
+  safeHours: number | null;
+}
+
+export interface AvailableFoodRow {
+  food: AvailableFood;
+  state: AvailableState;
+  /** The dish may be kept for tomorrow */
+  overnight: boolean;
+}
+
+export interface AvailableFoodView {
+  closingTime: string;
+  /** The date the closing review is due for, or null */
+  reviewDue: string | null;
+  /** Food still waiting (available or time over) first, then today's done ones */
+  rows: AvailableFoodRow[];
+  /** Today's wastage and staff meals of cooked food */
+  waste: FoodWaste[];
+}
+
 export interface CookingPlanView {
   date: string;
   today: string;
@@ -568,7 +610,11 @@ export interface ApiClient {
   /** Super Waiter / counter: creates the table's order if needed and adds one round. */
   sendRound(input: SendRoundInput): Promise<Order>;
   /** Owner/Manager only, with a reason. The item stays on the order, marked VOID, and leaves the bill. */
-  voidItem(orderItemId: Uuid, reason: string): Promise<Order>;
+  /**
+   * Void a sent item. When its food was already made (kitchen Ready), what happens to the food must be chosen (I4): Available
+   * Prepared Food, back to stock, or wastage with a reason — never wastage by itself.
+   */
+  voidItem(orderItemId: Uuid, reason: string, food?: FoodOutcome): Promise<Order>;
 
   /** Waiter: "Request bill / Call cashier". Repeated taps send one request. */
   requestBill(orderId: Uuid): Promise<Order>;
@@ -608,7 +654,10 @@ export interface ApiClient {
   /** PLACED → ACCEPTED with a prep time; the kitchen tickets are created now. */
   acceptOnlineOrder(orderId: Uuid, prepMinutes: number): Promise<Order>;
   rejectOnlineOrder(orderId: Uuid, reason: string): Promise<Order>;
-  cancelOrder(orderId: Uuid, reason: string): Promise<Order>;
+  /** Cancel; each line whose food was made needs its choice (I4), by line id. Lines still cooking are decided by the kitchen. */
+  cancelOrder(orderId: Uuid, reason: string, food?: Record<Uuid, FoodOutcome>): Promise<Order>;
+  /** I4: the lines of an order (or one line) and what may happen to their food if it is cancelled or voided now */
+  getMadeFood(orderId: Uuid, itemId?: Uuid | null): Promise<MadeFoodLine[]>;
   /** READY → RIDER_ASSIGNED, or change the rider before pickup. */
   assignRider(orderId: Uuid, riderId: Uuid): Promise<Order>;
   /** Takeaway: READY → PICKED_UP at the counter. */
@@ -749,6 +798,17 @@ export interface ApiClient {
   draftShortageBills(date: string): Promise<{ drafts: { supplierId: Uuid; supplierName: string; lines: number }[]; withoutSupplier: string[] }>;
   /** When the plan is checked against the stock (Owner): e.g. 20:00 for tomorrow, 07:00 for today. */
   saveCookingChecks(checks: CookingCheckTime[]): Promise<void>;
+
+  /** I4 (owner, 2026-11-09): give ready food of the same dish to a line that is not made yet; its raw stock is not taken again. Kitchen. */
+  giveAvailableFood(orderItemId: Uuid, availableId: Uuid): Promise<void>;
+  /** I4: a ticket that was cooking when its order was cancelled: KEEP = finish it and keep it for another order, STOP = stop (spoilt = wastage with this reason) */
+  decideCancelledTicket(ticketId: Uuid, decision: 'KEEP' | 'STOP', spoiltReason: string | null): Promise<void>;
+  /** I4: Stock → Available Food and the closing review */
+  getAvailableFood(): Promise<AvailableFoodView>;
+  /** Closing review of one food: wastage or staff meal with a reason, or KEEP for tomorrow where the dish allows it (Owner / Manager) */
+  closeAvailableFood(availableId: Uuid, kind: 'WASTE' | 'STAFF_MEAL' | 'KEEP', reason: string): Promise<void>;
+  /** When the closing review is due (Owner, Settings) */
+  saveClosingTime(time: string): Promise<void>;
   /** A supplier added from the ingredient form (name + phone). */
   addSupplier(input: SupplierInput): Promise<Supplier>;
   /** Suppliers S1: every supplier with today's purchases, what we owe and the status. */

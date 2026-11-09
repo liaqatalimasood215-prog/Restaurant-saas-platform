@@ -233,6 +233,27 @@ import {
   type CookingCheckTime,
   type CookMode,
   type PlanRow,
+  DEFAULT_CLOSING_TIME,
+  MAX_WASTE_REASON,
+  availableState,
+  checkGive,
+  checkOutcome,
+  checkReuse,
+  closingReviewDue,
+  givenPortions,
+  netTaken,
+  newItemStock,
+  outcomeChoices,
+  reuseOf,
+  safeUntilOf,
+  saleUses,
+  type AvailableFood,
+  type FoodOutcome,
+  type FoodWaste,
+  type GiveProblem,
+  type OutcomeProblem,
+  type ReuseSetting,
+  type StockHow,
 } from '@restaurant-saas/shared';
 import {
   ApiError,
@@ -263,6 +284,8 @@ import {
   type SellPreparedInput,
   type CookingBatchInput,
   type CookingPlanView,
+  type AvailableFoodView,
+  type MadeFoodLine,
   type SupplierInput,
   type KhataPeriod,
   type PurchaseBillInput,
@@ -295,6 +318,23 @@ const KITCHEN_ORDER_STATUSES: readonly OrderStatus[] = [
 ];
 /** How long a fully voided ticket stays on the kitchen screen so the cooks notice the VOID. */
 const VOID_TICKET_VISIBLE_MS = 2 * 60 * 1000;
+
+/** I4: what happens to food that was made, after a cancel or void (owner, 2026-11-09) */
+const OUTCOME_MESSAGES: Record<OutcomeProblem, string> = {
+  CHOOSE: 'This food was already made: choose what happens to it.',
+  NOT_ALLOWED: 'This choice is not possible for this food.',
+  NOT_SAFE: 'Confirm that the food was not served and is safe, or choose wastage.',
+  REASON_REQUIRED: 'Write the reason for the wastage.',
+};
+const GIVE_MESSAGES: Record<GiveProblem, string> = {
+  NOT_SAME_DISH: 'This ready food is a different dish, size or add-ons.',
+  NOTHING_LEFT: 'This food was already given to another order.',
+  TIME_OVER: 'This food is past its safe time and cannot be given.',
+  ALREADY_MADE: 'This line is already made.',
+  VOID: 'This line was voided.',
+  NOT_TRACKED_LINE: 'This line is from before stock tracking.',
+  ALREADY_GIVEN: 'This line already has its food.',
+};
 
 function wait(): Promise<void> {
   const ms = MIN_DELAY_MS + Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS);
@@ -503,6 +543,11 @@ function recalculate(order: Order): void {
 function setStatus(order: Order, to: OrderStatus, changedBy: string | null, reason: string | null = null): void {
   order.history.push({ fromStatus: order.status, toStatus: to, changedBy, reason, changedAt: nowIso() });
   order.status = to;
+}
+
+/** "Chicken Karahi (1 kg)" for ready food */
+function foodLabel(food: Pick<AvailableFood, 'name' | 'variantName'>): string {
+  return food.variantName ? `${food.name} (${food.variantName})` : food.name;
 }
 
 /** A ticket whose items were all voided: nothing to cook. Returns when the last item was voided. */
@@ -973,6 +1018,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
           .sort((a, b) => a.sort - b.sort),
         modifierGroups: data.modifierGroups,
         stations: [...data.stations].sort((a, b) => a.sort - b.sort),
+        // I4: ready food of a dish waiting for another order
+        readyFood: (data.inventory.availableFood ?? [])
+          .filter((f) => availableState(f, Date.now()) === 'AVAILABLE')
+          .map((f) => ({ menuItemId: f.menuItemId, variantName: f.variantName, remaining: f.remaining })),
       };
     });
   }
@@ -1078,6 +1127,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         addKitchenTickets(data, target, lines, roundNo, now);
         target.items.push(...lines);
         recalculate(target);
+        this.syncStock(data, target, user.id);
         if (input.discount) this.giveDiscount(data, this.require(data, 'order.discount'), target, input.discount);
         data.idempotency[input.idempotencyKey] = target.id;
         return target;
@@ -1146,10 +1196,12 @@ export class DemoAdapter implements ApiClient, DemoControls {
       voidReason: null,
       voidedBy: null,
       voidedAt: null,
+      // I4: taken at the kitchen's Ready, once
+      stock: newItemStock(),
     };
   }
 
-  voidItem(orderItemId: string, reason: string): Promise<Order> {
+  voidItem(orderItemId: string, reason: string, food?: FoodOutcome): Promise<Order> {
     return this.request(() =>
       this.store.update((data) => {
         const user = this.require(data, 'item.void');
@@ -1159,10 +1211,19 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (!order || !item) throw new ApiError('NOT_FOUND', 'Item not found.');
         if (!OPEN_DINE_IN.includes(order.status)) throw new ApiError('CONFLICT', 'This order is closed.');
         if (item.isVoid) return order;
+        // I4: food already made is never wastage by itself: its outcome is chosen (owner, 2026-11-09)
+        const made = this.madeLine(data, order, item);
+        if (made.made) {
+          const problem = checkOutcome(food, made.choices);
+          if (problem) throw new ApiError('VALIDATION', OUTCOME_MESSAGES[problem]);
+        }
+        const at = nowIso();
         item.isVoid = true;
         item.voidReason = reason.trim();
         item.voidedBy = user.id;
-        item.voidedAt = nowIso();
+        item.voidedAt = at;
+        if (made.made && food) this.applyOutcome(data, order, item, food, user.id, at);
+        else this.giveBack(data, item);
         recalculate(order);
         return order;
       }),
@@ -1354,6 +1415,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
             const paid = checkTransition({ type: order.type, from: order.status, to: 'PAID', role: user.role, isFullyPaid: true });
             if (!paid.ok) throw ruleError(paid.reason);
             setStatus(order, 'PAID', user.id);
+            this.closeStock(data, order, user.id);
           }
           giveInvoiceNumber(data, order);
         }
@@ -1720,6 +1782,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         order.items.push(...lines);
         recalculate(order);
         applyAutomaticSteps(order);
+        this.syncStock(data, order, user.id);
         data.orders.push(order);
         if (input.discount) this.giveDiscount(data, this.require(data, 'order.discount'), order, input.discount);
         data.idempotency[input.idempotencyKey] = order.id;
@@ -1743,6 +1806,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         order.prepMinutes = prepMinutes;
         addKitchenTickets(data, order, order.items, 1, nowIso());
         applyAutomaticSteps(order);
+        this.syncStock(data, order, user.id);
         return order;
       }),
     );
@@ -1762,7 +1826,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
     );
   }
 
-  cancelOrder(orderId: string, reason: string): Promise<Order> {
+  cancelOrder(orderId: string, reason: string, food: Record<string, FoodOutcome> = {}): Promise<Order> {
     return this.request(() =>
       this.store.update((data) => {
         const user = this.require(data, 'order.cancel');
@@ -1777,7 +1841,24 @@ export class DemoAdapter implements ApiClient, DemoControls {
           hasPayments: order.payments.length > 0,
         });
         if (!check.ok) throw ruleError(check.reason);
+        // I4: every line whose food was made needs its outcome before anything changes (owner, 2026-11-09)
+        const lines = order.items.filter((i) => !i.isVoid).map((item) => ({ item, made: this.madeLine(data, order, item) }));
+        for (const { item, made } of lines) {
+          if (!made.made) continue;
+          const problem = checkOutcome(food[item.id], made.choices);
+          if (problem) throw new ApiError('VALIDATION', `${this.lineLabel(item)}: ${OUTCOME_MESSAGES[problem]}`);
+        }
         setStatus(order, 'CANCELLED', user.id, reason.trim());
+        const at = nowIso();
+        for (const { item, made } of lines) {
+          const outcome = food[item.id];
+          if (made.made && outcome) this.applyOutcome(data, order, item, outcome, user.id, at);
+          else if (!made.cooking) this.giveBack(data, item);
+        }
+        // Tickets still cooking: the kitchen finishes and keeps them, or stops (decision 9)
+        for (const ticket of order.tickets) {
+          if (ticket.status === 'PREPARING' && order.items.some((i) => i.ticketId === ticket.id && !i.isVoid && i.stock && !i.stock.takenAt)) ticket.cancelDecision = 'PENDING';
+        }
         return order;
       }),
     );
@@ -1928,18 +2009,32 @@ export class DemoAdapter implements ApiClient, DemoControls {
         user.role !== 'KITCHEN' || user.stationIds.length === 0 || user.stationIds.includes(stationId);
       const views: KitchenTicketView[] = [];
       const now = Date.now();
+      // I4: ready food that may still be given to another order of the same dish
+      const foods = (data.inventory.availableFood ?? []).filter((f) => availableState(f, now) === 'AVAILABLE');
       for (const order of data.orders) {
-        if (order.status === 'CANCELLED' || order.status === 'REJECTED') continue;
+        if (order.status === 'REJECTED') continue;
+        // A cancelled order shows only a ticket that was cooking, until the kitchen keeps or stops it
+        const cancelled = order.status === 'CANCELLED';
         const active = KITCHEN_ORDER_STATUSES.includes(order.status);
         for (const ticket of order.tickets) {
           if (!ownStation(ticket.stationId)) continue;
-          const voidedAt = voidedTicketAt(order, ticket);
-          if (voidedAt !== null && now - voidedAt > VOID_TICKET_VISIBLE_MS) continue;
+          if (cancelled && ticket.cancelDecision !== 'PENDING') continue;
+          const items = order.items.filter((i) => i.ticketId === ticket.id);
           // Owner, 2026-11-09: food that left the pass stays 5 minutes, then hides (from the saved time: no coming back after a
           // refresh); food still at the pass stays while its order is open
-          const pickup = ticketPickup(ticket, order);
-          const state = kdsState(pickup, now);
-          if (state === 'HIDDEN' || (state === 'ACTIVE' && (!active || ticket.status === 'SERVED'))) continue;
+          const pickup = cancelled ? null : ticketPickup(ticket, order);
+          if (!cancelled) {
+            const voidedAt = voidedTicketAt(order, ticket);
+            if (voidedAt !== null && now - voidedAt > VOID_TICKET_VISIBLE_MS) continue;
+            const state = kdsState(pickup, now);
+            if (state === 'HIDDEN' || (state === 'ACTIVE' && (!active || ticket.status === 'SERVED'))) continue;
+          }
+          const offers = cancelled
+            ? []
+            : items.flatMap((item) => {
+                const match = foods.filter((f) => checkGive({ food: f, line: item, ticketStatus: ticket.status, now }) === null);
+                return match.length ? [[item.id, match.map((f) => ({ id: f.id, remaining: f.remaining, fromDailyNumber: f.fromDailyNumber, madeAt: f.madeAt, safeUntil: f.safeUntil }))] as const] : [];
+              });
           views.push({
             ticket,
             orderType: order.type,
@@ -1947,8 +2042,12 @@ export class DemoAdapter implements ApiClient, DemoControls {
             dailyNumber: order.dailyNumber,
             tableName: order.tableId ? this.orderPlace(data, order) : null,
             waiterName: this.staffName(data, order.waiterId),
-            items: order.items.filter((i) => i.ticketId === ticket.id),
+            items,
             pickup: pickup ? { at: pickup.at, byName: pickup.byId ? this.staffName(data, pickup.byId) : null, source: pickup.source } : null,
+            ...(offers.length ? { available: Object.fromEntries(offers) } : {}),
+            ...(cancelled
+              ? { cancelled: { reason: order.history.findLast((h) => h.toStatus === 'CANCELLED')?.reason ?? '', canKeep: items.some((i) => !i.isVoid && this.reuseFor(data, i).enabled) } }
+              : {}),
           });
         }
       }
@@ -1984,7 +2083,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (to === 'PREPARING' && ticket.status === 'READY') ticket.readyAt = null;
         if (to === 'READY') ticket.readyAt = now;
         if (to === 'SERVED') ticket.servedAt = now;
+        const undone = to === 'PREPARING' && ticket.status === 'READY';
         ticket.status = to;
+        // I4: the stock is taken at Ready, once; the kitchen's Undo gives it back and Ready again takes it again
+        if (undone) this.returnTicketStock(data, order, ticket.id, user.id);
+        else this.syncStock(data, order, user.id);
 
         applyAutomaticSteps(order);
       }),
@@ -2157,7 +2260,9 @@ export class DemoAdapter implements ApiClient, DemoControls {
           modifierGroupIds: [...new Set(input.modifierGroupIds)],
           isAvailable: input.isAvailable,
           isOnline: input.isOnline,
+          ...(input.reuse !== undefined ? { reuse: input.reuse } : {}),
         };
+        if (input.reuse && !checkReuse(input.reuse)) throw new ApiError('VALIDATION', 'Safe time must be 1 to 24 hours.');
         let item: MenuItem;
         if (existing) {
           const moved = existing.categoryId !== category.id;
@@ -2617,6 +2722,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
         suppliers: inv.suppliers.filter((s) => s.isActive),
         cooked,
         cookingShort: { today: shortOf(cookingDay), tomorrow: shortOf(nextDate(cookingDay)) },
+        availableFood: (inv.availableFood ?? []).filter((f) => availableState(f, Date.now()) === 'AVAILABLE').length,
+        notTrackedToday: this.notTrackedOn(data, cookingDay),
       };
     });
   }
@@ -3304,7 +3411,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
       this.require(data, 'inventory.view');
       const inv = data.inventory;
       const today = this.cookingToday(data);
-      const day = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : nextDate(today);
+      // 'today' comes from the cooked-stock alert (I4)
+      const day = date === 'today' ? today : date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : nextDate(today);
       const { rows, cooked, needs } = this.planCheck(data, day);
       const nameOf = (id: string | null | undefined) => (id ? (inv.ingredients.find((i) => i.id === id)?.name ?? null) : null);
       const dishes = inv.ingredients
@@ -3431,6 +3539,328 @@ export class DemoAdapter implements ApiClient, DemoControls {
           throw new ApiError('VALIDATION', `Type up to ${MAX_COOKING_CHECKS} times like 20:00.`);
         }
         data.inventory.cookingChecks = checks.map((c) => ({ time: c.time, forDay: c.forDay }));
+      }),
+    );
+  }
+
+  // ── I4: stock used by sales, ready food given to another order (owner, 2026-11-09) ───────────
+
+  /** The recipe version a line kept (I2), from the recipe's saved versions. */
+  private keptVersion(data: DemoData, target: RecipeTarget, version: number): RecipeVersion | null {
+    return this.recipeFor(data, target)?.versions.find((v) => v.version === version) ?? null;
+  }
+
+  /** "Chicken Karahi (1 kg)" */
+  private lineLabel(item: Pick<OrderItem, 'name' | 'variantName'>): string {
+    return item.variantName ? `${item.name} (${item.variantName})` : item.name;
+  }
+
+  /** The names of a line's parts that have no verified recipe ("Chicken Karahi (1 kg)", "Extra makhan"). */
+  private partNames(data: DemoData, item: OrderItem, keys: readonly string[]): string[] {
+    return keys.map((key) => {
+      if (key.startsWith('addon:')) return data.modifierGroups.flatMap((g) => g.modifiers).find((m) => m.id === key.slice(6))?.name ?? item.name;
+      const variant = data.items.find((i) => i.id === item.menuItemId)?.variants.find((v) => v.id === key.slice(5));
+      return variant ? `${item.name} (${variant.name})` : item.name;
+    });
+  }
+
+  /** The reuse setting of a line's dish: may it go to another order after a cancel? */
+  private reuseFor(data: DemoData, line: { menuItemId: string | null }): ReuseSetting {
+    const menuItem = data.items.find((i) => i.id === line.menuItemId);
+    if (!menuItem) return { enabled: false, safeHours: 0, overnight: false };
+    return reuseOf(menuItem, data.categories.find((c) => c.id === menuItem.categoryId)?.name ?? '');
+  }
+
+  /** Cost of some portions of a ready food. */
+  private foodCostShare(data: DemoData, availableId: string, quantity: number): number | null {
+    const food = (data.inventory.availableFood ?? []).find((f) => f.id === availableId);
+    return food && food.cost !== null && food.quantity > 0 ? mulDivRound(food.cost, quantity, food.quantity) : null;
+  }
+
+  /** Takes one line's stock, once, by its kept recipe: raw and cooked ingredients each from their own stock. Portions given from ready food take nothing raw. */
+  private takeLineStock(data: DemoData, order: Order, item: OrderItem, userId: string, how: StockHow): void {
+    const stock = item.stock;
+    if (!stock || stock.takenAt || item.isVoid) return;
+    const portions = Math.max(0, item.quantity - givenPortions(stock));
+    const { uses, notTracked } = saleUses(item, portions, (target, version) => this.keptVersion(data, target, version));
+    const at = nowIso();
+    const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+    const note = `Order #${order.dailyNumber} · ${item.quantity} × ${this.lineLabel(item)}`.slice(0, MAX_MOVEMENT_NOTE);
+    for (const use of uses) {
+      data.inventory.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'SALE_USE', quantityMilli: -use.quantityMilli, reason: null, note, createdBy: userId, createdAt: at, orderId: order.id, orderItemId: item.id });
+    }
+    const book = this.costBook(data);
+    const costs = [...uses.map((u) => ingredientCost(book, u.ingredientId, u.quantityMilli)), ...(stock.fromAvailable ?? []).map((f) => this.foodCostShare(data, f.availableId, f.quantity))];
+    stock.takenAt = at;
+    stock.how = how;
+    stock.notTracked = this.partNames(data, item, notTracked);
+    stock.cost = costs.some((c) => c === null) ? null : costs.reduce<number>((sum, c) => sum + (c ?? 0), 0);
+  }
+
+  /** Gives back what a line still holds: the kitchen's Undo (taken again at Ready), or food put back in stock (stays handled). */
+  private returnLineStock(data: DemoData, order: Order, item: OrderItem, userId: string, why: string, keepHandled: boolean): void {
+    const stock = item.stock;
+    if (!stock?.takenAt) return;
+    const at = nowIso();
+    const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+    const note = `${why} · Order #${order.dailyNumber} · ${this.lineLabel(item)}`.slice(0, MAX_MOVEMENT_NOTE);
+    for (const back of netTaken(data.inventory.movements.filter((m) => m.orderItemId === item.id))) {
+      data.inventory.movements.push({ id: newId(), ...scope, ingredientId: back.ingredientId, type: 'SALE_RETURN', quantityMilli: back.quantityMilli, reason: null, note, createdBy: userId, createdAt: at, orderId: order.id, orderItemId: item.id });
+    }
+    if (keepHandled) return;
+    stock.takenAt = null;
+    delete stock.how;
+    delete stock.cost;
+    delete stock.notTracked;
+  }
+
+  /** Takes the stock of every line whose ticket is Ready (or served) and not taken yet. */
+  private syncStock(data: DemoData, order: Order, userId: string): void {
+    for (const item of order.items) {
+      const ticket = order.tickets.find((t) => t.id === item.ticketId);
+      if (ticket && (ticket.status === 'READY' || ticket.status === 'SERVED') && ticket.cancelDecision !== 'PENDING') this.takeLineStock(data, order, item, userId, 'READY');
+    }
+  }
+
+  private returnTicketStock(data: DemoData, order: Order, ticketId: string, userId: string): void {
+    for (const item of order.items) if (item.ticketId === ticketId && item.stock?.how === 'READY') this.returnLineStock(data, order, item, userId, 'Kitchen Undo', false);
+  }
+
+  /** Decision 3: a dine-in bill paid before the kitchen pressed Ready takes the stock then. */
+  private closeStock(data: DemoData, order: Order, userId: string): void {
+    for (const item of order.items) this.takeLineStock(data, order, item, userId, 'CLOSE');
+  }
+
+  /** Portions a line was given from ready food go back to it (the line was voided or cancelled before it was made). */
+  private giveBack(data: DemoData, item: OrderItem): void {
+    for (const given of item.stock?.fromAvailable ?? []) {
+      const food = (data.inventory.availableFood ?? []).find((f) => f.id === given.availableId);
+      if (!food) continue;
+      food.remaining += given.quantity;
+      food.givenTo = food.givenTo.filter((g) => g.itemId !== item.id);
+    }
+    if (item.stock) item.stock.fromAvailable = [];
+  }
+
+  /** Was the line's food made, was it served, is it still cooking, and what may happen to it now. */
+  private madeLine(data: DemoData, order: Order, item: OrderItem): Omit<MadeFoodLine, 'itemId' | 'name' | 'variantName' | 'quantity' | 'unit'> {
+    const ticket = order.tickets.find((t) => t.id === item.ticketId);
+    const made = Boolean(item.stock?.takenAt) && !item.stock?.outcome;
+    const served = ticket?.status === 'SERVED';
+    const reuse = this.reuseFor(data, item);
+    const menuItem = data.items.find((i) => i.id === item.menuItemId);
+    const fromPot = Boolean(menuItem?.preparedItemId) || Boolean(data.stations.find((s) => s.id === item.stationId)?.autoReady);
+    return {
+      made,
+      served,
+      cooking: !made && !item.isVoid && Boolean(item.stock) && !item.stock?.takenAt && ticket?.status === 'PREPARING',
+      choices: made ? outcomeChoices({ served, reusable: reuse.enabled, returnable: fromPot && givenPortions(item.stock) === 0 }) : [],
+      safeHours: reuse.enabled ? reuse.safeHours : null,
+    };
+  }
+
+  /** Food that was made and then cancelled or voided: to Available Prepared Food, back to its stock, or wastage with a reason. */
+  private applyOutcome(data: DemoData, order: Order, item: OrderItem, outcome: FoodOutcome, userId: string, at: string): void {
+    const stock = item.stock;
+    if (!stock) return;
+    const reason = outcome.kind === 'WASTE' ? (outcome.reason ?? '').trim().slice(0, MAX_WASTE_REASON) : null;
+    let availableId: string | null = null;
+    if (outcome.kind === 'AVAILABLE') {
+      const ticket = order.tickets.find((t) => t.id === item.ticketId);
+      availableId = this.putAvailable(data, order, item, userId, ticket?.readyAt ?? stock.takenAt ?? at).id;
+    }
+    if (outcome.kind === 'BACK_TO_STOCK') this.returnLineStock(data, order, item, userId, 'Back to stock', true);
+    if (outcome.kind === 'WASTE') this.recordWaste(data, { kind: 'WASTE', menuItemId: item.menuItemId, name: item.name, variantName: item.variantName, quantity: item.quantity, unit: item.unit, cost: stock.cost ?? null, reason: reason ?? '', orderId: order.id, dailyNumber: order.dailyNumber, availableId: null }, userId, at);
+    stock.outcome = { kind: outcome.kind, reason, availableId, by: userId, at };
+  }
+
+  /** Puts a made line into Available Prepared Food: its raw stock was taken once, by this order; never taken again. */
+  private putAvailable(data: DemoData, order: Order, item: OrderItem, userId: string, madeAt: string): AvailableFood {
+    const reuse = this.reuseFor(data, item);
+    const sources = (item.stock?.fromAvailable ?? []).flatMap((given) => (data.inventory.availableFood ?? []).filter((f) => f.id === given.availableId));
+    const made = [madeAt, ...sources.map((f) => f.madeAt)].sort()[0] ?? madeAt;
+    const safeUntil = [safeUntilOf(madeAt, Math.max(1, reuse.safeHours)), ...sources.map((f) => f.safeUntil)].sort()[0] ?? madeAt;
+    const at = nowIso();
+    const food: AvailableFood = {
+      id: newId(),
+      restaurantId: data.restaurant.id,
+      branchId: data.branch.id,
+      menuItemId: item.menuItemId ?? '',
+      name: item.name,
+      variantName: item.variantName,
+      variantId: item.variantId ?? null,
+      ...(item.sizeMix ? { sizeMix: item.sizeMix } : {}),
+      modifierIds: item.modifierIds ?? [],
+      modifierNames: item.modifiers.map((m) => m.name),
+      unit: item.unit,
+      quantity: item.quantity,
+      remaining: item.quantity,
+      fromOrderId: order.id,
+      fromDailyNumber: order.dailyNumber,
+      fromItemId: item.id,
+      madeAt: made,
+      safeUntil,
+      cost: item.stock?.cost ?? null,
+      givenTo: [],
+      closed: [],
+      createdBy: userId,
+      createdAt: at,
+    };
+    (data.inventory.availableFood ??= []).push(food);
+    return food;
+  }
+
+  private recordWaste(data: DemoData, waste: Omit<FoodWaste, 'id' | 'restaurantId' | 'branchId' | 'createdBy' | 'createdAt'>, userId: string, at: string): void {
+    (data.inventory.foodWaste ??= []).push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ...waste, createdBy: userId, createdAt: at });
+  }
+
+  /** The date the closing review is due for (food still left), or null. */
+  private foodReviewDue(data: DemoData): string | null {
+    const open = (data.inventory.availableFood ?? []).filter((f) => f.remaining > 0).map((f) => f.madeAt).sort();
+    return closingReviewDue(data.inventory.closingTime ?? DEFAULT_CLOSING_TIME, open[0] ?? null, new Date(), data.branch.timezone);
+  }
+
+  /** Sold lines of a business day with a part that has no verified recipe, by name. */
+  private notTrackedOn(data: DemoData, businessDay: string): { name: string; count: number }[] {
+    const counts = new Map<string, number>();
+    for (const order of data.orders) {
+      if (order.businessDate !== businessDay) continue;
+      for (const item of order.items) for (const name of item.stock?.takenAt ? (item.stock.notTracked ?? []) : []) counts.set(name, (counts.get(name) ?? 0) + item.quantity);
+    }
+    return [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+  }
+
+  getMadeFood(orderId: string, itemId: string | null = null): Promise<MadeFoodLine[]> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.requireUser(data);
+      const order = this.findOrder(data, orderId);
+      return order.items
+        .filter((i) => !i.isVoid && (!itemId || i.id === itemId))
+        .map((item) => ({ itemId: item.id, name: item.name, variantName: item.variantName, quantity: item.quantity, unit: item.unit, ...this.madeLine(data, order, item) }));
+    });
+  }
+
+  giveAvailableFood(orderItemId: string, availableId: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'ticket.update');
+        const order = data.orders.find((o) => o.items.some((i) => i.id === orderItemId));
+        const item = order?.items.find((i) => i.id === orderItemId);
+        if (!order || !item) throw new ApiError('NOT_FOUND', 'Item not found.');
+        if (!KITCHEN_ORDER_STATUSES.includes(order.status)) throw new ApiError('CONFLICT', 'This order is closed.');
+        const ticket = order.tickets.find((t) => t.id === item.ticketId);
+        if (!ticket) throw new ApiError('NOT_FOUND', 'Ticket not found.');
+        if (user.role === 'KITCHEN' && user.stationIds.length > 0 && !user.stationIds.includes(ticket.stationId)) throw new ApiError('FORBIDDEN', 'This is not your station.');
+        const food = (data.inventory.availableFood ?? []).find((f) => f.id === availableId);
+        if (!food) throw new ApiError('NOT_FOUND', 'This ready food was not found.');
+        const problem = checkGive({ food, line: item, ticketStatus: ticket.status, now: Date.now() });
+        // A double tap: the line already has its food
+        if (problem === 'ALREADY_GIVEN') return;
+        if (problem) throw new ApiError('CONFLICT', GIVE_MESSAGES[problem]);
+        const stock = item.stock;
+        if (!stock) return;
+        const quantity = Math.min(food.remaining, item.quantity - givenPortions(stock));
+        const at = nowIso();
+        food.remaining -= quantity;
+        food.givenTo.push({ orderId: order.id, dailyNumber: order.dailyNumber, itemId: item.id, quantity, by: user.id, at });
+        (stock.fromAvailable ??= []).push({ availableId: food.id, quantity, fromDailyNumber: food.fromDailyNumber, at, by: user.id });
+        // Every line of the ticket has its food: Ready at once, and no raw stock is taken for it again
+        const lines = order.items.filter((i) => i.ticketId === ticket.id && !i.isVoid);
+        if (lines.every((i) => i.stock && givenPortions(i.stock) >= i.quantity)) {
+          ticket.startedAt ??= at;
+          ticket.status = 'READY';
+          ticket.readyAt = at;
+          this.syncStock(data, order, user.id);
+          applyAutomaticSteps(order);
+        }
+      }),
+    );
+  }
+
+  decideCancelledTicket(ticketId: string, decision: 'KEEP' | 'STOP', spoiltReason: string | null): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'ticket.update');
+        const { order, ticket } = findTicket(data, ticketId);
+        // Decided already (a double tap, or another tablet)
+        if (ticket.cancelDecision !== 'PENDING') return;
+        if (user.role === 'KITCHEN' && user.stationIds.length > 0 && !user.stationIds.includes(ticket.stationId)) throw new ApiError('FORBIDDEN', 'This is not your station.');
+        const items = order.items.filter((i) => i.ticketId === ticket.id && !i.isVoid && i.stock && !i.stock.takenAt);
+        if (decision === 'KEEP' && !items.some((i) => this.reuseFor(data, i).enabled)) throw new ApiError('CONFLICT', 'This food cannot be kept for another order. Choose Stop.');
+        const spoilt = spoiltReason?.trim().slice(0, MAX_WASTE_REASON) || null;
+        const at = nowIso();
+        for (const item of items) {
+          const stock = item.stock;
+          if (!stock) continue;
+          if (decision === 'KEEP' && this.reuseFor(data, item).enabled) {
+            this.takeLineStock(data, order, item, user.id, 'KEEP');
+            const food = this.putAvailable(data, order, item, user.id, at);
+            stock.outcome = { kind: 'AVAILABLE', reason: null, availableId: food.id, by: user.id, at };
+            continue;
+          }
+          this.giveBack(data, item);
+          if (spoilt) {
+            this.takeLineStock(data, order, item, user.id, 'WASTE');
+            this.recordWaste(data, { kind: 'WASTE', menuItemId: item.menuItemId, name: item.name, variantName: item.variantName, quantity: item.quantity, unit: item.unit, cost: stock.cost ?? null, reason: spoilt, orderId: order.id, dailyNumber: order.dailyNumber, availableId: null }, user.id, at);
+          }
+          stock.outcome = { kind: spoilt ? 'WASTE' : 'STOPPED', reason: spoilt, availableId: null, by: user.id, at };
+        }
+        ticket.cancelDecision = decision;
+      }),
+    );
+  }
+
+  getAvailableFood(): Promise<AvailableFoodView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const now = Date.now();
+      const tz = data.branch.timezone;
+      const today = localClock(new Date(now), tz).date;
+      const rows = (data.inventory.availableFood ?? [])
+        .map((food) => ({ food, state: availableState(food, now), overnight: this.reuseFor(data, food).overnight }))
+        .filter((r) => r.state !== 'DONE' || localClock(new Date(r.food.createdAt), tz).date === today)
+        .sort((a, b) => Number(a.state === 'DONE') - Number(b.state === 'DONE') || b.food.madeAt.localeCompare(a.food.madeAt));
+      return {
+        closingTime: data.inventory.closingTime ?? DEFAULT_CLOSING_TIME,
+        reviewDue: this.foodReviewDue(data),
+        rows,
+        waste: (data.inventory.foodWaste ?? []).filter((w) => localClock(new Date(w.createdAt), tz).date === today).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      };
+    });
+  }
+
+  closeAvailableFood(availableId: string, kind: 'WASTE' | 'STAFF_MEAL' | 'KEEP', reason: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const food = (data.inventory.availableFood ?? []).find((f) => f.id === availableId);
+        if (!food) throw new ApiError('NOT_FOUND', 'This ready food was not found.');
+        if (food.remaining <= 0) return;
+        const at = nowIso();
+        if (kind === 'KEEP') {
+          if (!this.reuseFor(data, food).overnight) throw new ApiError('CONFLICT', 'This dish is not kept overnight. Allow it in the Menu first.');
+          food.keptAt = at;
+          food.safeUntil = safeUntilOf(at, 24);
+          return;
+        }
+        const why = reason.trim().slice(0, MAX_WASTE_REASON) || (kind === 'STAFF_MEAL' ? 'Staff meal' : '');
+        if (!why) throw new ApiError('VALIDATION', OUTCOME_MESSAGES.REASON_REQUIRED);
+        const quantity = food.remaining;
+        food.closed.push({ kind, quantity, reason: why, by: user.id, at });
+        food.remaining = 0;
+        this.recordWaste(data, { kind, menuItemId: food.menuItemId, name: food.name, variantName: food.variantName, quantity, unit: food.unit, cost: this.foodCostShare(data, food.id, quantity), reason: why, orderId: food.fromOrderId, dailyNumber: food.fromDailyNumber, availableId: food.id }, user.id, at);
+      }),
+    );
+  }
+
+  saveClosingTime(time: string): Promise<void> {
+    return this.request(() =>
+      this.store.update((data) => {
+        this.require(data, 'settings.manage');
+        if (!isClockTime(time)) throw new ApiError('VALIDATION', 'Enter a time like 23:00.');
+        data.inventory.closingTime = time;
       }),
     );
   }
@@ -3918,6 +4348,17 @@ export class DemoAdapter implements ApiClient, DemoControls {
             names: short.slice(0, 3).map((n) => data.inventory.ingredients.find((i) => i.id === n.ingredientId)?.name ?? ''),
             at: new Date().toISOString(),
           });
+        }
+        // I4: cooked food sold beyond what was recorded as cooked: record the Cooking Batch (decision 1)
+        const negative = data.inventory.ingredients.filter((i) => i.kind === 'PREPARED' && onHandOf(i.id, data.inventory.movements) < 0);
+        if (negative.length) {
+          list.push({ kind: 'COOKED_NEGATIVE', id: `cooked-negative:${negative.map((i) => i.id).sort().join(',')}`, count: negative.length, names: negative.slice(0, 3).map((i) => i.name), at: new Date().toISOString() });
+        }
+        // I4: the closing review of the ready food that is left
+        const reviewDate = this.foodReviewDue(data);
+        if (reviewDate) {
+          const open = (data.inventory.availableFood ?? []).filter((f) => f.remaining > 0);
+          list.push({ kind: 'FOOD_REVIEW', id: `food-review:${reviewDate}`, date: reviewDate, count: open.length, names: open.slice(0, 3).map((f) => foodLabel(f)), at: new Date().toISOString() });
         }
       }
       if (this.permissionsOf(data, user).includes('order.manage')) {

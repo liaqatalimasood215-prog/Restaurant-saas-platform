@@ -10,6 +10,7 @@ import {
   formatPaisa,
   formatQuantity,
   refundableAmount,
+  type ItemStock,
   type OrderStatus,
   type OrderType,
   type OrderView,
@@ -200,7 +201,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
           <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-slate-500">{t('orders.items')}</h3>
           <ul className="divide-y divide-slate-100">
             {order.items.map((item) => (
-              <li key={item.id} className="flex justify-between gap-2 py-1.5">
+              <li key={item.id} className="flex flex-wrap justify-between gap-x-2 py-1.5">
                 <span className={cn(item.isVoid && 'text-slate-400 line-through')}>
                   <span className="font-semibold">
                     {formatQuantity(item.quantity, item.unit)} {item.name}
@@ -213,6 +214,11 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 {item.isVoid && (
                   <span className="basis-full text-xs font-semibold text-red-700">
                     {t('orders.voidedBy', { name: name(item.voidedBy), reason: item.voidReason ?? '' })}
+                  </span>
+                )}
+                {item.stock && (
+                  <span className="basis-full text-xs text-slate-500" data-line-stock>
+                    {stockText(item.stock)}
                   </span>
                 )}
               </li>
@@ -348,4 +354,18 @@ function OrderDetail({ orderId }: { orderId: string }) {
       {slip && order.payments.some((p) => p.id === slip.id) && <RefundSlipDialog order={order} refund={slip} placeLabel={placeOf(view)} refundedBy={name(slip.receivedBy)} onClose={() => setSlip(null)} />}
     </Card>
   );
+}
+
+/** I4: what a line took from stock and what happened to its food (owner, 2026-11-09). */
+function stockText(stock: ItemStock): string {
+  const parts: string[] = [];
+  const outcome = stock.outcome;
+  if (outcome) {
+    parts.push(outcome.kind === 'WASTE' ? t('orders.stock.WASTE', { reason: outcome.reason ?? '' }) : t(`orders.stock.${outcome.kind}`));
+  }
+  if (stock.fromAvailable?.length) parts.push(t('orders.stock.given', { n: stock.fromAvailable.map((f) => `#${f.fromDailyNumber}`).join(', ') }));
+  if (stock.takenAt) parts.push(t(stock.how === 'CLOSE' ? 'orders.stock.takenClose' : 'orders.stock.taken', { time: new Date(stock.takenAt).toLocaleTimeString('en-PK', { hour: 'numeric', minute: '2-digit' }) }));
+  else if (!outcome) parts.push(t('orders.stock.pending'));
+  if (stock.notTracked?.length) parts.push(t('orders.stock.notTracked', { names: stock.notTracked.join(', ') }));
+  return parts.join(' · ');
 }

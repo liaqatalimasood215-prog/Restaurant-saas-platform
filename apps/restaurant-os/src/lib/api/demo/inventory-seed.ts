@@ -4,9 +4,11 @@ import {
   businessDate,
   displayFactorMilli,
   rupeesToPaisa,
+  type AvailableFood,
   type CookingBatch,
   type CookingCheckTime,
   type CookingPlan,
+  type FoodWaste,
   type Ingredient,
   type KhataEntry,
   type PurchaseRecipe,
@@ -50,6 +52,11 @@ export interface DemoInventory {
   cookingPlan?: CookingPlan;
   /** I3: when the plan is checked against the stock; missing = 8 pm for tomorrow, 7 am for today */
   cookingChecks?: CookingCheckTime[];
+  /** I4: food made and then cancelled, kept for another order of the same dish; cooked food wasted or eaten by staff */
+  availableFood?: AvailableFood[];
+  foodWaste?: FoodWaste[];
+  /** I4: when the closing review of the ready food that is left is due; missing = 23:00 */
+  closingTime?: string;
   expiringSoonDays: number;
 }
 

@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Bell, ChefHat, CircleCheck, CookingPot, Maximize, Minimize, PackageX, Volume2, VolumeX } from 'lucide-react';
-import { kdsState, type KitchenStation, type TicketStatus } from '@restaurant-saas/shared';
+import { WASTE_REASONS, kdsState, type KitchenStation, type KitchenTicketView, type TicketStatus } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
@@ -42,6 +43,9 @@ export function KitchenScreen() {
   const [stationId, setStationId] = useState(readStoredStation);
   const [soundOn, setSoundOn] = useState(false);
   const [stockOpen, setStockOpen] = useState(false);
+  // I4: ready food given to a line (after the safety check), and a cancelled ticket being stopped
+  const [giving, setGiving] = useState<{ view: KitchenTicketView; itemId: string; foodId: string } | null>(null);
+  const [stopping, setStopping] = useState<string | null>(null);
   // The pressed ticket stays disabled until it shows its new status, so a double tap does nothing.
   const [pending, setPending] = useState<{ ticketId: string; from: TicketStatus } | null>(null);
   const seenNew = useRef<Set<string> | null>(null);
@@ -93,6 +97,14 @@ export function KitchenScreen() {
       await getApi().updateTicket(ticketId, to);
     } catch (err) {
       setPending(null);
+      toast.show({ tone: 'error', title: err instanceof Error ? err.message : t('states.errorBody') });
+    }
+  };
+
+  const attempt = async (call: () => Promise<void>) => {
+    try {
+      await call();
+    } catch (err) {
       toast.show({ tone: 'error', title: err instanceof Error ? err.message : t('states.errorBody') });
     }
   };
@@ -230,6 +242,9 @@ export function KitchenScreen() {
                       busy={pending?.ticketId === v.ticket.id && pending.from === v.ticket.status}
                       onMove={(to) => move(v.ticket.id, v.ticket.status, to)}
                       onUndoPickup={allowed('ticket.update') || allowed('ticket.serve') ? () => void undoPickup(v.ticket.id) : undefined}
+                      onGive={allowed('ticket.update') ? (itemId, foodId) => setGiving({ view: v, itemId, foodId }) : undefined}
+                      onKeep={allowed('ticket.update') ? () => void attempt(() => getApi().decideCancelledTicket(v.ticket.id, 'KEEP', null)) : undefined}
+                      onStop={allowed('ticket.update') ? () => setStopping(v.ticket.id) : undefined}
                     />
                   ))}
                 </div>
@@ -239,6 +254,28 @@ export function KitchenScreen() {
         })}
       </div>
 
+      {giving && (
+        <GiveFoodDialog
+          giving={giving}
+          now={now}
+          onClose={() => setGiving(null)}
+          onGive={() => {
+            const { itemId, foodId } = giving;
+            setGiving(null);
+            void attempt(() => getApi().giveAvailableFood(itemId, foodId));
+          }}
+        />
+      )}
+      {stopping && (
+        <StopFoodDialog
+          onClose={() => setStopping(null)}
+          onStop={(spoilt) => {
+            const ticketId = stopping;
+            setStopping(null);
+            void attempt(() => getApi().decideCancelledTicket(ticketId, 'STOP', spoilt));
+          }}
+        />
+      )}
       {stockOpen && (
         <StockDialog
           station={stations.find((s) => s.id === selected)}
@@ -247,6 +284,83 @@ export function KitchenScreen() {
         />
       )}
     </>
+  );
+}
+
+/**
+ * Give ready food of the same dish to this line (owner, 2026-11-09): the kitchen looks at it first. Its raw stock was taken once,
+ * by the order it was made for; it is not taken again.
+ */
+function GiveFoodDialog({ giving, now, onClose, onGive }: { giving: { view: KitchenTicketView; itemId: string; foodId: string }; now: number; onClose: () => void; onGive: () => void }) {
+  const [safe, setSafe] = useState(false);
+  const item = giving.view.items.find((i) => i.id === giving.itemId);
+  const food = giving.view.available?.[giving.itemId]?.find((f) => f.id === giving.foodId);
+  if (!item || !food) return null;
+  const name = item.variantName ? `${item.name} (${item.variantName})` : item.name;
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('kitchen.giveTitle', { name })}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('nav.close')}
+          </Button>
+          <Button disabled={!safe} onClick={onGive} className="bg-green-600 bg-none hover:bg-green-700">
+            {t('kitchen.giveFood')}
+          </Button>
+        </>
+      }
+    >
+      <p className="mb-2">{t('kitchen.giveBody', { n: food.fromDailyNumber, min: Math.max(0, Math.floor((now - Date.parse(food.madeAt)) / 60_000)), until: new Date(food.safeUntil).toLocaleTimeString('en-PK', { hour: 'numeric', minute: '2-digit' }) })}</p>
+      <p className="mb-3 text-sm text-slate-600">{t('kitchen.giveStock')}</p>
+      <label className="flex min-h-12 items-center gap-2 rounded-xl bg-amber-50 px-3 font-bold text-amber-900">
+        <input type="checkbox" checked={safe} onChange={(e) => setSafe(e.target.checked)} className="size-5 accent-brand" />
+        {t('kitchen.giveSafe')}
+      </label>
+    </Dialog>
+  );
+}
+
+/** Stop a cancelled ticket: nothing is taken from stock, unless what was already used is spoilt (wastage with its reason). */
+function StopFoodDialog({ onClose, onStop }: { onClose: () => void; onStop: (spoiltReason: string | null) => void }) {
+  const [spoilt, setSpoilt] = useState(false);
+  const [reason, setReason] = useState<string>(WASTE_REASONS[3]);
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('kitchen.stopTitle')}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('nav.close')}
+          </Button>
+          <Button onClick={() => onStop(spoilt ? reason : null)} className="bg-red-600 hover:bg-red-700">
+            {t('kitchen.stopFood')}
+          </Button>
+        </>
+      }
+    >
+      <p className="mb-3">{t('kitchen.stopBody')}</p>
+      <label className="flex min-h-12 items-center gap-2 rounded-xl border border-slate-200 px-3 font-semibold">
+        <input type="checkbox" checked={spoilt} onChange={(e) => setSpoilt(e.target.checked)} className="size-5 accent-brand" />
+        {t('kitchen.stopSpoilt')}
+      </label>
+      {spoilt && (
+        <label className="mt-2 block text-sm">
+          <span className="mb-1 block font-bold text-slate-900">{t('food.reason')}</span>
+          <select value={reason} onChange={(e) => setReason(e.target.value)} className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-2">
+            {WASTE_REASONS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </Dialog>
   );
 }
 

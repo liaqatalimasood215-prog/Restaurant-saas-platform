@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AlarmClock, Armchair, Bike, Check, ChevronDown, HandPlatter, Play, ShoppingBag, Timer, Undo2, UtensilsCrossed } from 'lucide-react';
+import { AlarmClock, Armchair, Ban, Bike, Check, ChevronDown, HandPlatter, PackageCheck, Play, ShoppingBag, Timer, Undo2, UtensilsCrossed } from 'lucide-react';
 import {
   DEFAULT_LATE_MINUTES,
   PICKUP_VISIBLE_MS,
@@ -68,6 +68,9 @@ export function TicketCard({
   busy,
   onMove,
   onUndoPickup,
+  onGive,
+  onKeep,
+  onStop,
 }: {
   view: KitchenTicketView;
   station: KitchenStation | undefined;
@@ -77,6 +80,11 @@ export function TicketCard({
   onMove: (to: TicketStatus) => void;
   /** The signed-in person may undo a waiter's pickup (kitchen of this station, Owner, Manager, waiters) */
   onUndoPickup?: () => void;
+  /** I4: give ready food of the same dish to a line (owner, 2026-11-09): opens the safety check */
+  onGive?: (itemId: string, foodId: string) => void;
+  /** I4: the order was cancelled while this ticket was cooking: finish and keep it, or stop */
+  onKeep?: () => void;
+  onStop?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const { ticket, pickup } = view;
@@ -108,7 +116,23 @@ export function TicketCard({
           : t('kitchen.pickedUp');
 
   const big = 'press flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl px-2 text-[15px] font-extrabold disabled:opacity-60';
-  const action = allVoid ? (
+  const cancelled = view.cancelled ?? null;
+  const action = cancelled ? (
+    <div className="grid gap-1" data-cancelled-actions>
+      {cancelled.canKeep && onKeep && (
+        <button type="button" disabled={busy} onClick={onKeep} className={cn(big, 'bg-green-600 text-[13px] text-white')}>
+          <PackageCheck className="size-4" aria-hidden />
+          {t('kitchen.keepFood')}
+        </button>
+      )}
+      {onStop && (
+        <button type="button" disabled={busy} onClick={onStop} className={cn(big, 'border-2 border-red-300 bg-white text-[13px] text-red-700')}>
+          <Ban className="size-4" aria-hidden />
+          {t('kitchen.stopFood')}
+        </button>
+      )}
+    </div>
+  ) : allVoid ? (
     <p className="rounded-lg bg-red-100 px-2 py-1.5 text-center text-xs font-black text-red-800">{t('kitchen.voidTicket')}</p>
   ) : pickup ? (
     pickup.source === 'TICKET' && ticket.status === 'READY' && onUndoPickup ? (
@@ -138,11 +162,12 @@ export function TicketCard({
       className={cn(
         '@container relative overflow-hidden rounded-xl border bg-white py-1.5 pr-2 pl-3 shadow-[0_2px_8px_-6px_rgb(15_23_42/0.35)] before:absolute before:inset-y-0 before:left-0 before:w-1.5',
         STRIPE[ticket.status],
-        pickup ? 'border-slate-200 bg-slate-50 opacity-75' : waiting ? 'border-2 border-red-400 bg-red-50/40' : level === 'LATE' ? 'border-red-400' : level === 'WARN' ? 'border-orange-300' : 'border-slate-200',
+        cancelled ? 'border-2 border-red-500 bg-red-50/60' : pickup ? 'border-slate-200 bg-slate-50 opacity-75' : waiting ? 'border-2 border-red-400 bg-red-50/40' : level === 'LATE' ? 'border-red-400' : level === 'WARN' ? 'border-orange-300' : 'border-slate-200',
       )}
       data-kds-ticket={ticket.status}
       data-kds-order={view.dailyNumber}
       data-kds-pickup={pickup ? pickup.source : waiting ? 'WAITING' : undefined}
+      data-kds-cancelled={cancelled ? '' : undefined}
       title={view.waiterName ? t('kitchen.waiter', { name: view.waiterName }) : undefined}
     >
       <header className="flex items-center gap-x-1.5">
@@ -181,6 +206,11 @@ export function TicketCard({
         </span>
       </header>
 
+      {cancelled && (
+        <p className="mt-1 rounded bg-red-600 px-1.5 py-0.5 text-xs font-black text-white" data-cancelled-line>
+          {t('kitchen.cancelledWhileCooking', { reason: cancelled.reason })}
+        </p>
+      )}
       {/* Picked up: who took it and when the card goes; still at the pass after 10 minutes: a warning */}
       {pickup && (
         <p className="mt-1 flex items-center gap-1 text-xs font-bold text-green-800" data-pickup-line>
@@ -211,6 +241,27 @@ export function TicketCard({
                 {item.modifiers.length > 0 && <span className="block text-[13px] leading-tight font-semibold text-slate-600">{item.modifiers.map((m) => `+ ${m.name}`).join('  ')}</span>}
                 {item.note && <span className="inline-block rounded bg-amber-100 px-1 text-[13px] font-bold text-amber-900">“{item.note}”</span>}
                 {item.isVoid && item.voidReason && <span className="block text-[11px] font-semibold">{item.voidReason}</span>}
+                {/* I4: ready food of the same dish waiting for another order (owner, 2026-11-09) */}
+                {!item.isVoid &&
+                  onGive &&
+                  (view.available?.[item.id] ?? []).slice(0, 1).map((food) => (
+                    <button
+                      key={food.id}
+                      type="button"
+                      onClick={() => onGive(item.id, food.id)}
+                      className="press mt-0.5 flex min-h-9 w-full items-center gap-1.5 rounded-lg border-2 border-green-600 bg-green-50 px-1.5 text-left text-[13px] font-extrabold text-green-800"
+                      data-give-food={food.fromDailyNumber}
+                    >
+                      <PackageCheck className="size-4 shrink-0" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate">{t('kitchen.readyFood', { n: food.fromDailyNumber, min: Math.max(0, Math.floor((now - Date.parse(food.madeAt)) / 60_000)) })}</span>
+                      <span className="shrink-0 rounded bg-green-600 px-1.5 py-0.5 text-white">{t('kitchen.giveFood')}</span>
+                    </button>
+                  ))}
+                {item.stock?.fromAvailable?.length ? (
+                  <span className="mt-0.5 inline-block rounded bg-green-100 px-1 text-[11px] font-black text-green-800" data-given-food>
+                    {t('kitchen.givenFrom', { n: item.stock.fromAvailable.map((f) => `#${f.fromDailyNumber}`).join(', ') })}
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>

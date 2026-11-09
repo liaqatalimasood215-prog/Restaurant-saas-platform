@@ -4,8 +4,10 @@ import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import {
   MAX_DESCRIPTION_LENGTH,
+  MAX_SAFE_HOURS,
   MAX_SIZES,
   MENU_UNITS,
+  defaultReuse,
   checkMenuItem,
   cleanName,
   paisaToInput,
@@ -13,6 +15,7 @@ import {
   sameName,
   type MenuItem,
   type MenuSetup,
+  type ReuseSetting,
 } from '@restaurant-saas/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -64,6 +67,8 @@ export function MenuItemDialog({
   const [groupIds, setGroupIds] = useState<string[]>(item?.modifierGroupIds ?? []);
   const [isAvailable, setIsAvailable] = useState(item?.isAvailable ?? true);
   const [isOnline, setIsOnline] = useState(item?.isOnline ?? true);
+  // I4 (owner, 2026-11-09): made, cancelled, not served and safe → may go to another order of the same dish; null = the default by category
+  const [reuse, setReuse] = useState<ReuseSetting | null>(item?.reuse ?? null);
   const [position, setPosition] = useState(item ? String(inCategory(item.categoryId).findIndex((i) => i.id === item.id) + 1) : '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -71,6 +76,7 @@ export function MenuItemDialog({
   const category = categories.find((c) => c.id === categoryId);
   const sameCategory = item?.categoryId === categoryId;
   const categorySize = inCategory(categoryId).length + (sameCategory ? 0 : 1);
+  const reuseNow = reuse ?? defaultReuse(category?.name ?? '');
 
   const save = async () => {
     const input: MenuItemInput = {
@@ -85,6 +91,7 @@ export function MenuItemDialog({
       modifierGroupIds: groupIds,
       isAvailable,
       isOnline,
+      reuse,
       position: /^\d+$/.test(position.trim()) ? Number(position) : null,
     };
     // One product once in the whole menu (owner, 2026-11-08): the message names the category that already has it
@@ -204,6 +211,29 @@ export function MenuItemDialog({
           <div className="space-y-2 rounded-xl border border-slate-200 p-3">
             <Switch checked={isAvailable} onChange={setIsAvailable} disabled={!canStock} label={t('menuSetup.item.available')} hint={t('menuSetup.item.availableHint')} />
             <Switch checked={isOnline} onChange={setIsOnline} label={t('menuSetup.item.online')} hint={t('menuSetup.item.onlineHint')} />
+            {item?.preparedItemId ? (
+              <p className="text-xs text-slate-500">{t('menuSetup.item.reusePot')}</p>
+            ) : (
+              <div data-reuse-setting>
+                <Switch checked={reuseNow.enabled} onChange={(on) => setReuse({ ...reuseNow, enabled: on })} label={t('menuSetup.item.reuse')} hint={t('menuSetup.item.reuseHint')} />
+                {reuseNow.enabled && (
+                  <div className="mt-2 flex flex-wrap items-center gap-3 pl-1">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      {t('menuSetup.item.reuseHours')}
+                      <input
+                        type="number"
+                        min={1}
+                        max={MAX_SAFE_HOURS}
+                        value={reuseNow.safeHours}
+                        onChange={(e) => setReuse({ ...reuseNow, safeHours: Math.round(Number(e.target.value)) })}
+                        className="min-h-11 w-20 rounded-xl border border-slate-300 bg-white px-2 text-base"
+                      />
+                    </label>
+                    <Switch checked={reuseNow.overnight} onChange={(on) => setReuse({ ...reuseNow, overnight: on })} label={t('menuSetup.item.reuseOvernight')} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

@@ -75,6 +75,9 @@ export function MenuPanel({
                 : t('waiter.perUnit', { price: formatPaisa(from), unit: item.unit });
             const count = inBill[item.id] ?? 0;
             const justAdded = added?.itemId === item.id;
+            // I4: ready food of this dish waiting for another order (made, then cancelled); the kitchen gives it
+            const ready = (menu.readyFood ?? []).filter((f) => f.menuItemId === item.id);
+            const readyCount = ready.reduce((sum, f) => sum + f.remaining, 0);
             return (
               <li key={item.id}>
                 <button
@@ -107,6 +110,16 @@ export function MenuPanel({
                       </span>
                     </span>
                   )}
+                  {readyCount > 0 && (
+                    <span
+                      aria-hidden
+                      className="absolute left-2 top-2 z-10 rounded-full bg-green-600 px-2 py-0.5 text-[11px] font-black text-white shadow-sm"
+                      title={ready.map((f) => `${f.remaining} × ${f.variantName ?? item.name}`).join(', ')}
+                      data-ready-food={readyCount}
+                    >
+                      {t('pos.readyFood', { n: readyCount })}
+                    </span>
+                  )}
                   <ProductArt
                     name={item.name}
                     categoryName={categoryName(item.categoryId)}
@@ -131,6 +144,7 @@ export function MenuPanel({
                     )}
                   </span>
                   {count > 0 && <span className="sr-only"> · {t('pos.inBill', { n: count })}</span>}
+                  {readyCount > 0 && <span className="sr-only"> · {t('pos.readyFood', { n: readyCount })}</span>}
                 </button>
               </li>
             );
