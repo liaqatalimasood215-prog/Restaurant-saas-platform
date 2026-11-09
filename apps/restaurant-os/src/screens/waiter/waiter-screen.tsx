@@ -38,6 +38,7 @@ import { ItemDialog } from './item-dialog';
 import { SentRounds } from './sent-rounds';
 import { ServiceWaiterScreen } from './service-waiter-screen';
 import { SubOrderBar } from './sub-order';
+import { newId } from '@/lib/new-id';
 
 /**
  * Waiter screen, phone first (MASTER_PROMPT.md §5.1, §7.1 Waiter). The Super Waiter (and counter
@@ -159,7 +160,7 @@ function OrderWorkspace({
   const [view, setView] = useState<'menu' | 'order'>('menu');
   const [busy, setBusy] = useState(false);
   // One key per round: a double tap or a retry after a lost answer never sends the round twice.
-  const [roundKey, setRoundKey] = useState(() => crypto.randomUUID());
+  const [roundKey, setRoundKey] = useState(() => newId());
   const [voidTarget, setVoidTarget] = useState<OrderItem | null>(null);
 
   const guestsValue = guests ?? order?.guests ?? (isNew ? 1 : 0);
@@ -202,7 +203,7 @@ function OrderWorkspace({
       setCart([]);
       setGuests(null);
       setSelected(updated.id);
-      setRoundKey(crypto.randomUUID());
+      setRoundKey(newId());
       toast.show({ tone: 'success', title: t('waiter.sent', { n: roundNo }) });
     } catch (err) {
       fail(err);

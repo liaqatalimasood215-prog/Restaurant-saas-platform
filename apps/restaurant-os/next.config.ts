@@ -21,5 +21,7 @@ export default function config(phase: string): NextConfig {
     transpilePackages: ['@restaurant-saas/shared'],
     // Development only: the customer link and QR code use it, so they open on a phone on the same Wi-Fi.
     env: lan ? { NEXT_PUBLIC_LAN_ADDRESS: lan } : {},
+    // Next.js blocks its dev files on any address but localhost; a phone on the same Wi-Fi uses this one.
+    allowedDevOrigins: lan ? [lan] : [],
   };
 }

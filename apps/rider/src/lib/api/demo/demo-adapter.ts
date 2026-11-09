@@ -97,6 +97,7 @@ export class DemoAdapter implements RiderApi, DemoControls {
   private linkLost = false;
   private linkStarted = false;
   private firstAnswer: Promise<void> = Promise.resolve();
+  private readonly unsavedPickups: Record<string, string> = {};
   private readonly pending = new Map<string, { resolve: () => void; reject: (err: Error) => void }>();
 
   constructor() {
@@ -344,19 +345,20 @@ export class DemoAdapter implements RiderApi, DemoControls {
 
   private pickups(): Record<string, string> {
     try {
-      return JSON.parse(this.sessionStore().getItem(PICKUPS_KEY) ?? '{}') as Record<string, string>;
+      return { ...(JSON.parse(this.sessionStore().getItem(PICKUPS_KEY) ?? '{}') as Record<string, string>), ...this.unsavedPickups };
     } catch {
-      return {};
+      return this.unsavedPickups;
     }
   }
 
   async confirmPickup(id: string): Promise<void> {
     const delivery = await this.getDelivery(id);
     if (delivery.status !== 'RIDER_ASSIGNED' || delivery.pickupTappedAt) return;
+    this.unsavedPickups[pickupKey(delivery)] = nowIso();
     try {
-      this.sessionStore().setItem(PICKUPS_KEY, JSON.stringify({ ...this.pickups(), [pickupKey(delivery)]: nowIso() }));
+      this.sessionStore().setItem(PICKUPS_KEY, JSON.stringify(this.pickups()));
     } catch {
-      throw new ApiError('CONFLICT', t('app.errorBody'));
+      // Storage blocked or full: the tap lasts until a reload, like the login and the sample orders.
     }
     this.emit();
   }
@@ -502,6 +504,8 @@ export class DemoAdapter implements RiderApi, DemoControls {
   }
 
   resetSample(): void {
+    // Taps kept in memory (storage blocked) go with the sample, or a fresh delivery would start as picked up.
+    for (const key of Object.keys(this.unsavedPickups)) delete this.unsavedPickups[key];
     try {
       this.sessionStore().removeItem(PICKUPS_KEY);
     } catch {

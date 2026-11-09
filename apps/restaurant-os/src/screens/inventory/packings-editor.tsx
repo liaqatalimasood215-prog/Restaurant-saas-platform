@@ -4,6 +4,7 @@ import { Plus, X } from 'lucide-react';
 import { MILLI, PACKING_KINDS, checkPackings, paisaToInput, parseQuantity, parseRupees, type Packing, type PackingKind, type StockUnit } from '@restaurant-saas/shared';
 import { t } from '@/i18n';
 import { unitLabel } from './inventory-format';
+import { newId } from '@/lib/new-id';
 
 /**
  * "Also bought as" (owner's multiple-units brief, 2026-11-07): the product's own packings besides its main unit — a
@@ -97,7 +98,7 @@ export function PackingsEditor({
         </ul>
       )}
       {drafts.length < 6 && (
-        <button type="button" onClick={() => onChange([...drafts, { id: `pk-${crypto.randomUUID().slice(0, 8)}`, kind: kinds.includes('carton') ? 'carton' : kinds[0]!, size: '', price: '' }])} className="press flex min-h-11 items-center gap-1.5 rounded-xl border border-dashed border-brand/50 px-3 text-sm font-bold text-brand hover:bg-brand-soft">
+        <button type="button" onClick={() => onChange([...drafts, { id: `pk-${newId().slice(0, 8)}`, kind: kinds.includes('carton') ? 'carton' : kinds[0]!, size: '', price: '' }])} className="press flex min-h-11 items-center gap-1.5 rounded-xl border border-dashed border-brand/50 px-3 text-sm font-bold text-brand hover:bg-brand-soft">
           <Plus className="size-4" aria-hidden />
           {t('inventory.packings.add')}
         </button>

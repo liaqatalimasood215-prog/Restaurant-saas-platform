@@ -8,6 +8,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { newId } from '@/lib/new-id';
 
 const METHODS: { method: PaymentMethod; icon: typeof Banknote }[] = [
   { method: 'CASH', icon: Banknote },
@@ -72,7 +73,7 @@ export function PaymentDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // One key per dialog: double taps on "Record payment" record one payment.
-  const [key] = useState(() => crypto.randomUUID());
+  const [key] = useState(() => newId());
 
   const amount = toPaisa(amountText);
   const tip = toPaisa(tipText);
@@ -131,16 +132,17 @@ export function PaymentDialog({
         <span className="text-2xl font-black text-slate-900">{formatPaisa(due)}</span>
       </p>
 
-      <MethodPicker value={method} onChange={setMethod} label={t('pos.method')} />
+      {/* A message about an earlier try goes as soon as the cashier changes something, so it never sits next to the change. */}
+      <MethodPicker value={method} onChange={(m) => (setError(null), setMethod(m))} label={t('pos.method')} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block font-bold text-slate-900">{t('pos.amount')}</span>
-          <input inputMode="decimal" value={amountText} onChange={(e) => setAmountText(e.target.value)} className={field} />
+          <input inputMode="decimal" value={amountText} onChange={(e) => (setError(null), setAmountText(e.target.value))} className={field} />
         </label>
         <label className="block">
           <span className="mb-1 block font-bold text-slate-900">{t('pos.tip')}</span>
-          <input inputMode="decimal" value={tipText} placeholder="0" onChange={(e) => setTipText(e.target.value)} className={field} />
+          <input inputMode="decimal" value={tipText} placeholder="0" onChange={(e) => (setError(null), setTipText(e.target.value))} className={field} />
         </label>
         {method === 'CASH' ? (
           <label className="block sm:col-span-2">
@@ -149,7 +151,7 @@ export function PaymentDialog({
               inputMode="decimal"
               value={cashText}
               placeholder={String(((amount ?? 0) + (tip ?? 0)) / 100)}
-              onChange={(e) => setCashText(e.target.value)}
+              onChange={(e) => (setError(null), setCashText(e.target.value))}
               className={field}
             />
           </label>

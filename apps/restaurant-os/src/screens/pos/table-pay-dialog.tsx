@@ -8,6 +8,7 @@ import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { subOrderItems } from '../waiter/sub-order';
 import { MethodPicker, toPaisa } from './payment-dialog';
+import { newId } from '@/lib/new-id';
 
 /** One bill for everyone at the table: each sub-order is paid in full and keeps its own invoice. */
 export function TablePayDialog({
@@ -31,7 +32,7 @@ export function TablePayDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // One key per dialog: double taps record one payment.
-  const [key] = useState(() => crypto.randomUUID());
+  const [key] = useState(() => newId());
 
   const cash = cashText.trim() === '' ? total : toPaisa(cashText);
   const change = method === 'CASH' && cash !== null ? cash - total : null;
@@ -86,11 +87,12 @@ export function TablePayDialog({
         <span className="font-bold text-slate-700">{t('pos.due')}</span>
         <span className="text-2xl font-black text-slate-900">{formatPaisa(total)}</span>
       </p>
-      <MethodPicker value={method} onChange={setMethod} label={t('pos.method')} />
+      {/* A message about an earlier try goes as soon as the cashier changes something, so it never sits next to the change. */}
+      <MethodPicker value={method} onChange={(m) => (setError(null), setMethod(m))} label={t('pos.method')} />
       {method === 'CASH' ? (
         <label className="block">
           <span className="mb-1 block font-bold text-slate-900">{t('pos.cashReceived')}</span>
-          <input inputMode="decimal" value={cashText} placeholder={String(total / 100)} onChange={(e) => setCashText(e.target.value)} className={field} />
+          <input inputMode="decimal" value={cashText} placeholder={String(total / 100)} onChange={(e) => (setError(null), setCashText(e.target.value))} className={field} />
         </label>
       ) : (
         <label className="block">

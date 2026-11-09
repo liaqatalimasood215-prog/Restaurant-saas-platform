@@ -55,6 +55,7 @@ import { amountText, fromDisplayMilli, quantityText, stockText, toDisplayMilli, 
 import { bookOf, costableLines, emptyLine, fromDrafts, stateOf, toDrafts, type LineDraft } from './recipe-draft';
 import { CostingRows, LEVEL_TONE, RecipeLines, ingredientArt } from './recipe-lines';
 import { SizesDialog, type SizeRow } from './sizes-dialog';
+import { newId } from '@/lib/new-id';
 
 export type EditorSubject =
   | {
@@ -283,7 +284,7 @@ export function RecipeBuilder({
       next = presetSizes(unit).map((label) => {
         const q = sizeQuantity(label, unit, base);
         return {
-          key: crypto.randomUUID(),
+          key: newId(),
           variantId: null,
           name: label,
           quantity: milliToInput(q),
@@ -942,7 +943,7 @@ export function RecipeBuilder({
                     ...d,
                     [editingKey]: from.map((l) => ({
                       ...l,
-                      key: crypto.randomUUID(),
+                      key: newId(),
                     })),
                   }));
                   change();
@@ -1124,7 +1125,7 @@ export function RecipeBuilder({
           newRow={(label) => {
             const q = sizeQuantity(label, baseUnit, baseMilli ?? MILLI);
             return {
-              key: crypto.randomUUID(),
+              key: newId(),
               variantId: null,
               name: label,
               quantity: milliToInput(q),

@@ -20,6 +20,7 @@ import { QrImage } from '../online-app/website-qr';
 import { StaffAvatar } from '../staff/staff-parts';
 import { LinkDialog } from '../staff/staff-screen';
 import { RIDER_APP_ORIGIN, riderShareUrl } from './rider-bridge';
+import { newId } from '@/lib/new-id';
 
 type Confirm = { kind: 'disable' | 'remove'; rider: RiderOverview } | null;
 
@@ -81,10 +82,10 @@ export function RidersScreen() {
   const settle = ({ account }: RiderOverview) =>
     run(async () => {
       // One key per handover: a double tap never records the cash twice.
-      const key = settleKeys[account.id] ?? crypto.randomUUID();
+      const key = settleKeys[account.id] ?? newId();
       setSettleKeys((keys) => ({ ...keys, [account.id]: key }));
       const settlement = await getApi().settleRiderCash(account.id, key);
-      setSettleKeys((keys) => ({ ...keys, [account.id]: crypto.randomUUID() }));
+      setSettleKeys((keys) => ({ ...keys, [account.id]: newId() }));
       toast.show({ tone: 'success', title: t('riders.settled', { amount: formatPaisa(settlement.amount), name: account.name }) });
     });
 

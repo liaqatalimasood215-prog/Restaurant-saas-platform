@@ -7,6 +7,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { MethodPicker } from '../pos/payment-dialog';
+import { newId } from '@/lib/new-id';
 
 /** A payment recorded with the wrong method: the same amount moves to the right one (owner, 2026-11-02). */
 export function CorrectPaymentDialog({ order, payment, onClose, onDone }: { order: Order; payment: PaymentEntry; onClose: () => void; onDone: () => void }) {
@@ -16,7 +17,7 @@ export function CorrectPaymentDialog({ order, payment, onClose, onDone }: { orde
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // One key per dialog: a double tap corrects once.
-  const [key] = useState(() => crypto.randomUUID());
+  const [key] = useState(() => newId());
 
   const submit = async () => {
     if (!method) return setError(t('orders.errorMethod'));

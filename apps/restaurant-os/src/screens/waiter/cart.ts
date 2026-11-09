@@ -1,4 +1,5 @@
 import { sizeMixFor, unitPriceFor, type DraftItemInput, type MenuSnapshot, type MenuUnit } from '@restaurant-saas/shared';
+import { newId } from '@/lib/new-id';
 
 /** One line of the round being built on the waiter's phone (not sent yet). */
 export interface CartLine extends DraftItemInput {
@@ -47,5 +48,5 @@ export function addToCart(cart: CartLine[], draft: DraftItemInput): CartLine[] {
     [...l.modifierIds].sort().join() === [...draft.modifierIds].sort().join();
   const existing = cart.find(same);
   if (existing) return cart.map((l) => (l === existing ? { ...l, quantity: Math.min(50, l.quantity + draft.quantity) } : l));
-  return [...cart, { ...draft, key: crypto.randomUUID() }];
+  return [...cart, { ...draft, key: newId() }];
 }

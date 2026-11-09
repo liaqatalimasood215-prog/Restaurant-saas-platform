@@ -18,7 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
-import { ErrorState } from '@/components/ui/states';
+import { LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
@@ -397,25 +397,31 @@ export function AddTableDialog({ setup, defaultAreaId, onClose }: { setup: Table
 // ── Edit one table ───────────────────────────────────────────────────────────────────────────
 
 export function EditTableDialog({ setup, tableId, onClose }: { setup: TableSetup; tableId: string; onClose: () => void }) {
-  const toast = useToast();
   const entry = setup.tables.find((e) => e.table.id === tableId);
-  const table = entry?.table;
-  const inArea = (areaId: string) => setup.tables.filter((e) => e.table.areaId === areaId);
-  const [name, setName] = useState(table?.name ?? '');
-  const [areaId, setAreaId] = useState(table?.areaId ?? '');
-  const [seats, setSeats] = useState(String(table?.seats ?? 4));
-  const [position, setPosition] = useState(String(inArea(table?.areaId ?? '').findIndex((e) => e.table.id === tableId) + 1));
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  if (!entry || !table) {
+  // The board and this setup list reload separately: just after a table is added, the setup can be a moment behind.
+  // The form waits for it, so it never starts with an empty name or the wrong area.
+  if (!entry) {
     return (
       <Dialog open onClose={onClose} title={t('tableSetup.editTitle', { name: '' })}>
-        <ErrorState message={t('states.errorBody')} />
+        <LoadingState />
       </Dialog>
     );
   }
+  return <EditTableForm key={tableId} setup={setup} entry={entry} onClose={onClose} />;
+}
+
+function EditTableForm({ setup, entry, onClose }: { setup: TableSetup; entry: TableSetup['tables'][number]; onClose: () => void }) {
+  const toast = useToast();
+  const table = entry.table;
+  const tableId = table.id;
+  const inArea = (areaId: string) => setup.tables.filter((e) => e.table.areaId === areaId);
+  const [name, setName] = useState(table.name);
+  const [areaId, setAreaId] = useState(table.areaId);
+  const [seats, setSeats] = useState(String(table.seats));
+  const [position, setPosition] = useState(String(inArea(table.areaId).findIndex((e) => e.table.id === tableId) + 1));
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const areas = setup.areas.map((a) => a.area).filter((a) => a.isActive || a.id === table.areaId);
   const area = areas.find((a) => a.id === areaId);

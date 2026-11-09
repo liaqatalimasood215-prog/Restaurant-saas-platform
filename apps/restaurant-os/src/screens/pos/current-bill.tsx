@@ -53,6 +53,7 @@ import { PrintDialog } from './print-dialog';
 import { TablePayDialog } from './table-pay-dialog';
 import { ProductArt } from './product-art';
 import type { PrintKind } from './printable-bill';
+import { newId } from '@/lib/new-id';
 
 type Icon = typeof ChefHat;
 
@@ -235,7 +236,7 @@ export function CurrentBill({
         orderId: result.id,
         heldId: null,
         newSubOrder: false,
-        sendKey: crypto.randomUUID(),
+        sendKey: newId(),
         // The panel restarts when the order is new or a held bill is used up: open the payment after it.
         payNow: payNow && (result.id !== d.orderId || d.heldId !== null),
         discount: null,

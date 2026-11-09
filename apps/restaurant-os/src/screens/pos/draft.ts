@@ -1,6 +1,7 @@
 import type { DiscountChoice, OrderType } from '@restaurant-saas/shared';
 import type { CartLine } from '../waiter/cart';
 import type { CustomerValue } from './customer-fields';
+import { newId } from '@/lib/new-id';
 
 /**
  * The bill on the POS screen. New items live only here until "Send to kitchen"; after that the
@@ -37,7 +38,7 @@ export function newDraft(type: OrderType = 'TAKEAWAY'): Draft {
     cart: [],
     orderId: null,
     heldId: null,
-    sendKey: crypto.randomUUID(),
+    sendKey: newId(),
     payNow: false,
     newSubOrder: false,
     discount: null,

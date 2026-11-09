@@ -61,7 +61,9 @@ export function ItemDialog({
   const single = mixable ? (chosen.length === 1 ? chosen[0] : undefined) : item.variants.find((v) => v.id === variantId);
   const lineQuantity = mixable ? (mix ? 1 : (sizes[0]?.quantity ?? 1)) : quantity;
   const sizeMissing = item.variants.length > 0 && !single && !mix;
-  const unitPrice = unitPriceFor({ basePrice: item.basePrice, variantPrice: mix?.price ?? single?.price, modifierPrices });
+  // Until a size is chosen the button shows the smallest size's price ("from"), like the menu card, never the base price.
+  const fromPrice = sizeMissing ? Math.min(...item.variants.map((v) => v.price)) : undefined;
+  const unitPrice = unitPriceFor({ basePrice: item.basePrice, variantPrice: mix?.price ?? single?.price ?? fromPrice, modifierPrices });
 
   const pickSize = (id: string) => {
     if (!mixable) return setVariantId(id);
@@ -100,7 +102,7 @@ export function ItemDialog({
       title={item.name}
       footer={
         <Button size="lg" className="w-full" onClick={add}>
-          {t(initial ? 'waiter.saveItem' : 'waiter.addItem', { price: formatPaisa(unitPrice * lineQuantity) })}
+          {t(initial ? 'waiter.saveItem' : sizeMissing ? 'waiter.addItemFrom' : 'waiter.addItem', { price: formatPaisa(unitPrice * lineQuantity) })}
         </Button>
       }
     >

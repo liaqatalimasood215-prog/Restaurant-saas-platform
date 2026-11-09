@@ -38,16 +38,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ show }}>
       {children}
-      <div
-        aria-live="polite"
-        className="pointer-events-none fixed inset-x-3 top-20 z-50 flex flex-col items-center gap-2 md:bottom-6 md:left-auto md:right-6 md:top-auto md:items-end"
-      >
+      {/*
+        Top centre on every screen size: at the bottom right a message sat on the POS Send to Kitchen / Bill Now buttons for six
+        seconds and swallowed the cashier's tap. Taps also pass through a message to what is under it; only its X takes a tap.
+      */}
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-3 top-20 z-50 flex flex-col items-center gap-2">
         {toasts.map((toast) => (
           <div
             key={toast.id}
             role={toast.tone === 'error' ? 'alert' : 'status'}
             className={cn(
-              'pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-2xl border p-4 shadow-lg',
+              'flex w-full max-w-sm items-start gap-3 rounded-2xl border p-4 shadow-lg',
               toast.tone === 'success' && 'border-green-200 bg-green-50 text-green-900',
               toast.tone === 'error' && 'border-red-200 bg-red-50 text-red-900',
               toast.tone === 'info' && 'border-slate-200 bg-white text-slate-900',
@@ -66,7 +67,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               type="button"
               onClick={() => dismiss(toast.id)}
               aria-label={t('nav.close')}
-              className="-m-1 rounded-lg p-1 opacity-60 hover:opacity-100"
+              className="pointer-events-auto -m-1 rounded-lg p-1 opacity-60 hover:opacity-100"
             >
               <X className="size-4" aria-hidden />
             </button>

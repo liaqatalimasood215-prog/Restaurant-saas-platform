@@ -21,6 +21,7 @@ import { PrintDialog } from '../pos/print-dialog';
 import { CancelOrderDialog } from './cancel-order-dialog';
 import { CounterOrderDialog } from './counter-order-dialog';
 import { OrderCard, type OrderCardActions } from './order-card';
+import { newId } from '@/lib/new-id';
 
 const SECTIONS: { key: 'new' | 'kitchen' | 'ready' | 'rider'; statuses: OrderStatus[] }[] = [
   { key: 'new', statuses: ['PLACED'] },
@@ -191,10 +192,10 @@ export function OnlineOrdersScreen() {
                     variant="secondary"
                     disabled={busy || r.cashToSettle === 0}
                     onClick={() => {
-                      const key = settleKeys[r.rider.id] ?? crypto.randomUUID();
+                      const key = settleKeys[r.rider.id] ?? newId();
                       setSettleKeys((k) => ({ ...k, [r.rider.id]: key }));
                       void run(() => getApi().settleRiderCash(r.rider.id, key), (s) => t('online.settled', { amount: formatPaisa(s.amount), name: r.rider.name })).then(
-                        (s) => s && setSettleKeys((k) => ({ ...k, [r.rider.id]: crypto.randomUUID() })),
+                        (s) => s && setSettleKeys((k) => ({ ...k, [r.rider.id]: newId() })),
                       );
                     }}
                   >

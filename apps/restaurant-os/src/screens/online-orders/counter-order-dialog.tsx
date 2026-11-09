@@ -11,6 +11,7 @@ import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { addToCart, describeLine, type CartLine } from '../waiter/cart';
 import { ItemDialog } from '../waiter/item-dialog';
+import { newId } from '@/lib/new-id';
 
 /**
  * Takeaway at the counter or a delivery order taken on the phone (MASTER_PROMPT.md §5.3, §5.4).
@@ -38,7 +39,7 @@ export function CounterOrderDialog({
   const [picking, setPicking] = useState<MenuItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [key] = useState(() => crypto.randomUUID());
+  const [key] = useState(() => newId());
 
   const views = cart.map((l) => describeLine(l, menu)).filter((v) => v !== null);
   const itemsTotal = views.reduce((sum, v) => sum + v.unitPrice * v.line.quantity, 0);

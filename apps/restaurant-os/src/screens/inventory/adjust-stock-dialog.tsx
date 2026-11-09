@@ -10,6 +10,7 @@ import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { fromDisplayMilli, stockText, unitLabel } from './inventory-format';
+import { newId } from '@/lib/new-id';
 
 /**
  * Correct the stock of one ingredient: Add or Remove, a quantity, a reason (and a note for "Other").
@@ -27,7 +28,7 @@ export function AdjustStockDialog({ row, view, onClose }: { row: IngredientRow |
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // One key per dialog: a double tap on Save records the change once.
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey] = useState(() => newId());
 
   const current = view.ingredients.find((r) => r.ingredient.id === ingredientId) ?? null;
   const typed = parseQuantity(quantity, { allowZero: false });

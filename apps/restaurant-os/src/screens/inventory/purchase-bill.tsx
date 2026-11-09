@@ -48,6 +48,7 @@ import { PackingsEditor, packingDrafts, packingsFromDrafts, type PackingDraft } 
 import { bookOf } from './recipes/recipe-draft';
 import { ingredientArt } from './recipes/recipe-lines';
 import { PurchasePreview, PurchaseSummary, purchasePreview } from './recipes/purchase-recipes';
+import { newId } from '@/lib/new-id';
 
 /**
  * New Purchase (Bill) — owner's brief and picture, 2026-11-06. Two screens, one at a time:
@@ -67,7 +68,7 @@ interface BillLine {
   rate: string;
 }
 
-const newKey = () => crypto.randomUUID();
+const newKey = () => newId();
 
 export function PurchaseBill({ supplierId, firstProductId, onClose }: { supplierId: string; firstProductId?: string | null; onClose: () => void }) {
   const ws = useApiQuery(() => getApi().getSupplierWorkspace(supplierId, 'TODAY'), [supplierId]);

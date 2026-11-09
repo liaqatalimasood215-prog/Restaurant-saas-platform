@@ -7,6 +7,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { MethodPicker, toPaisa } from '../pos/payment-dialog';
+import { newId } from '@/lib/new-id';
 
 /**
  * Owner or Manager gives money back, full or part, with a reason (MASTER_PROMPT.md §8). A new entry only: the payment and the
@@ -22,7 +23,7 @@ export function RefundDialog({ order, onClose, onDone }: { order: Order; onClose
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // One key per dialog: double taps on the last button give the money back once.
-  const [key] = useState(() => crypto.randomUUID());
+  const [key] = useState(() => newId());
   const amount = toPaisa(amountText);
 
   const next = () => {

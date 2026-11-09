@@ -298,6 +298,7 @@ import {
 } from '../client';
 import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
+import { newId } from '@/lib/new-id';
 
 /**
  * No made-up network delay (owner, 2026-11-06: POS and Tables felt slow; every call waited 150–350 ms, a screen
@@ -342,7 +343,6 @@ function wait(): Promise<void> {
 }
 
 const nowIso = () => new Date().toISOString();
-const newId = () => crypto.randomUUID();
 const riderAccount = (rider: StaffUser): RiderAccount => ({
   id: rider.id,
   name: rider.name,

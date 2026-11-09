@@ -6,6 +6,7 @@ import { checkOrderDetails, stepsKind } from '../../order-rules';
 import { announce } from '../../sound';
 import { ApiError, ORDER_MODES, type CustomerOrder, type CustomerProfile, type CustomerStore, type DemoControls, type PlaceOrderInput, type StoreApi } from '../client';
 import { DEMO_CLOSED_AT_START, DEMO_RIDER, DEMO_STORES } from './seed';
+import { newId } from '@/lib/new-id';
 
 /**
  * Phase 2 implementation of the StoreApi: sample data in this browser (localStorage), shared with its other tabs.
@@ -153,7 +154,7 @@ export class DemoAdapter implements StoreApi, DemoControls {
   }
 
   private sendToRestaurantOs(order: CustomerLinkOrder): Promise<CustomerLinkPlaced> {
-    const id = crypto.randomUUID();
+    const id = newId();
     return new Promise<CustomerLinkPlaced>((resolve, reject) => {
       this.pendingOrders.set(id, { resolve, reject });
       this.host?.postMessage({ type: CUSTOMER_LINK_ORDER, id, order }, RESTAURANT_OS_ORIGIN);

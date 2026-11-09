@@ -18,6 +18,7 @@ import {
   type RecipesView,
   type StockUnit,
 } from '@restaurant-saas/shared';
+import { newId } from '@/lib/new-id';
 
 /**
  * A recipe line as typed on the screen: Quantity and Unit apart (Recipe Builder R1), the size of a package
@@ -63,7 +64,7 @@ export function toDrafts(lines: readonly RecipeLine[], ingredients: Lookup): Lin
     const unit = l.unit ?? ingredient?.stockUnit ?? 'g';
     const factor = ingredient ? (recipeUnitFactor(unit, ingredient, l.unitSizeMilli ?? null) ?? MILLI) : MILLI;
     return {
-      key: crypto.randomUUID(),
+      key: newId(),
       ingredientId: l.ingredientId,
       quantity: milliToInput(fromStockMilli(l.quantityMilli, factor)),
       unit,
@@ -76,7 +77,7 @@ export function toDrafts(lines: readonly RecipeLine[], ingredients: Lookup): Lin
 }
 
 export function emptyLine(ingredient?: Ingredient): LineDraft {
-  return { key: crypto.randomUUID(), ingredientId: ingredient?.id ?? '', quantity: '', unit: ingredient?.stockUnit ?? 'g', size: '', loss: '', optional: false, substituteId: '' };
+  return { key: newId(), ingredientId: ingredient?.id ?? '', quantity: '', unit: ingredient?.stockUnit ?? 'g', size: '', loss: '', optional: false, substituteId: '' };
 }
 
 /**

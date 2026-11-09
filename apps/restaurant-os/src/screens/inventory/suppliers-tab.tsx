@@ -35,9 +35,10 @@ import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { stockText, unitLabel } from './inventory-format';
 import { EditProductButton, ProductScreen, PurchaseBill } from './purchase-bill';
 import { ingredientArt } from './recipes/recipe-lines';
+import { newId } from '@/lib/new-id';
 
 const STATUS_TONE: Record<KhataStatus, Tone> = { PAID: 'green', PARTLY_PAID: 'amber', UNPAID: 'red' };
-const newKey = () => crypto.randomUUID();
+const newKey = () => newId();
 
 /**
  * Suppliers (owner's Smart Supplier brief, S1): one supplier = one screen. The list on the left (search, what we owe,

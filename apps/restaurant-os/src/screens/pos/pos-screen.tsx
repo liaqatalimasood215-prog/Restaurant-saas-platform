@@ -19,6 +19,7 @@ import { subOrderItems } from '../waiter/sub-order';
 import { CurrentBill } from './current-bill';
 import { newDraft, type Draft } from './draft';
 import { MenuPanel } from './menu-panel';
+import { newId } from '@/lib/new-id';
 
 type OpenEntry = TableBoardEntry & { order: NonNullable<TableBoardEntry['order']> };
 
@@ -196,7 +197,7 @@ export function PosScreen({ tableId }: { tableId?: string }) {
                               orderId: entry?.order?.id ?? null,
                               customer: { name: h.customerName, phone: h.customerPhone, address: h.customerAddress },
                               note: h.note,
-                              cart: h.items.map((i) => ({ ...i, key: crypto.randomUUID() })),
+                              cart: h.items.map((i) => ({ ...i, key: newId() })),
                               heldId: h.id,
                               discount: h.discount,
                             })

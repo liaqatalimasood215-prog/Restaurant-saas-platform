@@ -18,8 +18,9 @@ export function AppPreviewFrame({ origin, appName, children }: { origin: string;
     let misses = 0;
     const check = async () => {
       try {
-        // Only "did it answer" matters, so the app's reply stays unread.
-        await fetch(origin, { mode: 'no-cors', cache: 'no-store' });
+        // Only "did it answer" matters, so the app's reply stays unread. A small static file, not the home page: the page costs the
+        // app a full render every few seconds, and its font-preload header made the browser log a blocked-font error here.
+        await fetch(`${origin}/sw.js`, { mode: 'no-cors', cache: 'no-store' });
         misses = 0;
         if (!stopped) setDown(false);
       } catch {
