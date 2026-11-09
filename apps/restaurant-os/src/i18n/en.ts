@@ -442,7 +442,6 @@ export const en = {
     outOfStock: 'Out of stock',
     noResults: 'No menu items match "{q}".',
     addItem: 'Add · {price}',
-    addItemFrom: 'Add · from {price}',
     saveItem: 'Save · {price}',
     size: 'Size',
     chooseSize: 'Choose a size.',

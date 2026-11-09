@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   canMixSizes,
+  cardPrice,
   formatPaisa,
   sizeMixFor,
   unitPriceFor,
@@ -61,9 +62,11 @@ export function ItemDialog({
   const single = mixable ? (chosen.length === 1 ? chosen[0] : undefined) : item.variants.find((v) => v.id === variantId);
   const lineQuantity = mixable ? (mix ? 1 : (sizes[0]?.quantity ?? 1)) : quantity;
   const sizeMissing = item.variants.length > 0 && !single && !mix;
-  // Until a size is chosen the button shows the smallest size's price ("from"), like the menu card, never the base price.
-  const fromPrice = sizeMissing ? Math.min(...item.variants.map((v) => v.price)) : undefined;
-  const unitPrice = unitPriceFor({ basePrice: item.basePrice, variantPrice: mix?.price ?? single?.price ?? fromPrice, modifierPrices });
+  // Until a size is chosen the button shows the first size's price with its name, like the POS and Waiter cards
+  // (owner, 2026-11-05: "Rs. 2,800 / 1 kg"), never the base price.
+  const firstSize = sizeMissing ? cardPrice(item) : null;
+  const unitPrice = unitPriceFor({ basePrice: item.basePrice, variantPrice: mix?.price ?? single?.price ?? firstSize?.price, modifierPrices });
+  const priceText = formatPaisa(unitPrice * lineQuantity);
 
   const pickSize = (id: string) => {
     if (!mixable) return setVariantId(id);
@@ -102,7 +105,9 @@ export function ItemDialog({
       title={item.name}
       footer={
         <Button size="lg" className="w-full" onClick={add}>
-          {t(initial ? 'waiter.saveItem' : sizeMissing ? 'waiter.addItemFrom' : 'waiter.addItem', { price: formatPaisa(unitPrice * lineQuantity) })}
+          {t(initial ? 'waiter.saveItem' : 'waiter.addItem', {
+            price: firstSize?.sizeName ? t('waiter.sizePrice', { price: priceText, size: firstSize.sizeName }) : priceText,
+          })}
         </Button>
       }
     >
