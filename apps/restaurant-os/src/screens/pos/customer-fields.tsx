@@ -41,7 +41,7 @@ export function CustomerFields({
   };
   const field = 'min-h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm';
 
-  if (optional && !open) {
+  if (optional && !open && !value.name && !value.phone) {
     return (
       <button
         type="button"

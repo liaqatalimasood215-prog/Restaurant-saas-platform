@@ -307,6 +307,13 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
+**POS Find customer in the title row, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, not pushed, not yet on `main`** (owner: "table search can remove,
+his place customer search"). The box beside Running bills now finds a customer by name or phone (from 2 letters, earlier customers from the orders) and puts
+them on the bill; a bill with unsent items asks to send or hold first. Then (his second picture) a takeaway bill has no customer box: one line
+"Customer: name · phone" with ×; nobody found → add a new customer in the search (name, phone optional); on phones too. Delivery keeps name, phone,
+address. `screens/pos/customer-search.tsx`, `current-bill.tsx`. Tests: typecheck, lint, `walkthrough:pos`, `walkthrough`, `:online`, `:sub-orders`,
+`:sizes`, `:refunds` pass on port 3010. **Open:** his customer khata (regular customers buy on credit, pay later) — plan first, needs his approval.
+
 **Searches swap places, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, not pushed, not yet on `main`.** His two
 screenshots: "CHICKEN" in the header found no orders, and the small POS box was the menu search. Now the header finds menu items (on the POS as he types;
 Enter on another screen opens the POS) and the POS title-row box finds orders (number, table, customer → Orders). Phone: the header has no search, so the

@@ -46,10 +46,20 @@ const kdsTicket = (page, type, n) => page.locator(`main [data-kds-order="${n}"]`
 const kdsLine = (page, name, quantity) => page.locator(`main [data-kds-line="${name}"]`, { hasText: quantity }).first();
 const ok = (message) => console.log(`  ✓ ${message}`);
 const bill = (page) => page.locator('main [data-pos-bill]');
-// The customer box of a Takeaway bill is folded ("Customer (optional)"): open it before typing.
-const openCustomer = async (page) => {
-  const folded = bill(page).getByRole('button', { name: /^Customer \(optional\)/ });
-  if (await folded.count()) await folded.click();
+// A takeaway bill takes its customer from Find customer in the title row (owner, 2026-11-10): an earlier customer from the
+// list, else a new one with name and phone. The bill then shows one line "Customer: name · phone".
+const chooseCustomer = async (page, name, phone) => {
+  const box = page.locator('main [data-customer-search]');
+  await box.getByRole('searchbox', { name: 'Find customer: name or phone' }).fill(name);
+  const known = box.getByRole('button', { name: new RegExp(`^${name} · ${phone}`) });
+  const fresh = box.locator('[data-new-customer]');
+  await known.or(fresh).first().waitFor();
+  if (await known.count()) await known.click();
+  else {
+    await fresh.getByLabel('New customer phone (optional)').fill(phone);
+    await fresh.getByRole('button', { name: 'Add customer to the bill' }).click();
+  }
+  await bill(page).locator('[data-bill-customer]', { hasText: `${name} · ${phone}` }).waitFor();
 };
 const grandTotal =(page, total) => bill(page).locator('dt:text-is("Total") + dd', { hasText: total }).waitFor({ timeout: 6_000 });
 
@@ -148,9 +158,7 @@ ok('Close keeps the bill; "Yes, clear bill" empties it (nothing was sent to the 
 
 console.log('Flow A — takeaway: new customer, hold, reopen, send, pay later, then pay and hand over');
 await bill(cashier).getByRole('radio', { name: 'Takeaway' }).click();
-await openCustomer(cashier);
-await bill(cashier).getByLabel('Customer name', { exact: true }).fill('Hina Sheikh');
-await bill(cashier).getByLabel('Phone', { exact: true }).fill('0312-5556667');
+await chooseCustomer(cashier, 'Hina Sheikh', '0312-5556667');
 await pick(cashier, 'Zinger Burger', { quantity: 2 });
 await bill(cashier).getByRole('button', { name: 'Hold' }).click();
 await cashier.getByRole('button', { name: /^Running bills/ }).click();
@@ -183,11 +191,10 @@ ok('Burger Chef ready → paid Online/Wallet (invoice #2) → completed (picked 
 console.log('Flow A — the customer is found again by phone');
 await bill(cashier).getByRole('button', { name: 'Complete — start a new bill' }).click();
 await bill(cashier).getByRole('radio', { name: 'Takeaway' }).click();
-await openCustomer(cashier);
-await bill(cashier).getByRole('searchbox', { name: 'Find customer: name or phone' }).fill('Hina');
-await bill(cashier).getByRole('searchbox', { name: 'Find customer: name or phone' }).press('Enter');
-await bill(cashier).getByRole('button', { name: /^Hina Sheikh · 0312-5556667/ }).click();
-assert.equal(await bill(cashier).getByLabel('Phone', { exact: true }).inputValue(), '0312-5556667');
+const findBox = cashier.locator('main [data-customer-search]');
+await findBox.getByRole('searchbox', { name: 'Find customer: name or phone' }).fill('Hina');
+await findBox.getByRole('button', { name: /^Hina Sheikh · 0312-5556667/ }).click();
+await bill(cashier).locator('[data-bill-customer]', { hasText: 'Hina Sheikh · 0312-5556667' }).waitFor();
 ok('customer search "Hina" → Hina Sheikh filled in');
 
 console.log('Flow A — the Owner gives a discount on a new bill, then Bill Now');
@@ -199,9 +206,7 @@ await cashier.getByRole('dialog').getByRole('button', { name: 'Yes, clear bill' 
 await owner.bringToFront();
 await owner.getByRole('button', { name: 'New bill', exact: true }).click();
 await bill(owner).getByRole('radio', { name: 'Takeaway' }).click();
-await openCustomer(owner);
-await bill(owner).getByLabel('Customer name', { exact: true }).fill('Hina Sheikh');
-await bill(owner).getByLabel('Phone', { exact: true }).fill('0312-5556667');
+await chooseCustomer(owner, 'Hina Sheikh', '0312-5556667');
 await pick(owner, 'Wings');
 await bill(owner).getByRole('button', { name: 'Discount' }).click();
 dialog = owner.getByRole('dialog');
@@ -343,7 +348,7 @@ assert.match(summaryText, /\d+ open/, 'open / pending bills are counted apart');
 await shot(owner, '10-desktop-owner-summary-after-pos');
 ok('Summary lists the "Staff meal" discount given by Aziz Ahmed; open / pending bills are counted apart');
 
-console.log('Searches (owner, 2026-11-10): the header finds menu items, the POS title row finds orders');
+console.log('Searches (owner, 2026-11-10): the header finds menu items, the POS title row finds a customer');
 const menuSearch = owner.getByRole('searchbox', { name: 'Search menu items (e.g. Karahi, Chai)' });
 await menuSearch.fill('burger');
 await menuSearch.press('Enter');
@@ -355,15 +360,19 @@ assert.equal(await menuPanel.getByText('Fajita Pizza').count(), 0, 'only the ite
 await shot(owner, '11-desktop-header-menu-search');
 await menuSearch.fill('');
 await waitText(menuPanel, 'Fajita Pizza');
-const orderSearch = owner.getByRole('searchbox', { name: 'Order no., table, customer' });
-await orderSearch.fill('7');
-await orderSearch.press('Enter');
-await owner.waitForURL('**/orders?q=7');
-assert.equal(await owner.locator('main input[type="search"]').first().inputValue(), '7');
+const customerSearch = owner.locator('main [data-customer-search]');
+await customerSearch.getByRole('searchbox', { name: 'Find customer: name or phone' }).fill('hina');
+await customerSearch.getByRole('button', { name: /Hina Sheikh/ }).click();
+await bill(owner).locator('[data-bill-customer]', { hasText: 'Hina Sheikh · 0312-5556667' }).waitFor();
+assert.equal(await bill(owner).getByLabel('Customer name', { exact: true }).count(), 0, 'a takeaway bill has no customer fields any more');
+await shot(owner, '12-desktop-pos-find-customer');
 const phonePos = await openAs(USER.cashier, '/pos', PHONE);
 await phonePos.getByRole('searchbox', { name: 'Search menu' }).fill('burger');
 await waitText(phonePos.locator('main section[aria-label="Menu"]'), 'Beef Burger');
-ok('header "burger" on Summary + Enter → POS shows only the burgers; POS "7" + Enter → Orders searched for 7; phone: the POS box searches the menu');
+await bill(owner).getByRole('button', { name: 'Remove the customer from this bill' }).click();
+assert.equal(await bill(owner).locator('[data-bill-customer]').count(), 0, 'removed from the bill');
+await chooseCustomer(owner, 'Bilal Khan', '0333-1112223');
+ok('header "burger" on Summary + Enter → POS shows only the burgers; POS "hina" → Hina Sheikh with her phone as one line on the bill, no customer fields; × removes her; a new customer Bilal Khan added from the search; phone: the POS box searches the menu');
 
 await browser.close();
 console.log('POS walkthrough passed: Flow A (dine-in, takeaway, hold, discounts, split / pending payment, Bill Now) and Flow B (Call Waiter, payment), many tables at once and a quick sale.');

@@ -16,6 +16,8 @@ import {
   ShoppingBag,
   Trash2,
   Truck,
+  UserRound,
+  X,
 } from 'lucide-react';
 import {
   calculateBill,
@@ -415,15 +417,34 @@ export function CurrentBill({
               onSelect={(choice) => openSubOrder(table, choice === 'NEW' ? null : choice, choice === 'NEW')}
             />
           )}
-          {/* A new Table bill needs no customer: the table is chosen with the Table button. */}
-          {!order && draft.type !== 'DINE_IN' && (
+          {/* A new Table bill needs no customer: the table is chosen with the Table button. A takeaway bill finds its customer in the
+              title row (owner, 2026-11-10): here only the one chosen, with a remove button. Delivery keeps name, phone and address. */}
+          {!order && draft.type === 'TAKEAWAY' && (draft.customer.name || draft.customer.phone) && (
+            <p className="flex min-h-11 items-center gap-2 rounded-xl bg-slate-50 px-3 text-sm" data-bill-customer>
+              <UserRound className="size-4 shrink-0 text-slate-500" aria-hidden />
+              <span className="text-slate-500">{t('pos.customerLine')}:</span>
+              <span className="min-w-0 flex-1 truncate">
+                <span className="font-bold text-slate-900">{draft.customer.name}</span>
+                {draft.customer.phone && ` · ${draft.customer.phone}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setDraft((d) => ({ ...d, customer: { name: '', phone: '', address: '' } }))}
+                aria-label={t('pos.removeCustomer')}
+                className="press grid size-9 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-white hover:text-red-700"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </p>
+          )}
+          {!order && draft.type === 'DELIVERY' && (
             <section className="space-y-2">
               {draft.type === 'DELIVERY' && <h3 className={sectionTitle}>{t('pos.customerAndDelivery')}</h3>}
               <CustomerFields
                 value={draft.customer}
                 onChange={(customer) => setDraft((d) => ({ ...d, customer }))}
                 withAddress={draft.type === 'DELIVERY'}
-                optional={draft.type === 'TAKEAWAY'}
+                optional={false}
               />
             </section>
           )}
