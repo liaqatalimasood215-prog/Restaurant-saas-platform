@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { BellRing, ChevronDown, ListOrdered, Pause, Plus, Search } from 'lucide-react';
 import { formatPaisa, orderPlaceName, type MenuItem, type OrderView, type TableBoardEntry } from '@restaurant-saas/shared';
 import { ScreenHeader } from '@/components/screen-header';
@@ -12,6 +13,7 @@ import { t } from '@/i18n';
 import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
+import { setMenuSearch, useMenuSearch } from '@/lib/menu-search';
 import { useSession } from '@/lib/session';
 import { addToCart, type CartLine } from '../waiter/cart';
 import { ItemDialog } from '../waiter/item-dialog';
@@ -40,7 +42,10 @@ export function PosScreen({ tableId }: { tableId?: string }) {
   const toast = useToast();
   const [draft, setDraftState] = useState<Draft>(() => newDraft());
   const [picking, setPicking] = useState<{ item: MenuItem; line: CartLine | null } | null>(null);
-  const [productQuery, setProductQuery] = useState('');
+  // The menu search is typed in the header (owner, 2026-11-10); on a phone, where the header has no search, in the title row
+  const productQuery = useMenuSearch();
+  const [orderQuery, setOrderQuery] = useState('');
+  const router = useRouter();
   const [showBills, setShowBills] = useState(false);
   /** The product just added, so its card shows the tick once (owner 2026-11-03). */
   const [added, setAdded] = useState<{ itemId: string; at: number } | null>(null);
@@ -107,12 +112,33 @@ export function PosScreen({ tableId }: { tableId?: string }) {
 
   const actions = (
     <div className="flex flex-wrap items-center gap-2">
-      <label className="flex min-h-11 w-36 items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-2.5 shadow-sm transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15 xl:w-56 xl:gap-2 xl:px-3">
-        <Search className="size-4 shrink-0 text-slate-400 xl:size-5" aria-hidden />
+      {/* Owner, 2026-11-10: menu items are searched in the header; this place finds an order (number, table, customer) */}
+      <form
+        role="search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (orderQuery.trim()) router.push(`/orders?q=${encodeURIComponent(orderQuery.trim())}`);
+        }}
+        className="hidden md:block"
+      >
+        <label className="flex min-h-11 w-44 items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-2.5 shadow-sm transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15 xl:w-60 xl:gap-2 xl:px-3">
+          <Search className="size-4 shrink-0 text-slate-400 xl:size-5" aria-hidden />
+          <input
+            type="search"
+            value={orderQuery}
+            onChange={(e) => setOrderQuery(e.target.value)}
+            placeholder={t('pos.searchOrders')}
+            aria-label={t('pos.searchOrders')}
+            className="w-full bg-transparent text-sm"
+          />
+        </label>
+      </form>
+      <label className="flex min-h-11 w-36 items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-2.5 shadow-sm transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15 md:hidden">
+        <Search className="size-4 shrink-0 text-slate-400" aria-hidden />
         <input
           type="search"
           value={productQuery}
-          onChange={(e) => setProductQuery(e.target.value)}
+          onChange={(e) => setMenuSearch(e.target.value)}
           placeholder={t('pos.searchProducts')}
           aria-label={t('pos.searchProducts')}
           className="w-full bg-transparent text-sm"

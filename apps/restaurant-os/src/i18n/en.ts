@@ -97,6 +97,7 @@ export const en = {
   },
   header: {
     search: 'Search orders: number, table, customer',
+    searchMenu: 'Search menu items (e.g. Karahi, Chai)',
     branchLabel: 'Branch',
     alerts: 'Notifications',
     noAlerts: 'No notifications right now.',
@@ -2289,6 +2290,7 @@ export const en = {
     tapProducts: 'Tap products on the left to add them.',
     editItem: 'Edit {name}',
     searchProducts: 'Search menu',
+    searchOrders: 'Order no., table, customer',
     inBill: 'In this bill: {n}',
     categories: 'Menu categories',
     counterNoAdd: 'Items of a sent takeaway or delivery order cannot be changed here; start a new bill for more.',

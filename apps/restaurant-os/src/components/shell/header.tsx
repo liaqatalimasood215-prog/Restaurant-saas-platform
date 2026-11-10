@@ -2,11 +2,12 @@
 
 import { useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Search, Store } from 'lucide-react';
 import { t } from '@/i18n';
 import { minutesSince } from '@/lib/format';
 import { useNow } from '@/lib/hooks/use-now';
+import { setMenuSearch, useMenuSearch } from '@/lib/menu-search';
 import { useSession } from '@/lib/session';
 import { useDismiss } from '@/components/ui/use-dismiss';
 import { DemoModeIndicator } from './demo-mode';
@@ -24,7 +25,7 @@ export function Header() {
         <Logo />
       </div>
 
-      <div className="hidden max-w-xl flex-1 md:block">{session && allowed('orders.view') && <OrderSearch />}</div>
+      <div className="hidden max-w-xl flex-1 md:block">{session && (allowed('pos.view') ? <MenuSearch /> : allowed('orders.view') && <OrderSearch />)}</div>
 
       <div className="ml-auto flex items-center gap-1 sm:gap-2">
         {session && (
@@ -44,7 +45,39 @@ export function Header() {
   );
 }
 
-/** Header search: opens Orders with the search filled in (order number, table, customer). */
+/**
+ * Header search for menu items (owner, 2026-11-10: "any item can search"). On the POS it narrows the products as he types;
+ * on another screen Enter opens the POS with the search filled in. Orders are searched from the POS title row and the
+ * Orders page.
+ */
+function MenuSearch() {
+  const router = useRouter();
+  const onPos = usePathname() === '/pos';
+  const value = useMenuSearch();
+  return (
+    <form
+      role="search"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!onPos && value.trim()) router.push('/pos');
+      }}
+    >
+      <label className="flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 text-slate-400 shadow-sm transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
+        <Search className="size-5 shrink-0" aria-hidden />
+        <input
+          type="search"
+          value={value}
+          onChange={(e) => setMenuSearch(e.target.value)}
+          placeholder={t('header.searchMenu')}
+          aria-label={t('header.searchMenu')}
+          className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400"
+        />
+      </label>
+    </form>
+  );
+}
+
+/** Header search for a person who sees Orders but not the POS: opens Orders with the search filled in (order number, table, customer). */
 function OrderSearch() {
   const router = useRouter();
   const [value, setValue] = useState('');

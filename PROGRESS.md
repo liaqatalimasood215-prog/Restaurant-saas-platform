@@ -5,7 +5,7 @@
 > mein sab se pehle likhein: **"PROGRESS.md aur CLAUDE.md padho, phir wahin se jaari rakho."**
 > Naya project mat banana, code mat badalna jab tak kaam na diya jaye.
 
-**Last updated:** 2026-11-09 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
+**Last updated:** 2026-11-10 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
 everything in very easy Roman Urdu, code and documents in English)
 
 ---
@@ -306,6 +306,13 @@ walkthrough scripts clear localStorage themselves; the POS bill panel remounts w
 changes (state that must survive, such as `payNow`, lives in the draft, `screens/pos/draft.ts`).
 
 ## 9. Pending tasks and next steps (in this order)
+
+**Searches swap places, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, not pushed, not yet on `main`.** His two
+screenshots: "CHICKEN" in the header found no orders, and the small POS box was the menu search. Now the header finds menu items (on the POS as he types;
+Enter on another screen opens the POS) and the POS title-row box finds orders (number, table, customer → Orders). Phone: the header has no search, so the
+POS box stays the menu search. Someone with Orders but no POS keeps the old header order search. `src/lib/menu-search.ts`, `header.tsx`, `pos-screen.tsx`,
+`walkthrough:pos` (new last step). Also `.claude/launch.json` `restaurant-os-3010`: another worktree's server held port 3000. Tests: typecheck, lint,
+`walkthrough:pos`, `walkthrough`, `:online` pass on port 3010. The IM1 work is in the other worktree `restaurant-software-deploy-1b7e21`, also not committed.
 
 **On GitHub since 2026-11-10 (owner: "Haan, push karo").** Private repository `liaqatalimasood215-prog/Restaurant-saas-platform`, remote `origin`,
 branch `main` at `d026d93` then this docs update (375 files, 98 commits, placeholder email only). Before the push: read-only audit 2026-11-09 — no

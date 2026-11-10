@@ -4,37 +4,87 @@
     {
       "name": "restaurant-os",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@restaurant-saas/restaurant-os", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@restaurant-saas/restaurant-os",
+        "dev"
+      ],
       "port": 3000
     },
     {
       "name": "customer",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@restaurant-saas/customer", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@restaurant-saas/customer",
+        "dev"
+      ],
       "port": 3001
     },
     {
       "name": "rider",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@restaurant-saas/rider", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@restaurant-saas/rider",
+        "dev"
+      ],
       "port": 3002
+    },
+    {
+      "name": "restaurant-os-3010",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@restaurant-saas/restaurant-os",
+        "exec",
+        "next",
+        "dev",
+        "--port",
+        "3010"
+      ],
+      "port": 3010
     },
     {
       "name": "customer-production",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@restaurant-saas/customer", "exec", "next", "start", "--port", "3012"],
+      "runtimeArgs": [
+        "--filter",
+        "@restaurant-saas/customer",
+        "exec",
+        "next",
+        "start",
+        "--port",
+        "3012"
+      ],
       "port": 3012
     },
     {
       "name": "rider-production",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@restaurant-saas/rider", "exec", "next", "start", "--port", "3102"],
+      "runtimeArgs": [
+        "--filter",
+        "@restaurant-saas/rider",
+        "exec",
+        "next",
+        "start",
+        "--port",
+        "3102"
+      ],
       "port": 3102
     },
     {
       "name": "restaurant-os-production",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@restaurant-saas/restaurant-os", "exec", "next", "start", "--port", "3100"],
+      "runtimeArgs": [
+        "--filter",
+        "@restaurant-saas/restaurant-os",
+        "exec",
+        "next",
+        "start",
+        "--port",
+        "3100"
+      ],
       "port": 3100
     },
     {

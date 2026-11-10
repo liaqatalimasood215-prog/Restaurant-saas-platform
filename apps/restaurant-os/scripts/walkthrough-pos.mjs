@@ -343,5 +343,27 @@ assert.match(summaryText, /\d+ open/, 'open / pending bills are counted apart');
 await shot(owner, '10-desktop-owner-summary-after-pos');
 ok('Summary lists the "Staff meal" discount given by Aziz Ahmed; open / pending bills are counted apart');
 
+console.log('Searches (owner, 2026-11-10): the header finds menu items, the POS title row finds orders');
+const menuSearch = owner.getByRole('searchbox', { name: 'Search menu items (e.g. Karahi, Chai)' });
+await menuSearch.fill('burger');
+await menuSearch.press('Enter');
+await owner.waitForURL('**/pos');
+const menuPanel = owner.locator('main section[aria-label="Menu"]');
+await waitText(menuPanel, 'Beef Burger');
+await waitText(menuPanel, 'Zinger Burger');
+assert.equal(await menuPanel.getByText('Fajita Pizza').count(), 0, 'only the items that match');
+await shot(owner, '11-desktop-header-menu-search');
+await menuSearch.fill('');
+await waitText(menuPanel, 'Fajita Pizza');
+const orderSearch = owner.getByRole('searchbox', { name: 'Order no., table, customer' });
+await orderSearch.fill('7');
+await orderSearch.press('Enter');
+await owner.waitForURL('**/orders?q=7');
+assert.equal(await owner.locator('main input[type="search"]').first().inputValue(), '7');
+const phonePos = await openAs(USER.cashier, '/pos', PHONE);
+await phonePos.getByRole('searchbox', { name: 'Search menu' }).fill('burger');
+await waitText(phonePos.locator('main section[aria-label="Menu"]'), 'Beef Burger');
+ok('header "burger" on Summary + Enter → POS shows only the burgers; POS "7" + Enter → Orders searched for 7; phone: the POS box searches the menu');
+
 await browser.close();
 console.log('POS walkthrough passed: Flow A (dine-in, takeaway, hold, discounts, split / pending payment, Bill Now) and Flow B (Call Waiter, payment), many tables at once and a quick sale.');
