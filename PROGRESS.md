@@ -5,7 +5,7 @@
 > mein sab se pehle likhein: **"PROGRESS.md aur CLAUDE.md padho, phir wahin se jaari rakho."**
 > Naya project mat banana, code mat badalna jab tak kaam na diya jaye.
 
-**Last updated:** 2026-11-09 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
+**Last updated:** 2026-11-10 · **Owner:** Liaqat Ali (restaurant owner, beginner at software; explain
 everything in very easy Roman Urdu, code and documents in English)
 
 ---
@@ -216,6 +216,7 @@ vibration; Call Waiter also speaks. DEMO sync: between tabs of one browser only 
 backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.tsx`, `src/lib/sound.ts`.
 
 ## 7. Test status (last run, all green)
+- **2026-11-10 (IM1 Stabilise):** `pnpm test` 193, `pnpm typecheck`, `pnpm lint` pass. All 25 older Restaurant OS walkthroughs pass, the new `walkthrough:im1`, customer (182 checks) and rider (275 checks) too. In the first run of the 25, `:inventory` and `:recipes` each stopped on a 30-second timeout (a click on the All filter; the page load); both passed when run again alone, the cause was not found. `pnpm build` not run (the dev servers were running).
 - **2026-11-09 (bug run + phone fixes on this newest version, commit `d026d93`, pushed 2026-11-10):** `pnpm test` 189, `pnpm typecheck`, `pnpm lint` and `pnpm build`
   pass. ALL walkthroughs pass: the 25 Restaurant OS ones, customer, rider, the new rider `walkthrough:phone` (Wi-Fi address, storage blocked), and on
   the Wi-Fi address `walkthrough`, `:pos` and the customer walkthrough (181 checks). `:sales-stock` failed once while two test groups ran at the same
@@ -306,6 +307,24 @@ walkthrough scripts clear localStorage themselves; the POS bill panel remounts w
 changes (state that must survive, such as `payNow`, lives in the draft, `screens/pos/draft.ts`).
 
 ## 9. Pending tasks and next steps (in this order)
+
+**IM1 (Stabilise) built 2026-11-10 (DEMO), approved after the full regression run ("Approve, main par lao") and committed; not pushed.** Owner: "Approve, IM1 karo". What changed, bug by bug: `docs/INVENTORY_AUDIT_2026-11-10.md` §8
+(B1 Cook refused until the dish is linked with Sell on POS, B2 stock bought after a passed expiry date is usable, B3 one business day, B4 / B5 texts and one
+`postPurchase`, B6 plan row by quantity, B9 toasts, B10 `StockMovement.cost`). B7 waits for IM4, B8 for IM2, lots for IM7. New: `planLeft`, `takesRawTwice`,
+`usableMilli` third argument (`cooking.ts`), `lineCosts` (`suppliers.ts`), `PreparedRow.rawTwice`, `CookingPlanView` rows `cookedMilli` / `leftMilli`,
+`walkthrough:im1`. No data version change. His own browser data was not changed: his cooked dishes are still not linked, so Cook shows the red
+message until he links each one. **Next only after his approval: IM2** (compact UI, raw / planned / cooked labels, recipe kinds).
+
+**Inventory & Suppliers audit and improvement plan shown 2026-11-10 (owner then approved IM1).** His video (`123.mp4`,
+7 minutes of the Inventory screens) and two briefs (workflow audit, compact UI, purchasing, daily plan modes, auto posting, recipe kinds, Available
+Food; then Wastage, Expiry, Stock Count, Reports, cleaner Overview). Full audit: `docs/INVENTORY_AUDIT_2026-11-10.md` — the six flows traced, the
+stock trigger per product type, 10 bugs read from the code (B1 raw stock taken twice when a cooked dish is not linked to its menu product, B2 one
+expiry date per ingredient blocks fresh stock, B3 three different "today", B4 / B5 stale texts and the unused `receiveStock` path, B6 a plan row
+"cooked" after any batch, B7 a shared raw ingredient given in full to every dish, B8 Sell on POS defaults, B9 stacked toasts, B10 no cost on a
+movement), what is missing, DEMO limits against production, the compact UI and the plan **IM1–IM9** (IM1 stabilise, IM2 compact UI, IM3 purchasing
++ returns, IM4 daily plan, IM5 auto posting, IM6 Stock Count + Wastage, IM7 lot expiry, IM8 Reports + Overview, IM9 full check). It replaces the
+open steps I5–I7 and Suppliers S2. Five owner decisions are still open (§9 of the audit, #2–#6; #2 changes the approved "3 safe hours" default). Checked with
+`pnpm test` (189 pass); walkthroughs not run for the audit; no bug reproduced by clicking.
 
 **On GitHub since 2026-11-10 (owner: "Haan, push karo").** Private repository `liaqatalimasood215-prog/Restaurant-saas-platform`, remote `origin`,
 branch `main` at `d026d93` then this docs update (375 files, 98 commits, placeholder email only). Before the push: read-only audit 2026-11-09 — no

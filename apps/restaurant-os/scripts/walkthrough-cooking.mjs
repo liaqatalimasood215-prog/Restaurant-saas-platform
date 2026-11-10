@@ -89,6 +89,11 @@ try {
   await openPrepared(owner);
   const daalCard = card(owner, 'Cooked Daal Mash');
   assert.match(await daalCard.locator('[data-cooked-stock]').innerText(), /^0 g ≈ 0 plates$|^0 kg ≈ 0 plates$/);
+  // IM1: Daal Mash on the POS has its own raw recipe. Linked first, a sale takes the cooked dish and the raw stock is taken once.
+  await daalCard.getByRole('button', { name: 'Sell Cooked Daal Mash on POS' }).click();
+  const link = owner.getByRole('dialog', { name: 'Sell Cooked Daal Mash on POS' });
+  await link.getByRole('button', { name: 'Link and save' }).click();
+  await link.waitFor({ state: 'detached' });
   await daalCard.getByRole('button', { name: 'Cook Cooked Daal Mash' }).click();
   const box = cookBox(owner);
   await box.getByLabel('Raw Daal mash used').fill('5');

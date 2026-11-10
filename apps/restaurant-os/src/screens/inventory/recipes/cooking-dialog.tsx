@@ -78,6 +78,7 @@ export function CookDialog({
   const [key] = useState(newKey);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const twice = row?.rawTwice ?? null;
 
   const typed = parseQuantity(amount, { allowZero: false });
   const amountMilli = typed === null ? 0 : mode === 'MAIN' && main ? fromDisplayMilli(main, typed) : typed;
@@ -122,7 +123,7 @@ export function CookDialog({
           <Button variant="secondary" onClick={onClose}>
             {t('inventory.form.cancel')}
           </Button>
-          <Button onClick={() => void save()} disabled={busy || !version || short.length > 0}>
+          <Button onClick={() => void save()} disabled={busy || !version || short.length > 0 || Boolean(twice)}>
             <CookingPot className="size-4" aria-hidden />
             {t('inventory.cooking.save')}
           </Button>
@@ -131,6 +132,11 @@ export function CookDialog({
     >
       <div className="space-y-4" data-cook-dialog>
         {!version && <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">{t('inventory.cooking.notVerified')}</p>}
+        {twice && (
+          <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-800" data-raw-twice>
+            {t('inventory.cooking.rawTwice', { product: twice.name, dish: dish.name })}
+          </p>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className={label}>{mode === 'MAIN' && main ? t('inventory.cooking.rawUsed', { name: main.name }) : t('inventory.cooking.batches')}</span>

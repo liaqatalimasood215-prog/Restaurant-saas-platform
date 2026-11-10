@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { batchPlan, checkBatch, costPer, dueChecks, localClock, nextDate, planOf, planUses, platesOf, stockNeeds, usableMilli, DEFAULT_COOKING_CHECKS } from './index';
+import { batchPlan, checkBatch, costPer, dueChecks, localClock, nextDate, planLeft, planOf, planUses, platesOf, stockNeeds, takesRawTwice, usableMilli, DEFAULT_COOKING_CHECKS } from './index';
 
 // The owner's example: one recipe written for 1 kg raw daal mash; it makes 2.5 kg cooked daal
 const daal = {
@@ -73,4 +73,33 @@ test('the stock checks before cooking: 8 pm looks at tomorrow, 7 am at today, in
   // 01:00 UTC = 06:00 in Karachi: nothing yet today
   assert.deepEqual(dueChecks(DEFAULT_COOKING_CHECKS, new Date('2026-11-10T01:00:00Z')), []);
   assert.equal(nextDate('2026-12-31'), '2027-01-01');
+});
+
+test('IM1: a plan row is done by quantity, not by the first batch', () => {
+  const row = { preparedId: 'daal-mash', mode: 'MAIN' as const, amountMilli: 5_000_000 };
+  const batch = { preparedId: 'daal-mash', mode: 'MAIN' as const, amountMilli: 2_000_000, status: 'DONE' as const, planDate: '2026-11-10' };
+  assert.deepEqual(planLeft(row, [], '2026-11-10'), { cookedMilli: 0, leftMilli: 5_000_000 });
+  assert.deepEqual(planLeft(row, [batch], '2026-11-10'), { cookedMilli: 2_000_000, leftMilli: 3_000_000 }, '2 of 5 kg cooked: 3 kg left');
+  assert.deepEqual(planLeft(row, [batch, { ...batch, amountMilli: 4_000_000 }], '2026-11-10'), { cookedMilli: 6_000_000, leftMilli: 0 }, 'an extra batch never makes it negative');
+  assert.equal(planLeft(row, [{ ...batch, status: 'REVERSED' as const }], '2026-11-10').leftMilli, 5_000_000, 'a reversed batch does not count');
+  assert.equal(planLeft(row, [batch], '2026-11-11').leftMilli, 5_000_000, 'another day');
+  assert.equal(planLeft(row, [{ ...batch, preparedId: 'daal-chana' }], '2026-11-10').leftMilli, 5_000_000, 'another dish');
+});
+
+test('IM1: expired stock is not cooked with, but stock received after the expiry date is', () => {
+  assert.equal(usableMilli(10_000_000, false), 10_000_000);
+  assert.equal(usableMilli(-2_000_000, false), 0, 'never below zero');
+  assert.equal(usableMilli(10_000_000, true), 0, 'all of it is the expired stock');
+  assert.equal(usableMilli(15_000_000, true, 5_000_000), 5_000_000, '5 kg came after the date: those are fresh');
+  assert.equal(usableMilli(3_000_000, true, 5_000_000), 3_000_000, 'never more than is on hand');
+});
+
+test('IM1: the same dish cooked in a pot and sold by its own raw recipe would take the raw stock twice', () => {
+  const dish = { id: 'cooked-daal', name: 'Cooked Daal Mash' };
+  const raw = [{ ingredientId: 'daal' }, { ingredientId: 'ghee' }];
+  assert.equal(takesRawTwice(dish, daal.lines, { name: 'Daal Mash', preparedItemId: null }, raw), true, 'not linked, its recipe uses raw daal');
+  assert.equal(takesRawTwice(dish, daal.lines, { name: 'Daal Mash', preparedItemId: 'cooked-daal' }, [{ ingredientId: 'cooked-daal' }]), false, 'linked: a sale takes the cooked dish');
+  assert.equal(takesRawTwice(dish, daal.lines, { name: 'Daal Chana' }, raw), false, 'another dish');
+  assert.equal(takesRawTwice(dish, daal.lines, { name: 'daal mash' }, []), false, 'no verified recipe: nothing is taken (Not tracked)');
+  assert.equal(takesRawTwice(dish, daal.lines, { name: 'Daal Mash' }, [{ ingredientId: 'roti' }]), false, 'its recipe shares nothing with the pot');
 });
