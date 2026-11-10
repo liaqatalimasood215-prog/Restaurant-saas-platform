@@ -307,6 +307,14 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
+**Wastage & Expiry audit and plan shown 2026-11-10 (owner's Prompt 1 of `LALA_Inventory_Three_Detailed_Prompts-1.md`), waiting for his approval.
+Nothing built.** Plan: `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` — what exists (placeholder tab; one expiry date per ingredient; no WASTE movement; order-food
+waste in a separate `foodWaste` list only shown on Available Food), what is missing, screens, stock and cost rules, lots and expiry, permissions, steps
+**W0–W5** and 6 decisions. **W0:** the IM1 work (movement cost, needed here) is uncommitted in worktree `restaurant-software-deploy-1b7e21`. Owner:
+"Approve, W0 karo" — its regression run is done (all 25 older walkthroughs, `:im1`, customer, rider pass; `:inventory` and `:recipes` timed out once and
+passed when run again). Still to do, only after he says so: commit IM1 and join both branches on `main`. Prompt 2 (Stock
+Counts) and Prompt 3 (Reports) come after, each with its own audit. The plan file and this note are not committed.
+
 **POS Find customer in the title row, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, not pushed, not yet on `main`** (owner: "table search can remove,
 his place customer search"). The box beside Running bills now finds a customer by name or phone (from 2 letters, earlier customers from the orders) and puts
 them on the bill; a bill with unsent items asks to send or hold first. Then (his second picture) a takeaway bill has no customer box: one line
