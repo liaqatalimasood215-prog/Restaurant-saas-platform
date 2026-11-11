@@ -20,8 +20,8 @@ import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
 export const DATE_KINDS = ['USE_BY', 'BEST_BEFORE', 'UNKNOWN'] as const;
 export type DateKind = (typeof DATE_KINDS)[number];
 
-/** OLD_STOCK = stock from before lots; RETURNED = put back by a waste reversal (held); NONE = stock on no lot (a correction that added stock) */
-export type LotSource = 'OLD_STOCK' | 'PURCHASE' | 'BATCH' | 'RETURNED' | 'NONE';
+/** OLD_STOCK = stock from before lots; RETURNED = put back by a waste reversal (held); REQUEST = held by a waste report (W4); NONE = stock on no lot (a correction that added stock) */
+export type LotSource = 'OLD_STOCK' | 'PURCHASE' | 'BATCH' | 'RETURNED' | 'REQUEST' | 'NONE';
 
 export interface StockLot extends BranchScoped {
   id: Uuid;
@@ -128,7 +128,8 @@ export interface LotLedger {
   overdrawn: Set<Uuid>;
 }
 
-const WASTE_TYPES = new Set(['WASTE']);
+/** Thrown away, or held for a waste report (W4): the expired stock first */
+const WASTE_TYPES = new Set(['WASTE', 'WASTE_HOLD']);
 
 /**
  * Replays the movements, oldest first. Before `since` (the day lots started) everything belongs to the item's old-stock lot. After

@@ -53,6 +53,10 @@ export const PERMISSIONS = {
   'menu.manage': ['OWNER', 'MANAGER'],
   /** Add and edit ingredients, correct stock (with a reason) */
   'inventory.manage': ['OWNER', 'MANAGER'],
+  /** W4 (owner, 2026-11-12): report waste for approval; the food is held at once, nothing is a loss until approved */
+  'inventory.waste.submit': ['OWNER', 'MANAGER', 'KITCHEN'],
+  /** W4: approve or reject waste reports — the Owner and a Manager only */
+  'inventory.waste.approve': ['OWNER', 'MANAGER'],
   /** Publish the website and the Android app, domain and Google Play setup — the Owner only (owner, 2026-10-30) */
   'onlineApp.publish': ['OWNER'],
   /** See the staff list (read-only for the Manager) */

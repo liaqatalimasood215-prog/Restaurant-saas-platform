@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Bell, ChefHat, CircleCheck, CookingPot, Maximize, Minimize, PackageX, Volume2, VolumeX } from 'lucide-react';
+import { Bell, ChefHat, CircleCheck, CookingPot, Maximize, Minimize, PackageX, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { WASTE_REASONS, kdsState, type KitchenStation, type KitchenTicketView, type TicketStatus } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { useNow } from '@/lib/hooks/use-now';
 import { useSession } from '@/lib/session';
 import { playTone, speak, unlockSound } from '@/lib/sound';
+import { ReportWasteDialog } from './report-waste';
 import { TicketCard } from './ticket-card';
 
 const ALL = 'ALL';
@@ -43,6 +44,8 @@ export function KitchenScreen() {
   const [stationId, setStationId] = useState(readStoredStation);
   const [soundOn, setSoundOn] = useState(false);
   const [stockOpen, setStockOpen] = useState(false);
+  /** W4: Report waste for approval */
+  const [reporting, setReporting] = useState(false);
   // I4: ready food given to a line (after the safety check), and a cancelled ticket being stopped
   const [giving, setGiving] = useState<{ view: KitchenTicketView; itemId: string; foodId: string } | null>(null);
   const [stopping, setStopping] = useState<string | null>(null);
@@ -152,6 +155,12 @@ export function KitchenScreen() {
         <button type="button" onClick={() => setStockOpen(true)} disabled={!menu.data} className="press flex min-h-10 items-center gap-2 rounded-xl bg-white/15 px-3 text-sm font-bold text-white hover:bg-white/25 disabled:opacity-60">
           <PackageX className="size-5" aria-hidden />
           {t('kitchen.outOfStock')}
+        </button>
+      )}
+      {user && allowed('inventory.waste.submit') && (
+        <button type="button" onClick={() => setReporting(true)} className="press flex min-h-10 items-center gap-2 rounded-xl bg-white/15 px-3 text-sm font-bold text-white hover:bg-white/25" data-report-waste-button>
+          <Trash2 className="size-5" aria-hidden />
+          {t('kitchen.reportWaste')}
         </button>
       )}
       <button
@@ -276,6 +285,7 @@ export function KitchenScreen() {
           }}
         />
       )}
+      {reporting && <ReportWasteDialog onClose={() => setReporting(false)} />}
       {stockOpen && (
         <StockDialog
           station={stations.find((s) => s.id === selected)}

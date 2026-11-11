@@ -54,18 +54,21 @@ export function InventoryScreen({
   recipeItemId,
   cookingDate,
   foodReview,
+  wastePending,
 }: {
   recipeItemId?: string;
   /** I3: open the Cooking Plan of this date (from the alert) */
   cookingDate?: string;
   /** I4: open Available Food (the closing review alert) */
   foodReview?: boolean;
+  /** W4: open Wastage & Expiry → Pending approval (a waste report alert) */
+  wastePending?: boolean;
 } = {}) {
   const { allowed } = useSession();
   const inventory = useApiQuery(() => getApi().getInventory(), []);
   const order = useSectionOrder();
   // Opened from the Menu with a product's recipe: Recipes first
-  const [chosen, setSection] = useState<Section | null>(recipeItemId ? 'recipes' : cookingDate || foodReview ? 'stock' : null);
+  const [chosen, setSection] = useState<Section | null>(recipeItemId ? 'recipes' : cookingDate || foodReview || wastePending ? 'stock' : null);
   /** I3: a supplier's draft bill opened from the Cooking Plan */
   const [billFor, setBillFor] = useState<string | null>(null);
   // Inventory opens on the first section of his order.
@@ -76,7 +79,7 @@ export function InventoryScreen({
     if (next) saveSectionOrder([...next, ...order.filter((k) => !next.includes(k))]);
     setPicking(null);
   };
-  const [stockTab, setStockTab] = useState<StockTab>(cookingDate ? 'cooking' : foodReview ? 'food' : 'ingredients');
+  const [stockTab, setStockTab] = useState<StockTab>(cookingDate ? 'cooking' : foodReview ? 'food' : wastePending ? 'wastage' : 'ingredients');
   const [filter, setFilter] = useState<IngredientFilter>('ALL');
   const [historyOf, setHistoryOf] = useState<string | null>(null);
   const [editing, setEditing] = useState<IngredientRow | 'new' | null>(null);
@@ -225,7 +228,7 @@ export function InventoryScreen({
             />
           )}
           {stockTab === 'food' && <AvailableFoodTab canManage={canManage} />}
-          {stockTab === 'wastage' && <WastageTab view={view} canManage={canManage} />}
+          {stockTab === 'wastage' && <WastageTab view={view} canManage={canManage} startPending={wastePending} />}
           {stockTab === 'counts' && <PlannedPanel icon={ClipboardCheck} title="inventory.planned.counts.title" items="inventory.planned.counts.items" phase={4} />}
         </div>
       )}

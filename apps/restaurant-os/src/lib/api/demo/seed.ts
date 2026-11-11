@@ -34,7 +34,7 @@ import { createRecipeSeed } from './recipe-seed';
  * - 'acceptance': "Aziz Pizza — DEMO", the fixed data of the automatic tests (MASTER_PROMPT.md §12 Test A: Table 5 =
  *   Rs. 5,900). The walkthroughs ask for it through localStorage before the page loads (DEMO_FIXTURE_KEY).
  */
-export const DEMO_DATA_VERSION = 23;
+export const DEMO_DATA_VERSION = 24;
 export type DemoFixture = 'restaurant' | 'acceptance';
 export const DEMO_FIXTURE_KEY = 'lala-os-demo-fixture';
 
@@ -451,6 +451,13 @@ export function upgradeDemoData(raw: unknown, fixture: DemoFixture = 'restaurant
   if (data.version === 22 && data.inventory) {
     // W3 lots (owner, 2026-11-11): his stock becomes one old-stock lot per item, Needs review; nothing on hand changes
     data = { ...data, version: 23, inventory: addStockLots(data.inventory, demoId(101)) };
+  }
+  if (data.version === 23 && data.inventory) {
+    // W4 waste reports (owner, 2026-11-12): a saved Kitchen / Manager role or person gets the new permissions it is recommended
+    const added: Partial<Record<StaffRole, Permission[]>> = { KITCHEN: ['inventory.waste.submit'], MANAGER: ['inventory.waste.submit', 'inventory.waste.approve'] };
+    const withNew = (role: StaffRole, list: Permission[]) => [...list, ...(added[role] ?? []).filter((p) => !list.includes(p))];
+    const roles = Object.fromEntries(Object.entries(data.rolePermissions).map(([role, list]) => [role, list ? withNew(role as StaffRole, list) : list]));
+    data = { ...data, version: 24, rolePermissions: roles, staff: data.staff.map((s) => (s.permissions ? { ...s, permissions: withNew(s.role, s.permissions) } : s)) };
   }
   return data.version === DEMO_DATA_VERSION && data.inventory ? (data as DemoData) : null;
 }

@@ -216,6 +216,11 @@ vibration; Call Waiter also speaks. DEMO sync: between tabs of one browser only 
 backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.tsx`, `src/lib/sound.ts`.
 
 ## 7. Test status (last run, all green)
+- **2026-11-12 (W4 staff waste reports, committed on this branch):** `pnpm test` 209 (2 new), `pnpm typecheck`, `pnpm lint` pass. Walkthroughs pass: `:wastage` (20 steps; W4 =
+  17 chef reports 1 L milk, held, no prices, no loss; 18 bell + Approve = one waste entry from the held food; 19 Reject + Release needs the safe tick,
+  Reject + Keep on hold; 20 phone), `:staff`, `:kds`, `:inventory`, `:im1`, `:suppliers`, `:supplier-order`, `:units`, `:recipes`, `:cooked`,
+  `:auto-scale`, `:integration`. Changed tests: data version 23 → 24 (5 walkthroughs). Not run: `:cooking` and `:sales-stock` (still between midnight
+  and 06:00, see the W3 line), the other walkthroughs, customer, rider, `pnpm build`, a real phone.
 - **2026-11-12 (W3 lots and expiry, committed on this branch):** `pnpm test` 207 (9 new), `pnpm typecheck`, `pnpm lint` pass. Walkthroughs pass: `:wastage` (16 steps; W3 =
   13 expired blocked, 14 bill line date = own lot, 15 Set date confirms, 16 held → Release only with the safe tick), `:inventory`, `:im1`, `:suppliers`,
   `:supplier-order`, `:units`, `:recipes`, `:cooked`, `:auto-scale`, `:integration`, `:kds`. Changed tests: data version 22 → 23 (5 walkthroughs);
@@ -327,6 +332,12 @@ walkthrough scripts clear localStorage themselves; the POS bill panel remounts w
 changes (state that must survive, such as `payNow`, lives in the draft, `screens/pos/draft.ts`).
 
 ## 9. Pending tasks and next steps (in this order)
+
+**W4 staff waste reports built 2026-11-12 (DEMO), approved and committed on this branch — not pushed, not on main** (owner: "Approved. Start W4 with all four
+recommended settings"). Details: `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` §10e. Kitchen / KDS → Report waste (no prices; the food is held at once, no
+loss); Owner / Manager → Pending approval (bell alert): Approve = one waste entry from the held food; Reject = Release (safe tick, never expired) or Keep
+on hold. Permissions `inventory.waste.submit` / `inventory.waste.approve` (Role Permissions row "Waste Reports"; data version 24). Next, each after his
+approval: run `:cooking` and `:sales-stock` after 06:00; W5 (full check of Prompt 1 §7); merge into `main` / push.
 
 **W3 lots and expiry built 2026-11-12 (DEMO), approved ("Approve, commit karo") and committed on this branch — not pushed, not on main** (owner: "Approved to start W3 with all three
 recommended decisions"; his rules: unknown / unconfirmed dates stay Needs review, never safe; expired or unsafe returned food is never released). Details:

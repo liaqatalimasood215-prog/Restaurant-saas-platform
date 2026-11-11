@@ -25,6 +25,7 @@ import {
   type WasteLogRow,
   type WasteStage,
   type LotRow,
+  type WasteRequestRow,
 } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -49,12 +50,14 @@ type Section = 'log' | 'soon' | 'expired' | 'review' | 'held' | 'pending';
  * own (W3); staff requests and approval follow in W4. Owner / Manager post. W2: cooked stock, Staff meal and Donation (counted
  * apart), order food from Available Food in the same log, and Reverse / Correct (Owner / Manager, a reason, nothing deleted).
  */
-export function WastageTab({ view, canManage }: { view: InventoryView; canManage: boolean }) {
+export function WastageTab({ view, canManage, startPending = false }: { view: InventoryView; canManage: boolean; startPending?: boolean }) {
   const waste = useApiQuery(() => getApi().getWasteView(), []);
-  const { data: session } = useSession();
+  const { data: session, allowed } = useSession();
   const role = session?.user.role;
   const ownerOrManager = canManage && (role === 'OWNER' || role === 'MANAGER');
-  const [section, setSection] = useState<Section>('log');
+  const [section, setSection] = useState<Section>(startPending ? 'pending' : 'log');
+  const canApprove = ownerOrManager && allowed('inventory.waste.approve');
+  const [rejecting, setRejecting] = useState<WasteRequestRow | null>(null);
   const [recording, setRecording] = useState<{ row: IngredientRow | null; reason: StockWasteReason | null; lotId?: string | null; correct?: WasteEvent } | null>(null);
   const [reversing, setReversing] = useState<WasteEvent | null>(null);
   const [dating, setDating] = useState<LotRow | null>(null);
@@ -62,7 +65,8 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
 
   if (waste.loading && !waste.data) return <LoadingState />;
   if (!waste.data) return <ErrorState message={waste.error?.message} onRetry={waste.reload} />;
-  const { summary, meals, donations, cookedPrices, lots, rows, total, limit } = waste.data;
+  const { summary, meals, donations, cookedPrices, lots, requests, rows, total, limit } = waste.data;
+  const pending = requests.filter((r) => r.request.status === 'PENDING');
   // W3: every list is one row per delivery (lot), with its own date
   const byState = (state: LotRow['state']) => lots.filter((l) => l.state === state);
   const soon = byState('SOON');
@@ -114,7 +118,13 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
           alert={expired.length > 0}
           onClick={() => setSection(expired.length ? 'expired' : 'soon')}
         />
-        <SmallCard label={t('inventory.waste.cards.pending')} value="—" hint={t('inventory.waste.pendingLater')} />
+        <SmallCard
+          label={t('inventory.waste.cards.pending')}
+          value={String(pending.length)}
+          hint={pending.length ? t('inventory.reports.pendingCount', { n: pending.length }) : t('inventory.reports.none')}
+          alert={pending.length > 0}
+          onClick={() => setSection('pending')}
+        />
       </div>
       <p className="px-1 text-xs font-semibold text-slate-500" data-waste-apart>
         {t('inventory.waste.otherTotals', { meals: formatPaisa(meals.todayCost), mealLines: meals.todayLines, donations: formatPaisa(donations.todayCost), donationLines: donations.todayLines })}
@@ -126,7 +136,7 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
         {tab('expired', t('inventory.waste.tabs.expired'), expired.length)}
         {tab('review', t('inventory.waste.tabs.review'), review.length)}
         {tab('held', t('inventory.waste.tabs.held'), held.length)}
-        {tab('pending', t('inventory.waste.tabs.pending'))}
+        {tab('pending', t('inventory.waste.tabs.pending'), pending.length)}
       </div>
 
       {section === 'log' && (
@@ -158,12 +168,7 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
           onRelease={setReleasing}
         />
       )}
-      {section === 'pending' && (
-        <Card className="p-4 text-sm text-slate-600" data-waste-pending>
-          <Badge tone="dark">{t('status.PLACEHOLDER')}</Badge>
-          <p className="mt-2">{t('inventory.waste.pendingBody')}</p>
-        </Card>
-      )}
+      {section === 'pending' && <RequestList rows={requests} canApprove={canApprove} onReject={setRejecting} />}
 
       <p className="px-1 text-xs font-semibold text-amber-800">{t('inventory.waste.demoNote')}</p>
       {recording && (
@@ -182,6 +187,7 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
       {reversing && <ReverseDialog event={reversing} onClose={() => setReversing(null)} />}
       {dating && <LotDateDialog row={dating} onClose={() => setDating(null)} />}
       {releasing && <ReleaseDialog row={releasing} onClose={() => setReleasing(null)} />}
+      {rejecting && <RejectDialog row={rejecting} onClose={() => setRejecting(null)} />}
     </div>
   );
 }
@@ -405,6 +411,148 @@ function ReverseDialog({ event, onClose }: { event: WasteEvent; onClose: () => v
           {error}
         </p>
       )}
+    </Dialog>
+  );
+}
+
+// ── Staff waste reports (W4) ───────────────────────────────────────────────────────────────
+
+const REQUEST_TONE = { PENDING: 'amber', APPROVED: 'green', REJECTED: 'grey' } as const;
+
+/** Waiting reports first, each with Approve / Reject (Owner / Manager); then those decided in the last 7 days. */
+function RequestList({ rows, canApprove, onReject }: { rows: WasteRequestRow[]; canApprove: boolean; onReject: (row: WasteRequestRow) => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const pending = rows.filter((r) => r.request.status === 'PENDING');
+  const decided = rows.filter((r) => r.request.status !== 'PENDING');
+  const approve = async (row: WasteRequestRow) => {
+    setBusy(row.request.id);
+    try {
+      await getApi().decideWasteRequest({ requestId: row.request.id, approve: true, reason: '', release: false, safe: false });
+      toast.show({ tone: 'success', title: t('inventory.reports.approved') });
+    } catch (err) {
+      toast.show({ tone: 'error', title: err instanceof Error ? err.message : t('states.errorBody') });
+    }
+    setBusy(null);
+  };
+  const what = (row: WasteRequestRow) => row.lines.map((l) => `${l.name} ${stockText(l, l.stockMilli)}`).join(', ');
+  return (
+    <div className="space-y-2" data-waste-pending>
+      <Card className="divide-y divide-slate-100 overflow-hidden rounded-xl">
+        {pending.length === 0 && <p className="px-3 py-2.5 text-sm text-slate-500">{t('inventory.reports.none')}</p>}
+        {pending.map((row) => {
+          const name = row.requestedByName ?? '—';
+          return (
+            <div key={row.request.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm" data-waste-request={row.lines[0]?.name} data-request-status="PENDING">
+              <span className="min-w-0 flex-1 basis-56">
+                <span className="block font-bold leading-tight text-slate-900">{what(row)}</span>
+                <span className="block text-[11px] text-slate-500">
+                  {row.lines.map((l) => t(`inventory.waste.reasons.${l.reason}`) + (l.note ? ` — ${l.note}` : '')).join(' · ')} · {t('inventory.reports.from', { name })} · {whenText(row.request.requestedAt)}
+                </span>
+                {row.request.thrownAway && <Badge tone="dark">{t('inventory.reports.thrownAway')}</Badge>}
+              </span>
+              <span className="text-right text-xs font-semibold text-slate-600">{t('inventory.reports.lossHint', { loss: lossText(row.cost) })}</span>
+              {canApprove && (
+                <span className="flex gap-1.5">
+                  <Button size="sm" disabled={busy === row.request.id} onClick={() => void approve(row)} aria-label={t('inventory.reports.approveOf', { name })}>
+                    {t('inventory.reports.approve')}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => onReject(row)} aria-label={t('inventory.reports.rejectOf', { name })}>
+                    {t('inventory.reports.reject')}
+                  </Button>
+                </span>
+              )}
+            </div>
+          );
+        })}
+        <p className="bg-slate-50/60 px-3 py-2 text-xs text-slate-500">{t('inventory.reports.held')}</p>
+      </Card>
+      {decided.length > 0 && (
+        <Card className="divide-y divide-slate-100 overflow-hidden rounded-xl">
+          <p className="bg-slate-50 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">{t('inventory.reports.decided')}</p>
+          {decided.map((row) => (
+            <div key={row.request.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5 text-sm" data-waste-request={row.lines[0]?.name} data-request-status={row.request.status}>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-slate-800">{what(row)}</span>
+                <span className="block text-[11px] text-slate-500">
+                  {t('inventory.reports.from', { name: row.requestedByName ?? '—' })} · {t('inventory.reports.decidedBy', { status: t(`inventory.reports.status.${row.request.status}`), name: row.decidedByName ?? '—' })}
+                  {row.request.rejectReason ? ` — ${row.request.rejectReason} (${row.request.released ? t('inventory.reports.releasedNote') : t('inventory.reports.keptNote')})` : ''}
+                </span>
+              </span>
+              <Badge tone={REQUEST_TONE[row.request.status]}>{t(`inventory.reports.status.${row.request.status}`)}</Badge>
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/** W4: reject with a reason, then release the food (only with the safe tick; never when expired) or keep it on hold. */
+function RejectDialog({ row, onClose }: { row: WasteRequestRow; onClose: () => void }) {
+  const toast = useToast();
+  const [reason, setReason] = useState('');
+  const [release, setRelease] = useState(false);
+  const [safe, setSafe] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await getApi().decideWasteRequest({ requestId: row.request.id, approve: false, reason, release, safe });
+      toast.show({ tone: 'success', title: t('inventory.reports.rejected') });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('states.errorBody'));
+      setBusy(false);
+    }
+  };
+  const radio = (value: boolean, label: string) => (
+    <label className={cn('flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 text-sm font-semibold', release === value ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 text-slate-700')}>
+      <input type="radio" name="after-reject" checked={release === value} onChange={() => (setRelease(value), setError(null))} className="accent-brand" />
+      {label}
+    </label>
+  );
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('inventory.reports.rejectTitle')}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('inventory.form.cancel')}
+          </Button>
+          <Button onClick={() => void save()} disabled={busy}>
+            {t('inventory.reports.reject')}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3" data-reject-form>
+        <p className="text-sm font-semibold text-slate-800">{row.lines.map((l) => `${l.name} ${stockText(l, l.stockMilli)}`).join(', ')}</p>
+        <label className="block">
+          <span className="mb-1 block text-sm font-bold text-slate-900">{t('inventory.reports.rejectReason')}</span>
+          <input value={reason} onChange={(e) => (setReason(e.target.value), setError(null))} maxLength={140} placeholder={t('inventory.reports.rejectPlaceholder')} aria-label={t('inventory.reports.rejectReason')} className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base" />
+        </label>
+        <div className="space-y-1.5" role="radiogroup" aria-label={t('inventory.reports.afterReject')}>
+          <span className="block text-sm font-bold text-slate-900">{t('inventory.reports.afterReject')}</span>
+          {radio(false, t('inventory.reports.keepHeld'))}
+          {radio(true, t('inventory.reports.release'))}
+        </div>
+        {release && (
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <input type="checkbox" checked={safe} onChange={(e) => (setSafe(e.target.checked), setError(null))} className="size-5 accent-brand" />
+            {t('inventory.reports.safeTick')}
+          </label>
+        )}
+        {error && (
+          <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
+            {error}
+          </p>
+        )}
+      </div>
     </Dialog>
   );
 }

@@ -24,6 +24,7 @@ import {
   type Supplier,
   type SupplierCategory,
   type WasteEvent,
+  type WasteRequest,
 } from '@restaurant-saas/shared';
 import type { PurchaseDraft } from '../client';
 import { createRecipeSeed } from './recipe-seed';
@@ -66,6 +67,8 @@ export interface DemoInventory {
   lots?: StockLot[];
   /** W3: when lots started; every movement before it belongs to its item's old-stock lot */
   lotsSince?: string;
+  /** W4 (2026-11-12): staff waste reports, never edited or deleted; missing before */
+  wasteRequests?: WasteRequest[];
   expiringSoonDays: number;
 }
 

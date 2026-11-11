@@ -590,7 +590,9 @@ export type StaffNotification =
   /** I4: cooked food sold beyond what was recorded as cooked (Owner / Manager): record the Cooking Batch */
   | { kind: 'COOKED_NEGATIVE'; id: string; count: number; names: string[]; at: IsoDateTime }
   /** I4: the closing review of the ready food that is left (Owner / Manager) */
-  | { kind: 'FOOD_REVIEW'; id: string; date: string; count: number; names: string[]; at: IsoDateTime };
+  | { kind: 'FOOD_REVIEW'; id: string; date: string; count: number; names: string[]; at: IsoDateTime }
+  /** W4 (owner, 2026-11-12): a staff waste report waits for approval (Owner / Manager); its food is already held */
+  | { kind: 'WASTE_REQUEST'; id: string; count: number; names: string[]; byName: string; at: IsoDateTime };
 
 /** The cashier called a waiter from the POS ("Call Waiter"); tableId is null for the counter. */
 export interface WaiterCall extends BranchScoped {

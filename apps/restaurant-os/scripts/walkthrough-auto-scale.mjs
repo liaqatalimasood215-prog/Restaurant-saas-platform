@@ -102,7 +102,7 @@ try {
     await page.close();
     const owner = await open(context, '/pos', LAPTOP);
     const data = await saved(owner);
-    assert.equal(data.version, 23);
+    assert.equal(data.version, 24);
     assert.equal(data.restaurant.name, 'Lala Restaurant — DEMO');
     assert.ok(data.items.find((i) => i.id === ITEM.classicPizza).archivedAt, 'pizza is archived, not deleted');
     assert.ok(data.items.some((i) => i.name === 'muttan kari' && !i.archivedAt), "the owner's own item stays");

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkReverse, checkWaste, cookedWasteCost, summarizeWaste, wasteCost, wasteStockMilli, type Ingredient, type WasteLine, type WasteLineInput } from './index';
+import { canGrant, checkDecision, checkReverse, checkWaste, cookedWasteCost, recommendedPermissions, summarizeWaste, wasteCost, wasteStockMilli, type Ingredient, type WasteLine, type WasteLineInput } from './index';
 
 const NOW = Date.parse('2026-11-11T10:00:00Z');
 type Item = Pick<Ingredient, 'id' | 'kind' | 'isActive' | 'purchaseUnit' | 'stockUnit' | 'packSizeMilli' | 'purchasePrice' | 'packings' | 'loosePrice'>;
@@ -116,4 +116,21 @@ test('W3: a waste line may name its delivery; a staff meal or donation only from
   assert.equal(checkWaste(incident([line({ reason: null, parts: [{ unitKey: 'main', quantityMilli: 4_000 }] })], { kind: 'DONATION' }), items, onHand, NOW, lots)?.problem, 'NOT_USABLE', '4 L of 3 L usable');
   assert.equal(checkWaste(incident([line({ lotId: 'fresh', parts: [{ unitKey: 'main', quantityMilli: 3_500 }] })]), items, onHand, NOW, lots)?.problem, 'MORE_THAN_IN_LOT');
   assert.equal(checkWaste(incident([line({ lotId: 'other' })]), items, onHand, NOW, lots)?.problem, 'LOT_INVALID');
+});
+
+test('W4: a waste report is decided once; a rejection needs a reason', () => {
+  assert.equal(checkDecision({ status: 'PENDING' }, true, ''), null, 'approve needs no reason');
+  assert.equal(checkDecision({ status: 'PENDING' }, false, '  '), 'REASON_REQUIRED');
+  assert.equal(checkDecision({ status: 'PENDING' }, false, 'Only the box was dirty'), null);
+  assert.equal(checkDecision({ status: 'APPROVED' }, true, ''), 'NOT_PENDING', 'never approved twice');
+  assert.equal(checkDecision({ status: 'REJECTED' }, false, 'again'), 'NOT_PENDING');
+});
+
+test('W4: the Kitchen reports waste by default, only the Owner and a Manager approve; other floor staff only when switched on', () => {
+  assert.ok(recommendedPermissions('KITCHEN').includes('inventory.waste.submit'));
+  assert.ok(!recommendedPermissions('KITCHEN').includes('inventory.waste.approve'));
+  assert.ok(recommendedPermissions('MANAGER').includes('inventory.waste.approve'));
+  assert.ok(!recommendedPermissions('CASHIER').includes('inventory.waste.submit'), 'off by default');
+  assert.ok(canGrant('CASHIER', 'inventory.waste.submit') && canGrant('WAITER', 'inventory.waste.submit'), 'the Owner may switch it on');
+  assert.ok(!canGrant('CASHIER', 'inventory.waste.approve') && !canGrant('KITCHEN', 'inventory.waste.approve'), 'approval stays with the Owner and Manager');
 });

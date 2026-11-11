@@ -210,6 +210,24 @@ expired or unsafe returned food is **never released**.
   delivery; the stock list shows "x expired / on hold" and the earliest date.
 - Not in W3: staff requests and approval (W4), the full check (W5); warning windows stay the one "expiring soon" days setting.
 
+## 10e. W4 — built 2026-11-12 (DEMO), approved and committed on the feature branch
+
+Owner: "Approved. Start W4 with all four recommended settings" — (1) the Kitchen reports waste by default, Cashier / Waiter / Service
+Waiter only when the Owner switches it on in Role Permissions; (2) a **Report waste** button on the Kitchen / KDS title bar; (3) no Rs.
+limit: every staff report waits for approval (no threshold field built); (4) no prices for the Kitchen.
+
+- Permissions `inventory.waste.submit` (Owner, Manager, Kitchen; may be granted to Cashier, Waiter, Service Waiter) and
+  `inventory.waste.approve` (Owner, Manager only); new row "Waste Reports" in Role Permissions. Data version 24 adds them to saved
+  Kitchen / Manager roles and people.
+- **Report:** one item, quantity + unit, reason (a note for Other), "Already thrown away" tick; checked like Record Waste (never more
+  than on hand); once per key. The food is **held at once**: one WASTE_HOLD movement out of its lots (expired stock first) and one into
+  a held REQUEST lot with the date of the lot it left. On hand unchanged, no loss, khata unchanged. The chef sees "My reports" with
+  Waiting / Approved / Rejected.
+- **Pending approval** (card, tab, bell alert with sound and voice, link `/inventory?waste=pending`): Approve = one waste entry from
+  the held lot (reported by the chef, approved by the Owner / Manager), once; Reject = a reason, then **Release** (only with the safe
+  tick, never when expired — the W3 rule) or **Keep on hold** (On hold list). Decided reports stay listed for 7 days; nothing is deleted.
+- Not in W4: a photo (Phase 7); a message back to the chef's phone (the status shows in My reports); the full check (W5).
+
 ## 11. Limits of the DEMO
 
 One browser's storage; tabs sync by sending all data, the last writer wins. Nothing runs while no tab is open: a lot becomes

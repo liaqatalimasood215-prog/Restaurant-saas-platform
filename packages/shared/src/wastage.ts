@@ -122,8 +122,10 @@ export interface WasteEvent extends BranchScoped {
   stage: WasteStage;
   /** W2: missing = WASTE */
   kind?: WasteKind;
-  /** W2: Record Waste, Available Food (closing / its buttons) or a cancelled order line; missing = RECORD */
-  source?: 'RECORD' | 'AVAILABLE_FOOD' | 'ORDER_CANCEL';
+  /** W2: Record Waste, Available Food (closing / its buttons) or a cancelled order line; W4: an approved staff report; missing = RECORD */
+  source?: 'RECORD' | 'AVAILABLE_FOOD' | 'ORDER_CANCEL' | 'REQUEST';
+  /** W4: the staff report it came from (createdBy = who reported it, approvedBy = who approved it) */
+  requestId?: Uuid;
   lines: WasteLine[];
   note: string;
   /** REVERSED: put back by a linked reversal; never edited or deleted */
@@ -297,6 +299,53 @@ export function wasteBusinessDate(at: IsoDateTime, timeZone: string = DEFAULT_TI
   return businessDate(new Date(at), timeZone, dayStart);
 }
 
+// ── Staff waste reports (W4, owner 2026-11-12) ────────────────────────────────────────────────
+
+/**
+ * A waste report from the Kitchen (or other staff the Owner allows): nothing is a loss and the supplier khata never changes, but the
+ * food is held at once (a held lot), so it is never cooked, sold or eaten while it waits. The Owner or a Manager approves it (one
+ * waste event from the held lot, once) or rejects it (with a reason) and then releases the food — only when it is safe and not
+ * expired — or keeps it held. No Rs. limit: every report waits (owner's decision 3). A report is never edited or deleted.
+ */
+export interface WasteRequest extends BranchScoped {
+  id: Uuid;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  at: IsoDateTime;
+  businessDate: string;
+  stage: WasteStage;
+  lines: { ingredientId: Uuid; parts: WastePart[]; stockMilli: number; reason: StockWasteReason; note: string; heldLotId: Uuid }[];
+  note: string;
+  /** "Already thrown away": the person says it is gone; approval posts it as it is */
+  thrownAway: boolean;
+  requestedBy: Uuid;
+  requestedAt: IsoDateTime;
+  decidedBy?: Uuid | null;
+  decidedAt?: IsoDateTime | null;
+  /** Rejected: why, and whether the food went back to use or stays held */
+  rejectReason?: string;
+  released?: boolean;
+  wasteEventId?: Uuid | null;
+}
+
+export type DecisionProblem = 'NOT_PENDING' | 'REASON_REQUIRED' | 'NOTE_TOO_LONG';
+
+/** A report is decided once; a rejection needs a reason. */
+export function checkDecision(request: Pick<WasteRequest, 'status'>, approve: boolean, reason: string): DecisionProblem | null {
+  if (request.status !== 'PENDING') return 'NOT_PENDING';
+  if (approve) return null;
+  if (!reason.trim()) return 'REASON_REQUIRED';
+  return reason.trim().length > MAX_REVERSE_REASON ? 'NOTE_TOO_LONG' : null;
+}
+
+export interface WasteRequestRow {
+  request: WasteRequest;
+  lines: { name: string; purchaseUnit: PurchaseUnit; stockUnit: Ingredient['stockUnit']; stockMilli: number; reason: StockWasteReason; note: string; cooked: boolean }[];
+  requestedByName: string | null;
+  decidedByName: string | null;
+  /** At the last purchase price / batch cost; for the Owner and Manager only (null for the Kitchen's own list) */
+  cost: Paisa | null;
+}
+
 export type ReverseProblem = 'NOT_POSTED' | 'ORDER_FOOD' | 'REASON_REQUIRED' | 'NOTE_TOO_LONG';
 
 /**
@@ -337,6 +386,8 @@ export interface WasteView {
   cookedPrices: Record<Uuid, CookedPrice | null>;
   /** W3: every lot with stock left (also held and expired ones), earliest date first */
   lots: LotRow[];
+  /** W4: staff waste reports: pending ones first, then those decided in the last 7 days */
+  requests: WasteRequestRow[];
   /** One row per line, newest first, at most `limit` */
   rows: WasteLogRow[];
   total: number;

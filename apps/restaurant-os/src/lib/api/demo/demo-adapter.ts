@@ -218,6 +218,7 @@ import {
   type LotRow,
   type ReleaseProblem,
   type StockLot,
+  checkDecision,
   checkReverse,
   checkWaste,
   cookedWasteCost,
@@ -227,8 +228,11 @@ import {
   wasteStockMilli,
   type CookedPrice,
   type ReverseProblem,
+  type DecisionProblem,
   type WasteEvent,
   type WasteLine,
+  type WasteRequest,
+  type WasteRequestRow,
   type WasteProblem,
   type WasteView,
   checkPortion,
@@ -328,6 +332,9 @@ import {
   type SupplierProfileInput,
   StockWasteInput,
   LotDateInput,
+  WasteDecisionInput,
+  WasteReportView,
+  WasteRequestInput,
 } from '../client';
 import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
@@ -514,6 +521,13 @@ const WASTE_MESSAGES: Record<WasteProblem, string> = {
   LOT_INVALID: 'Choose a delivery of this item.',
   MORE_THAN_IN_LOT: 'More than is left in this delivery.',
   NOT_USABLE: 'Only stock that may be used: expired or held food is never eaten or given away.',
+};
+
+/** W4: why a waste report cannot be decided */
+const DECISION_MESSAGES: Record<DecisionProblem, string> = {
+  NOT_PENDING: 'This report was already decided.',
+  REASON_REQUIRED: 'Write why the report is rejected.',
+  NOTE_TOO_LONG: 'The reason is too long (140 letters at most).',
 };
 
 /** W3: why a date or a discard time cannot be saved, and why held food cannot be released */
@@ -2973,6 +2987,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         donations: summarizeWaste(events, today, 'DONATION'),
         cookedPrices,
         lots: this.lotRows(data),
+        requests: this.requestRows(data, () => true, true),
         rows: all.slice(0, limit),
         total: all.length,
         limit,
@@ -3044,6 +3059,154 @@ export class DemoAdapter implements ApiClient, DemoControls {
         }
         Object.assign(lot, { unverified: false, dateSetBy: user.id, dateSetAt: now });
         return lot;
+      }),
+    );
+  }
+
+  // ── Staff waste reports (W4, owner 2026-11-12) ──────────────────────────────────────────────
+
+  /** One report as a list row; the cost (last purchase price / batch cost) only for the Owner and a Manager */
+  private requestRow(data: DemoData, request: WasteRequest, withCost: boolean): WasteRequestRow {
+    const inv = data.inventory;
+    let cost: number | null = 0;
+    const lines = request.lines.map((line) => {
+      const item = inv.ingredients.find((i) => i.id === line.ingredientId);
+      const cooked = item?.kind === 'PREPARED';
+      const lineCost = !item ? null : cooked ? cookedWasteCost(this.cookedPrice(data, item.id), line.stockMilli) : (wasteCost(item, line.stockMilli)?.cost ?? null);
+      cost = cost === null || lineCost === null ? null : cost + lineCost;
+      return { name: item?.name ?? '—', purchaseUnit: item?.purchaseUnit ?? 'kg', stockUnit: item?.stockUnit ?? 'g', stockMilli: line.stockMilli, reason: line.reason, note: line.note, cooked };
+    });
+    return { request, lines, requestedByName: this.staffName(data, request.requestedBy), decidedByName: this.staffName(data, request.decidedBy ?? null), cost: withCost ? cost : null };
+  }
+
+  /** Pending reports first (oldest first), then those decided in the last 7 days (newest first) */
+  private requestRows(data: DemoData, keep: (r: WasteRequest) => boolean, withCost: boolean): WasteRequestRow[] {
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    const all = (data.inventory.wasteRequests ?? []).filter(keep);
+    const pending = all.filter((r) => r.status === 'PENDING').sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+    const decided = all.filter((r) => r.status !== 'PENDING' && (r.decidedAt ?? '') >= weekAgo).sort((a, b) => (b.decidedAt ?? '').localeCompare(a.decidedAt ?? ''));
+    return [...pending, ...decided].map((r) => this.requestRow(data, r, withCost));
+  }
+
+  getWasteReport(): Promise<WasteReportView> {
+    return this.request(() => {
+      const data = this.store.read();
+      const user = this.require(data, 'inventory.waste.submit');
+      // No prices for the Kitchen (owner's decision 4): the items are sent without them
+      const items = data.inventory.ingredients
+        .filter((i) => i.isActive)
+        .map((i) => ({ ...i, purchasePrice: 0, loosePrice: null, packings: (i.packings ?? []).map((p) => ({ ...p, pricePaisa: 0 })), rates: undefined }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return { items, mine: this.requestRows(data, (r) => r.requestedBy === user.id, false).slice(0, 10) };
+    });
+  }
+
+  /**
+   * W4: a staff waste report. Checked like Record Waste (a reason, never more than on hand); then each line's food is held at once:
+   * one WASTE_HOLD movement out of its lots (the expired stock first) and one into a new held lot with the date of the lot it left.
+   * On hand does not change; nothing is a loss; the khata never changes. Once per key.
+   */
+  submitWasteRequest(input: WasteRequestInput): Promise<WasteRequest> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.waste.submit');
+        const inv = data.inventory;
+        const key = 'waste-request:' + input.idempotencyKey;
+        const done = data.idempotency[key];
+        const first = done ? (inv.wasteRequests ?? []).find((r) => r.id === done) : undefined;
+        if (first) return first;
+        this.checkStockWaste(data, { at: input.at, kind: 'WASTE', stage: input.stage, lines: input.lines.map((l) => ({ ...l, lotId: null })), note: input.note, idempotencyKey: input.idempotencyKey });
+        const now = nowIso();
+        const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+        const requestId = newId();
+        const lines = input.lines.map((line) => {
+          const item = inv.ingredients.find((i) => i.id === line.ingredientId)!;
+          const stockMilli = wasteStockMilli(line.parts, item)!;
+          const outId = newId();
+          const note = `Waste report: ${line.note.trim() || line.reason!.toLowerCase().replace(/_/g, ' ')}`.slice(0, MAX_MOVEMENT_NOTE);
+          inv.movements.push({ id: outId, ...scope, ingredientId: item.id, type: 'WASTE_HOLD', quantityMilli: -stockMilli, reason: null, note, createdBy: user.id, createdAt: now });
+          // The held lot keeps the date of the delivery it came from (the first one)
+          const fromLot = (this.lotBook(data).ledger.taken.get(outId) ?? []).map((p) => (inv.lots ?? []).find((l) => l.id === p.lotId)).find(Boolean);
+          const lot = this.newLot(
+            data,
+            { ingredientId: item.id, source: 'REQUEST', sourceId: requestId, firstMilli: stockMilli, cost: null, date: fromLot?.date ?? null, dateKind: fromLot?.dateKind ?? 'UNKNOWN', discardAt: fromLot?.discardAt ?? null, dateFrom: fromLot?.dateFrom ?? 'NONE', unverified: fromLot?.unverified ?? false, held: true, holdReason: note },
+            user.id,
+            now,
+          );
+          inv.movements.push({ id: newId(), ...scope, ingredientId: item.id, type: 'WASTE_HOLD', quantityMilli: stockMilli, reason: null, note, createdBy: user.id, createdAt: now, lotId: lot.id });
+          return {
+            ingredientId: item.id,
+            parts: line.parts.map((p) => {
+              const option = findBuyOption(item, p.unitKey)!;
+              return { unitKey: option.key, unit: option.unit, unitSizeMilli: option.sizeMilli, quantityMilli: p.quantityMilli! };
+            }),
+            stockMilli,
+            reason: line.reason!,
+            note: line.note.trim(),
+            heldLotId: lot.id,
+          };
+        });
+        const request: WasteRequest = {
+          id: requestId,
+          ...scope,
+          status: 'PENDING',
+          at: new Date(input.at).toISOString(),
+          businessDate: wasteBusinessDate(input.at, data.branch.timezone, data.branch.businessDayStart),
+          stage: input.stage,
+          lines,
+          note: input.note.trim(),
+          thrownAway: input.thrownAway,
+          requestedBy: user.id,
+          requestedAt: now,
+        };
+        (inv.wasteRequests ??= []).push(request);
+        data.idempotency[key] = request.id;
+        return request;
+      }),
+    );
+  }
+
+  /**
+   * W4: approve = one waste entry from the held food (createdBy the reporter, approvedBy the approver), once; reject = a reason,
+   * then the food is released (only confirmed safe and not expired, like any held food) or stays held. Owner / Manager.
+   */
+  decideWasteRequest(input: WasteDecisionInput): Promise<WasteRequest> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.waste.approve');
+        this.requireOwnerOrManager(user);
+        const inv = data.inventory;
+        const request = (inv.wasteRequests ?? []).find((r) => r.id === input.requestId);
+        if (!request) throw new ApiError('NOT_FOUND', 'This waste report was not found.');
+        const problem = checkDecision(request, input.approve, input.reason);
+        if (problem) throw new ApiError(problem === 'NOT_PENDING' ? 'CONFLICT' : 'VALIDATION', DECISION_MESSAGES[problem]);
+        const book = this.lotBook(data);
+        const now = nowIso();
+        if (input.approve) {
+          for (const line of request.lines) {
+            if (book.remaining(line.heldLotId) < line.stockMilli) throw new ApiError('CONFLICT', 'Some of the held food was already used or recorded. Reject this report and record what is left.');
+          }
+          const event = this.writeStockWaste(
+            data,
+            { at: request.at, kind: 'WASTE', stage: request.stage, note: request.note, idempotencyKey: request.id, lines: request.lines.map((l) => ({ ingredientId: l.ingredientId, lotId: l.heldLotId, parts: l.parts.map((p) => ({ unitKey: p.unitKey, quantityMilli: p.quantityMilli })), reason: l.reason, note: l.note })) },
+            user,
+            { source: 'REQUEST', requestId: request.id, createdBy: request.requestedBy },
+          );
+          Object.assign(request, { status: 'APPROVED', decidedBy: user.id, decidedAt: now, wasteEventId: event.id });
+          return request;
+        }
+        const lots = request.lines.map((l) => (inv.lots ?? []).find((lot) => lot.id === l.heldLotId)!).filter(Boolean);
+        if (input.release) {
+          for (const lot of lots) {
+            const why = checkRelease(lot, book.remaining(lot.id), input.safe, book.now, inv.expiringSoonDays);
+            if (why && why !== 'NOTHING_LEFT') throw new ApiError(why === 'EXPIRED' ? 'CONFLICT' : 'VALIDATION', RELEASE_MESSAGES[why]);
+          }
+          for (const lot of lots) Object.assign(lot, { held: false, release: { by: user.id, at: now, note: `Report rejected: ${input.reason.trim()}`.slice(0, MAX_REVERSE_REASON) } });
+        } else {
+          for (const lot of lots) lot.holdReason = `Report rejected, kept on hold: ${input.reason.trim()}`.slice(0, MAX_MOVEMENT_NOTE);
+        }
+        Object.assign(request, { status: 'REJECTED', decidedBy: user.id, decidedAt: now, rejectReason: input.reason.trim(), released: input.release });
+        return request;
       }),
     );
   }
@@ -4898,6 +5061,13 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const negative = data.inventory.ingredients.filter((i) => i.kind === 'PREPARED' && onHandOf(i.id, data.inventory.movements) < 0);
         if (negative.length) {
           list.push({ kind: 'COOKED_NEGATIVE', id: `cooked-negative:${negative.map((i) => i.id).sort().join(',')}`, count: negative.length, names: negative.slice(0, 3).map((i) => i.name), at: new Date().toISOString() });
+        }
+        // W4: a staff waste report waits for the Owner or a Manager (one alert per report)
+        if (this.permissionsOf(data, user).includes('inventory.waste.approve')) {
+          for (const r of (data.inventory.wasteRequests ?? []).filter((x) => x.status === 'PENDING')) {
+            const names = r.lines.map((l) => data.inventory.ingredients.find((i) => i.id === l.ingredientId)?.name ?? '');
+            list.push({ kind: 'WASTE_REQUEST', id: `waste-request:${r.id}`, count: r.lines.length, names: names.slice(0, 3), byName: this.staffName(data, r.requestedBy) ?? '', at: r.requestedAt });
+          }
         }
         // I4: the closing review of the ready food that is left
         const reviewDate = this.foodReviewDue(data);

@@ -69,6 +69,8 @@ import type {
   StockLedgerView,
   DateKind,
   StockLot,
+  WasteRequest,
+  WasteRequestRow,
   WasteKind,
   WasteLineInput,
   WasteStage,
@@ -600,6 +602,32 @@ export interface StockWasteInput {
   idempotencyKey: string;
 }
 
+/** W4: a staff waste report: what, how much, why; the food is held at once, nothing is a loss until approved */
+export interface WasteRequestInput {
+  at: string;
+  stage: WasteStage;
+  lines: WasteLineInput[];
+  note: string;
+  /** The person says it is already thrown away */
+  thrownAway: boolean;
+  idempotencyKey: string;
+}
+
+/** W4: what the Kitchen's Report waste needs: the items in use (no prices) and the person's own reports of the last days */
+export interface WasteReportView {
+  items: Ingredient[];
+  mine: WasteRequestRow[];
+}
+
+/** W4: the Owner's or a Manager's decision; a rejected report's food is released (only when confirmed safe) or stays held */
+export interface WasteDecisionInput {
+  requestId: Uuid;
+  approve: boolean;
+  reason: string;
+  release: boolean;
+  safe: boolean;
+}
+
 /** W3: a lot's date from the label, or (cooked food) hours after it was made, optionally for every new batch of the dish */
 export interface LotDateInput {
   lotId: Uuid;
@@ -818,6 +846,12 @@ export interface ApiClient {
   setLotDate(input: LotDateInput): Promise<StockLot>;
   /** W3: held (returned) food back to use, only when confirmed safe and never after its date (Owner / Manager) */
   releaseLot(lotId: Uuid, safe: boolean, note: string): Promise<StockLot>;
+  /** W4: the Report waste box of the Kitchen (and other staff the Owner allows): items without prices and the person's own reports */
+  getWasteReport(): Promise<WasteReportView>;
+  /** W4: send a waste report; the food is held at once, once per key */
+  submitWasteRequest(input: WasteRequestInput): Promise<WasteRequest>;
+  /** W4: approve (one waste entry from the held food) or reject a report (Owner / Manager), once */
+  decideWasteRequest(input: WasteDecisionInput): Promise<WasteRequest>;
   /** Recipes & Food Cost (Step B): every menu size, add-on and prepared item with its current recipe and food cost. */
   getRecipes(): Promise<RecipesView>;
   /**
