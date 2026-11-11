@@ -310,7 +310,7 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 **All work of 2026-11-10 is on local `main` (owner: "Approve, main par lao").** IM1 (`98255ac`) and its docs note (`9bb7483`) were already pushed to GitHub
 `main` on 2026-11-11 by another chat (owner: "push"). The search / Find customer / Wastage-plan branch (`claude/sleepy-shamir-5e83b0`) was merged on top,
-README, PROGRESS and PROJECT_RULES joined by hand. These newer commits are **not pushed**: `origin/main` is `9bb7483`; a push needs his approval. **Next only after his approval: W1** of `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` (Record Waste for raw ingredients and packaging). His order of the
+README, PROGRESS and PROJECT_RULES joined by hand. These newer commits were **pushed to GitHub `main` on 2026-11-11** (owner: "ok push gitap"), fast-forward, no force. Every later push needs his approval again. **Next only after his approval: W1** of `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` (Record Waste for raw ingredients and packaging). His order of the
 inventory work is now Prompt 1 Wastage & Expiry (W1–W5), Prompt 2 Stock Counts, Prompt 3 Reports; IM2–IM5 of the audit wait.
 
 **Wastage & Expiry audit and plan shown 2026-11-10 (owner's Prompt 1 of `LALA_Inventory_Three_Detailed_Prompts-1.md`), waiting for his approval.
@@ -321,14 +321,14 @@ waste in a separate `foodWaste` list only shown on Available Food), what is miss
 passed when run again). Then ("Approve, main par lao") IM1 was committed and both branches joined on `main`: W0 is done. Prompt 2 (Stock
 Counts) and Prompt 3 (Reports) come after, each with its own audit.
 
-**POS Find customer in the title row, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, now on local `main`, not pushed** (owner: "table search can remove,
+**POS Find customer in the title row, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, on `main`, pushed 2026-11-11** (owner: "table search can remove,
 his place customer search"). The box beside Running bills now finds a customer by name or phone (from 2 letters, earlier customers from the orders) and puts
 them on the bill; a bill with unsent items asks to send or hold first. Then (his second picture) a takeaway bill has no customer box: one line
 "Customer: name · phone" with ×; nobody found → add a new customer in the search (name, phone optional); on phones too. Delivery keeps name, phone,
 address. `screens/pos/customer-search.tsx`, `current-bill.tsx`. Tests: typecheck, lint, `walkthrough:pos`, `walkthrough`, `:online`, `:sub-orders`,
 `:sizes`, `:refunds` pass on port 3010. **Open:** his customer khata (regular customers buy on credit, pay later) — plan first, needs his approval.
 
-**Searches swap places, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, now on local `main`, not pushed.** His two
+**Searches swap places, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, on `main`, pushed 2026-11-11.** His two
 screenshots: "CHICKEN" in the header found no orders, and the small POS box was the menu search. Now the header finds menu items (on the POS as he types;
 Enter on another screen opens the POS) and the POS title-row box finds orders (number, table, customer → Orders). Phone: the header has no search, so the
 POS box stays the menu search. Someone with Orders but no POS keeps the old header order search. `src/lib/menu-search.ts`, `header.tsx`, `pos-screen.tsx`,
