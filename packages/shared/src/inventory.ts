@@ -1,5 +1,6 @@
 import type { FoodCostSummary } from './recipes';
 import type { SupplierCategory } from './suppliers';
+import type { StockWasteReason } from './wastage';
 import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
 
 /**
@@ -409,7 +410,8 @@ export function suggestIngredientCode(name: string, existingCodes: readonly stri
 /** Step A: the opening stock and corrections. Purchases, kitchen use, waste and transfers follow in later steps. */
 /** PURCHASE = received from a supplier (Suppliers S1); the khata entry and supplier are kept on the movement. */
 /** COOK_USE = raw ingredients taken by a cooking batch, COOKED = the cooked dish it made (I3, owner 2026-11-09; batchId on both). */
-export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE', 'COOK_USE', 'COOKED', 'SALE_USE', 'SALE_RETURN'] as const;
+/** WASTE = thrown away, from a waste event (W1, 2026-11-11; wasteId and wasteReason on it). */
+export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE', 'COOK_USE', 'COOKED', 'SALE_USE', 'SALE_RETURN', 'WASTE'] as const;
 export type MovementType = (typeof MOVEMENT_TYPES)[number];
 
 export const ADJUST_REASONS = ['RECOUNT', 'ENTRY_MISTAKE', 'FOUND', 'OTHER'] as const;
@@ -433,6 +435,9 @@ export interface StockMovement extends BranchScoped {
   /** SALE_USE / SALE_RETURN (I4): the order line whose stock it is */
   orderId?: Uuid;
   orderItemId?: Uuid;
+  /** WASTE (W1): the waste event and why it was thrown away */
+  wasteId?: Uuid;
+  wasteReason?: StockWasteReason;
   /**
    * What this quantity was worth when it moved (paisa, never negative; the quantity carries the sign): a purchase line's share
    * of its bill, else the cost of that day. Kept so a later price never rewrites an old report. Missing on movements from
@@ -552,6 +557,8 @@ export interface InventoryView {
   /** I4: ready food that may still be given to another order, and today's sold lines with a part not tracked (no verified recipe) */
   availableFood?: number;
   notTrackedToday?: { name: string; count: number }[];
+  /** W1: stock waste posted today (business day): cost of the lines with a price, lines, lines without a price */
+  wasteToday?: { cost: Paisa; lines: number; unknown: number };
 }
 
 /** The dashboard numbers. Ingredients marked Not in use are left out. */

@@ -22,6 +22,7 @@ import { RecipesTab } from './recipes/recipes-tab';
 import { SuppliersTab } from './suppliers-tab';
 import { CookingPlanTab } from './cooking-plan-tab';
 import { AvailableFoodTab } from './available-food-tab';
+import { WastageTab } from './wastage-tab';
 
 /** Five clear sections (owner's second Inventory brief, 2026-11-04); Stock has its own sub-sections. */
 type Section = 'overview' | 'stock' | 'recipes' | 'purchasing' | 'reports';
@@ -40,7 +41,7 @@ const STOCK_TABS: { key: StockTab; icon: LucideIcon; phase?: number }[] = [
   { key: 'movements', icon: History },
   { key: 'cooking', icon: CalendarDays },
   { key: 'food', icon: PackageCheck },
-  { key: 'wastage', icon: Trash2, phase: 4 },
+  { key: 'wastage', icon: Trash2 },
   { key: 'counts', icon: ClipboardCheck, phase: 4 },
 ];
 
@@ -167,6 +168,7 @@ export function InventoryScreen({
           onOpenSuppliers={() => setSection('purchasing')}
           onOpenCooking={() => openStock('cooking')}
           onOpenFood={() => openStock('food')}
+          onOpenWastage={() => openStock('wastage')}
           onOpenMovements={() => {
             setHistoryOf(null);
             openStock('movements');
@@ -221,7 +223,7 @@ export function InventoryScreen({
             />
           )}
           {stockTab === 'food' && <AvailableFoodTab canManage={canManage} />}
-          {stockTab === 'wastage' && <PlannedPanel icon={Trash2} title="inventory.planned.wastage.title" items="inventory.planned.wastage.items" phase={4} />}
+          {stockTab === 'wastage' && <WastageTab view={view} canManage={canManage} />}
           {stockTab === 'counts' && <PlannedPanel icon={ClipboardCheck} title="inventory.planned.counts.title" items="inventory.planned.counts.items" phase={4} />}
         </div>
       )}

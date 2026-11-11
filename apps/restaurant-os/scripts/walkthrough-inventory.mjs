@@ -238,8 +238,9 @@ for (const [section, title] of [['Reports', 'Reports']]) {
 }
 await owner.getByRole('tab', { name: 'Stock', exact: true }).click();
 await owner.getByRole('tab', { name: /^Wastage & Expiry/ }).click();
-await owner.locator('main [data-planned="Wastage & Expiry"]').getByText('Comes in inventory phase 4, after your approval.').waitFor();
-ok('History of Chicken: −1.5 kg Counted again by Aziz Ahmed → 8.5 kg, +10 kg opening → 10 kg; kind and period filters; Suppliers opens; Reports and Wastage are clear PLACEHOLDERs with their phase');
+// W1 (2026-11-11): Wastage & Expiry is built (walkthrough:wastage); Stock Counts stays a placeholder
+await owner.locator('main [data-wastage]').getByRole('button', { name: 'Record Waste' }).waitFor();
+ok('History of Chicken: −1.5 kg Counted again by Aziz Ahmed → 8.5 kg, +10 kg opening → 10 kg; kind and period filters; Suppliers opens; Reports is a clear PLACEHOLDER with its phase; Wastage & Expiry opens with Record Waste');
 
 console.log('7. Owner and Manager only');
 const manager = await openAs(USER.manager, '/inventory', DESKTOP);

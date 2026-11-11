@@ -175,7 +175,11 @@ function Why({ row }: { row: StockLedgerRow }) {
   const { movement } = row;
   return (
     <>
-      {movement.reason ? t(`inventory.reasons.${movement.reason}`) : t(`inventory.movementTypes.${movement.type}`)}
+      {movement.reason
+        ? t(`inventory.reasons.${movement.reason}`)
+        : movement.wasteReason
+          ? `${t('inventory.movementTypes.WASTE')}: ${t(`inventory.waste.reasons.${movement.wasteReason}`)}`
+          : t(`inventory.movementTypes.${movement.type}`)}
       {movement.note && <span className="text-slate-500"> — {movement.note}</span>}
     </>
   );

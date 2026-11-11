@@ -21,6 +21,7 @@ import {
   type StockUnit,
   type Supplier,
   type SupplierCategory,
+  type WasteEvent,
 } from '@restaurant-saas/shared';
 import type { PurchaseDraft } from '../client';
 import { createRecipeSeed } from './recipe-seed';
@@ -55,6 +56,8 @@ export interface DemoInventory {
   /** I4: food made and then cancelled, kept for another order of the same dish; cooked food wasted or eaten by staff */
   availableFood?: AvailableFood[];
   foodWaste?: FoodWaste[];
+  /** W1 (2026-11-11): stock waste incidents of raw ingredients and packaging, never edited or deleted; missing before */
+  wasteEvents?: WasteEvent[];
   /** I4: when the closing review of the ready food that is left is due; missing = 23:00 */
   closingTime?: string;
   expiringSoonDays: number;

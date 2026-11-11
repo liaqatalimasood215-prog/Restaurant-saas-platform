@@ -151,6 +151,15 @@ built; lots keep their original deadline so a later promotion can use it.
 | **W4** | Staff requests: Pending approval, holds, Approve / Reject, optional threshold, a Record Waste entry for the Kitchen | pending and rejected request behaviour |
 | **W5** | New `walkthrough:wastage` with all ten checks of Prompt 1 §7, documents, screenshots | full run |
 
+## 10b. W1 — built 2026-11-11 (DEMO), waiting for the owner's review
+
+Record Waste for raw ingredients and packaging as in §5–§6: several items, units with "another unit", reason, where, when, preview, Post waste = one
+`WasteEvent` and one `WASTE` movement per item, once per key, all or none; loss at the last purchase price (estimate; lot cost in W3), Unknown without a
+price. Waste Log, four cards (Pending approval says W4), Expiring soon / Expired lists by the one date per ingredient, Stock Movements "Wasted: <reason>",
+Overview "Today's wastage". Files: `packages/shared/src/wastage.ts`, `screens/inventory/wastage-tab.tsx`, `postStockWaste` / `getWasteView` in the demo
+server. Test: `walkthrough:wastage`. Prompt 1 §7 checks covered so far: 10 L − 2 L = 8 L with one loss; carton + pieces; repeated submission; insufficient
+quantity; supplier debt unchanged. The other five come with W2–W4.
+
 ## 11. Limits of the DEMO
 
 One browser's storage; tabs sync by sending all data, the last writer wins. Nothing runs while no tab is open: a lot becomes

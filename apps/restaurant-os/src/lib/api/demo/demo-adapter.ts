@@ -199,6 +199,14 @@ import {
   balancesAfter,
   type StockLedgerQuery,
   type StockLedgerView,
+  checkWaste,
+  summarizeWaste,
+  wasteBusinessDate,
+  wasteCost,
+  wasteStockMilli,
+  type WasteEvent,
+  type WasteProblem,
+  type WasteView,
   checkPortion,
   portionLines,
   sameDish,
@@ -295,6 +303,7 @@ import {
   type ReceiveStockInput,
   type SupplierPaymentInput,
   type SupplierProfileInput,
+  StockWasteInput,
 } from '../client';
 import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
@@ -460,6 +469,23 @@ const SCALE_MESSAGES: Record<ScaleProblem, string> = {
   NO_SIZES: 'Tick at least one size.',
   SIZE_QUANTITY_INVALID: 'Every size needs a quantity (at most 100 × the base).',
   SIZE_DUPLICATE: 'A size is in the list twice.',
+};
+
+/** W1: why a waste incident cannot be posted */
+const WASTE_MESSAGES: Record<WasteProblem, string> = {
+  NO_LINES: 'Add at least one item.',
+  TOO_MANY_LINES: 'At most 20 items in one entry.',
+  STAGE_INVALID: 'Choose where it happened.',
+  TIME_INVALID: 'The time cannot be in the future or more than 7 days back.',
+  NOTE_TOO_LONG: 'The note is too long (140 letters at most).',
+  ITEM_REQUIRED: 'Choose a raw ingredient or packaging in use.',
+  DUPLICATE_ITEM: 'This item is in the entry twice. Use “+ another unit” on one line.',
+  TOO_MANY_PARTS: 'At most 3 units on one line.',
+  DUPLICATE_UNIT: 'The same unit twice on one line.',
+  QUANTITY_INVALID: 'Type a quantity above 0.',
+  REASON_REQUIRED: 'Choose why it was thrown away.',
+  NOTE_REQUIRED: 'Write what happened (reason Other).',
+  MORE_THAN_ON_HAND: 'More than is in stock. Correct the stock first if the stock is wrong.',
 };
 
 function menuMessage(check: NonNullable<MenuCheck>, name: string, where: string): string {
@@ -2725,6 +2751,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         cookingShort: { today: shortOf(cookingDay), tomorrow: shortOf(nextDate(cookingDay)) },
         availableFood: (inv.availableFood ?? []).filter((f) => availableState(f, Date.now()) === 'AVAILABLE').length,
         notTrackedToday: this.notTrackedOn(data, cookingDay),
+        wasteToday: ((s) => ({ cost: s.todayCost, lines: s.todayLines, unknown: s.todayUnknown }))(summarizeWaste(inv.wasteEvents ?? [], this.branchToday(data))),
       };
     });
   }
@@ -2835,6 +2862,102 @@ export class DemoAdapter implements ApiClient, DemoControls {
           cost: ingredientCost(this.costBook(data), ingredient.id, input.quantityMilli),
         });
         data.idempotency[key] = movementId;
+      }),
+    );
+  }
+
+  getWasteView(): Promise<WasteView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const inv = data.inventory;
+      const today = this.branchToday(data);
+      const events = [...(inv.wasteEvents ?? [])].sort((a, b) => b.at.localeCompare(a.at) || b.createdAt.localeCompare(a.createdAt));
+      const all = events.flatMap((event) =>
+        event.lines.map((line) => {
+          const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId);
+          return {
+            event,
+            line,
+            ingredientName: ingredient?.name ?? '—',
+            purchaseUnit: ingredient?.purchaseUnit ?? 'kg',
+            stockUnit: ingredient?.stockUnit ?? 'g',
+            byName: this.staffName(data, event.createdBy),
+          };
+        }),
+      );
+      const limit = 200;
+      return { today, summary: summarizeWaste(events, today), rows: all.slice(0, limit), total: all.length, limit };
+    });
+  }
+
+  /**
+   * W1: one waste incident in one change: one WASTE movement per line with the event and the reason on it, the loss at the
+   * last purchase price kept on the line and the movement (null = no price), and the event itself. A double tap or retry with
+   * the same key returns the first event. Every line is checked first: nothing is written while one line is wrong.
+   */
+  postStockWaste(input: StockWasteInput): Promise<WasteEvent> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        const inv = data.inventory;
+        const key = 'stock-waste:' + input.idempotencyKey;
+        const done = data.idempotency[key];
+        if (done) {
+          const first = (inv.wasteEvents ?? []).find((e) => e.id === done);
+          if (first) return first;
+        }
+        const onHand = (id: string) => onHandOf(id, inv.movements);
+        const problem = checkWaste(input, inv.ingredients, onHand, Date.now());
+        if (problem) {
+          const name = problem.line === null ? '' : (inv.ingredients.find((i) => i.id === input.lines[problem.line!]?.ingredientId)?.name ?? '');
+          throw new ApiError('VALIDATION', (name ? `${name}: ` : '') + WASTE_MESSAGES[problem.problem]);
+        }
+        const now = nowIso();
+        const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+        const eventId = newId();
+        const lines = input.lines.map((line) => {
+          const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId)!;
+          const stockMilli = wasteStockMilli(line.parts, ingredient)!;
+          const valued = wasteCost(ingredient, stockMilli);
+          const beforeMilli = onHand(ingredient.id);
+          const movementId = newId();
+          const note = line.note.trim();
+          inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: 'WASTE', quantityMilli: -stockMilli, reason: null, note, createdBy: user.id, createdAt: now, wasteId: eventId, wasteReason: line.reason!, cost: valued?.cost ?? null });
+          return {
+            ingredientId: ingredient.id,
+            // Each way it was typed, with the size of that unit as it is now (a later packing edit changes nothing)
+            parts: line.parts.map((p) => {
+              const option = findBuyOption(ingredient, p.unitKey)!;
+              return { unitKey: option.key, unit: option.unit, unitSizeMilli: option.sizeMilli, quantityMilli: p.quantityMilli! };
+            }),
+            stockMilli,
+            reason: line.reason!,
+            note,
+            cost: valued?.cost ?? null,
+            pricePaisa: valued?.pricePaisa ?? null,
+            priceUnitMilli: valued?.priceUnitMilli ?? null,
+            beforeMilli,
+            afterMilli: beforeMilli - stockMilli,
+            movementId,
+          };
+        });
+        const event: WasteEvent = {
+          id: eventId,
+          ...scope,
+          at: new Date(input.at).toISOString(),
+          businessDate: wasteBusinessDate(input.at, data.branch.timezone, data.branch.businessDayStart),
+          stage: input.stage,
+          lines,
+          note: input.note.trim(),
+          status: 'POSTED',
+          createdBy: user.id,
+          createdAt: now,
+          approvedBy: user.id,
+        };
+        (inv.wasteEvents ??= []).push(event);
+        data.idempotency[key] = event.id;
+        return event;
       }),
     );
   }

@@ -216,6 +216,14 @@ vibration; Call Waiter also speaks. DEMO sync: between tabs of one browser only 
 backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.tsx`, `src/lib/sound.ts`.
 
 ## 7. Test status (last run, all green)
+- **2026-11-11 (W1 restored in worktree `lala-restaurant-os-continue-9e41aa`, then committed there with the owner's approval):** files equal to `6e16416`; `pnpm test` 198 and
+  `pnpm typecheck` pass. With this folder's servers on 3000 / 3001 / 3002, the four that had failed (port 3000 was another folder's) now pass:
+  `:online-app`, `:riders` (first run: a screenshot timed out waiting for fonts after all its checks; passed when run again), `:connected`, `:previews`.
+- **2026-11-11 (W1 Stock Wastage):** `pnpm test` 198 (5 new), `pnpm typecheck`, `pnpm lint` pass. New `walkthrough:wastage` passes (twice). On port 3010:
+  `:inventory`, `:im1`, `:sales-stock`, `:suppliers`, `:supplier-order`, `:units`, `:recipes`, `:cooked`, `:integration`, `:pos`, `:kds` pass. `:cooking` (step 7) and
+  `walkthrough` (step 4, a click waiting for a page change) stopped on 30-second timeouts in the long run; `:cooking` passed alone at once, `walkthrough`
+  stopped again at another place (a page load) and passed on the third run. No server errors were logged; the cause is not found (three dev servers and
+  many browser tabs at once). Not run: the other 11 walkthroughs, customer, rider, `pnpm build`, a real phone.
 - **2026-11-10 (IM1 Stabilise):** `pnpm test` 193, `pnpm typecheck`, `pnpm lint` pass. All 25 older Restaurant OS walkthroughs pass, the new `walkthrough:im1`, customer (182 checks) and rider (275 checks) too. In the first run of the 25, `:inventory` and `:recipes` each stopped on a 30-second timeout (a click on the All filter; the page load); both passed when run again alone, the cause was not found. `pnpm build` not run (the dev servers were running).
 - **2026-11-09 (bug run + phone fixes on this newest version, commit `d026d93`, pushed 2026-11-10):** `pnpm test` 189, `pnpm typecheck`, `pnpm lint` and `pnpm build`
   pass. ALL walkthroughs pass: the 25 Restaurant OS ones, customer, rider, the new rider `walkthrough:phone` (Wi-Fi address, storage blocked), and on
@@ -308,9 +316,23 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
+**W1 Stock Wastage built 2026-11-11 (DEMO), approved for a local commit on branch `claude/sleepy-shamir-5e83b0` only — not merged into `main`, not pushed** (owner: "Approved. Start W1 … Do not commit or push").
+On 2026-11-11 the owner asked to restore it in worktree `lala-restaurant-os-continue-9e41aa` (branch `claude/lala-restaurant-os-continue-9e41aa`): applied there
+identical to `6e16416`, then committed on that branch with his approval ("Approve, commit karo"). Merge into `main`, push and W2 each wait for his approval.
+Stock → Wastage & Expiry is no longer a placeholder: **Record Waste** (one entry, several items; raw ingredients and packaging; quantity in any of the
+item's units with "another unit" — 1 carton + 2 bottles = 26 bottles; reason; Other needs a note; where: Storage / Preparation / Cooking; when, not in the
+future, at most 7 days back; preview "In stock 10 litres → 8 litres" and the loss), **Post waste** = one `WasteEvent` + one `WASTE` stock movement per item,
+once per key, all or none; loss at the last purchase price (estimate), no price = "Unknown — needs a price", never Rs. 0. Waste Log (table / phone cards),
+cards Waste today · Last 7 days · Expiring soon · Pending approval (W4), Expiring soon / Expired lists (one date per ingredient until W3), Stock Movements
+"Wasted: <reason>", Overview card "Today's wastage". Supplier khata never changes. Rules `packages/shared/src/wastage.ts` (5 unit tests); `postStockWaste`,
+`getWasteView`; `DemoInventory.wasteEvents` (optional, no data version change); screen `screens/inventory/wastage-tab.tsx`; `walkthrough:wastage`.
+Not in W1: prepared / cancelled-order food, staff meal, donation, reversal (W2), lots and dates per delivery (W3), staff requests and approval (W4), photo
+(Phase 7). Cancelled-order food waste stays in its own list on Available Food until W2. **Next only after his approval: W2.**
+
+
 **All work of 2026-11-10 is on local `main` (owner: "Approve, main par lao").** IM1 (`98255ac`) and its docs note (`9bb7483`) were already pushed to GitHub
 `main` on 2026-11-11 by another chat (owner: "push"). The search / Find customer / Wastage-plan branch (`claude/sleepy-shamir-5e83b0`) was merged on top,
-README, PROGRESS and PROJECT_RULES joined by hand. These newer commits were **pushed to GitHub `main` on 2026-11-11** (owner: "ok push gitap"), fast-forward, no force. Every later push needs his approval again. **Next only after his approval: W1** of `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` (Record Waste for raw ingredients and packaging). His order of the
+README, PROGRESS and PROJECT_RULES joined by hand. These newer commits were **pushed to GitHub `main` on 2026-11-11** (owner: "ok push gitap"), fast-forward, no force. Every later push needs his approval again. W1 of `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` was then built (see above). His order of the
 inventory work is now Prompt 1 Wastage & Expiry (W1–W5), Prompt 2 Stock Counts, Prompt 3 Reports; IM2–IM5 of the audit wait.
 
 **Wastage & Expiry audit and plan shown 2026-11-10 (owner's Prompt 1 of `LALA_Inventory_Three_Detailed_Prompts-1.md`), waiting for his approval.
