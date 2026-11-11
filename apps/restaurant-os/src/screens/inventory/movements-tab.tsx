@@ -28,13 +28,13 @@ export function MovementsTab({ view, ingredientId: start }: { view: InventoryVie
     () => getApi().getStockLedger({ ingredientId: ingredientId || null, type: type || null, from: range.from, to: range.to, staffId: staffId || null }),
     [ingredientId, type, period, staffId],
   );
-  const select = 'min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm';
+  const select = 'min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800';
   const filtered = Boolean(ingredientId || type || staffId || period !== 'ALL');
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <select value={ingredientId} onChange={(e) => setIngredientId(e.target.value)} aria-label={t('inventory.ledger.ingredient')} className={cn(select, 'min-w-52 flex-1 sm:flex-none')}>
+        <select value={ingredientId} onChange={(e) => setIngredientId(e.target.value)} aria-label={t('inventory.ledger.ingredient')} className={cn(select, 'min-w-44 flex-1 sm:flex-none')}>
           <option value="">{t('inventory.ledger.allIngredients')}</option>
           {view.ingredients.map((r) => (
             <option key={r.ingredient.id} value={r.ingredient.id}>
@@ -58,17 +58,14 @@ export function MovementsTab({ view, ingredientId: start }: { view: InventoryVie
             </option>
           ))}
         </select>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('inventory.ledger.period')}>
+        <div className="flex gap-1 rounded-xl bg-slate-200/60 p-1" role="group" aria-label={t('inventory.ledger.period')}>
           {PERIODS.map((p) => (
             <button
               key={p}
               type="button"
               aria-pressed={period === p}
               onClick={() => setPeriod(p)}
-              className={cn(
-                'press min-h-11 rounded-xl border px-3 text-sm font-bold',
-                period === p ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50',
-              )}
+              className={cn('press min-h-8 rounded-lg px-2.5 text-sm font-bold pointer-coarse:min-h-9', period === p ? 'bg-white text-brand shadow-sm' : 'text-slate-600 hover:text-slate-900')}
             >
               {t(`inventory.ledger.periods.${p}`)}
             </button>
@@ -78,15 +75,15 @@ export function MovementsTab({ view, ingredientId: start }: { view: InventoryVie
           <button
             type="button"
             onClick={() => (setIngredientId(''), setType(''), setStaffId(''), setPeriod('ALL'))}
-            className="press min-h-11 rounded-xl px-3 text-sm font-bold text-brand hover:bg-brand-soft"
+            className="press min-h-10 rounded-xl px-2.5 text-sm font-bold text-brand hover:bg-brand-soft"
           >
             {t('inventory.ledger.clear')}
           </button>
         )}
-        {ledger.data && <span className="ml-auto text-sm font-semibold text-slate-500">{ledger.data.total === 1 ? t('inventory.ledger.countOne') : t('inventory.ledger.count', { n: ledger.data.total })}</span>}
+        {ledger.data && <span className="ml-auto text-xs font-semibold text-slate-500">{ledger.data.total === 1 ? t('inventory.ledger.countOne') : t('inventory.ledger.count', { n: ledger.data.total })}</span>}
       </div>
-      <p className="flex items-center gap-1.5 text-xs text-slate-500">
-        <History className="size-4 text-brand" aria-hidden />
+      <p className="flex items-center gap-1.5 px-1 text-xs text-slate-500">
+        <History className="size-3.5 text-slate-400" aria-hidden />
         {t('inventory.ledger.hint')}
       </p>
 
@@ -95,34 +92,34 @@ export function MovementsTab({ view, ingredientId: start }: { view: InventoryVie
       ) : !ledger.data ? (
         <ErrorState message={ledger.error?.message} onRetry={ledger.reload} />
       ) : ledger.data.rows.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">{t('inventory.ledger.empty')}</p>
+        <p className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-center text-sm text-slate-500">{t('inventory.ledger.empty')}</p>
       ) : (
         <>
-          <Card className="hidden overflow-hidden lg:block">
+          <Card className="hidden overflow-hidden rounded-xl lg:block">
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+              <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">{t('inventory.ledger.columns.when')}</th>
-                  <th className="px-3 py-3">{t('inventory.ledger.columns.ingredient')}</th>
-                  <th className="px-3 py-3 text-right">{t('inventory.ledger.columns.change')}</th>
-                  <th className="px-3 py-3">{t('inventory.ledger.columns.why')}</th>
-                  <th className="px-3 py-3">{t('inventory.ledger.columns.by')}</th>
-                  <th className="px-4 py-3 text-right">{t('inventory.ledger.columns.after')}</th>
+                  <th className="px-3 py-2">{t('inventory.ledger.columns.when')}</th>
+                  <th className="px-3 py-2">{t('inventory.ledger.columns.ingredient')}</th>
+                  <th className="px-3 py-2 text-right">{t('inventory.ledger.columns.change')}</th>
+                  <th className="px-3 py-2">{t('inventory.ledger.columns.why')}</th>
+                  <th className="px-3 py-2">{t('inventory.ledger.columns.by')}</th>
+                  <th className="px-3 py-2 text-right">{t('inventory.ledger.columns.after')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {ledger.data.rows.map((row) => (
                   <tr key={row.movement.id} data-ledger-row={row.ingredientName} className="hover:bg-brand-soft/30">
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{whenText(row.movement.createdAt)}</td>
-                    <td className="px-3 py-3 font-bold text-slate-900">{row.ingredientName}</td>
-                    <td className="px-3 py-3 text-right">
+                    <td className="whitespace-nowrap px-3 py-2 text-slate-600">{whenText(row.movement.createdAt)}</td>
+                    <td className="px-3 py-2 font-bold text-slate-900">{row.ingredientName}</td>
+                    <td className="px-3 py-2 text-right">
                       <Change row={row} />
                     </td>
-                    <td className="px-3 py-3 text-slate-700">
+                    <td className="px-3 py-2 text-slate-700">
                       <Why row={row} />
                     </td>
-                    <td className="px-3 py-3 text-slate-600">{row.byName ?? '—'}</td>
-                    <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', row.balanceAfterMilli < 0 ? 'text-red-700' : 'text-slate-900')}>{balance(row)}</td>
+                    <td className="px-3 py-2 text-slate-600">{row.byName ?? '—'}</td>
+                    <td className={cn('px-3 py-2 text-right font-semibold tabular-nums', row.balanceAfterMilli < 0 ? 'text-red-700' : 'text-slate-900')}>{balance(row)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -131,7 +128,7 @@ export function MovementsTab({ view, ingredientId: start }: { view: InventoryVie
           <ul className="grid gap-2 sm:grid-cols-2 lg:hidden">
             {ledger.data.rows.map((row) => (
               <li key={row.movement.id} data-ledger-card={row.ingredientName}>
-                <Card className="flex items-start justify-between gap-3 p-3">
+                <Card className="flex items-start justify-between gap-3 rounded-xl px-3 py-2">
                   <div className="min-w-0">
                     <p className="font-bold text-slate-900">{row.ingredientName}</p>
                     <p className="text-xs text-slate-600">

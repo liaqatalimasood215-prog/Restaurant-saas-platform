@@ -160,6 +160,29 @@ Overview "Today's wastage". Files: `packages/shared/src/wastage.ts`, `screens/in
 server. Test: `walkthrough:wastage`. Prompt 1 §7 checks covered so far: 10 L − 2 L = 8 L with one loss; carton + pieces; repeated submission; insufficient
 quantity; supplier debt unchanged. The other five come with W2–W4.
 
+## 10c. W2 — built 2026-11-11 (DEMO), waiting for the owner's review
+
+Owner: "Approved — Start W2 with both recommended decisions": (1) only the Owner and a Manager record Staff meals, Donations and
+Reverse / Correct (checked on the role in the demo server, besides `inventory.manage`); (2) no default discard time — the
+per-dish safe hours of Available Food (approved default 3 hours, 2026-11-09) stay as they are; a discard time per cooked lot
+comes with W3.
+
+- **Cooked stock** in Record Waste ("Cooked food" group, reasons incl. "Unsold cooked food discarded at closing", stage
+  Holding / closing): one WASTE movement on the cooked dish only — its raw ingredients left at the batch and are never taken
+  again. Loss = the newest batch's cost ÷ what it actually made ("batch cost (estimate)"), else the recipe estimate, else Unknown.
+- **Order food** (a cancelled / voided line wasted, Available Food wasted or eaten at closing) now also writes a waste event in
+  the same Waste Log: one ORDER_FOOD line, cost kept on the order, **no stock movement** (it left once at the kitchen's Ready).
+  The callers already write it once (an outcome is chosen once; Available Food closes to 0), so it can never be reused and
+  wasted, or wasted twice. The `foodWaste` list on Available Food stays.
+- **Staff meal / Donation**: own kinds with their own movement types and totals ("Today apart from waste"); never in waste cost.
+- **Reverse**: a reason; one WASTE_REVERSAL movement per line linked to the event; the event stays as REVERSED (never edited or
+  deleted); a second reversal is refused. Order-food entries are not reversible (the food left the kitchen). **Correct** =
+  reverse + new event in one change, linked both ways (`reversal.correctedById`, `correctsId`); nothing is written if either part
+  fails; one key per form. Reversed stock is usable again at once — "held until released" needs usable stock and lots (W3).
+- Files: `packages/shared/src/wastage.ts` (kinds, `checkReverse`, `cookedWasteCost`, reasons per item), `inventory.ts` (movement
+  types), demo server (`writeStockWaste`, `reverseStockWaste`, `correctStockWaste`, `recordWaste`), `wastage-tab.tsx`. Tests:
+  3 new unit tests; `walkthrough:wastage` steps 9–12; `walkthrough:sales-stock` checks the order-food entries.
+
 ## 11. Limits of the DEMO
 
 One browser's storage; tabs sync by sending all data, the last writer wins. Nothing runs while no tab is open: a lot becomes

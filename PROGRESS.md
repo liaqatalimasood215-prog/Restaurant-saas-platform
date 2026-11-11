@@ -216,6 +216,11 @@ vibration; Call Waiter also speaks. DEMO sync: between tabs of one browser only 
 backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.tsx`, `src/lib/sound.ts`.
 
 ## 7. Test status (last run, all green)
+- **2026-11-11 (Inventory compact UI, committed with W2 on this branch):** `pnpm typecheck`, `pnpm lint` pass; walkthroughs `:inventory`, `:wastage`, `:suppliers`,
+  `:cooking`, `:sales-stock`, `:recipes`, `:im1`, `:cooked` pass. Not run: the other walkthroughs, customer, rider, `pnpm build`, a real phone.
+- **2026-11-11 (W2 Wastage, committed on this branch):** `pnpm test` 201 (3 new), `pnpm typecheck`, `pnpm lint` pass. `walkthrough:wastage` passes (12 steps; W2 =
+  9 cooked daal 1 kg wasted from cooked stock only, 10 staff meal + donation apart, 11 reverse once, 12 correct linked), `:inventory` and `:sales-stock`
+  (new order-food Waste Log checks) pass. Not run this time: the other walkthroughs, customer, rider, `pnpm build`, a real phone.
 - **2026-11-11 (W1 restored in worktree `lala-restaurant-os-continue-9e41aa`, then committed there with the owner's approval):** files equal to `6e16416`; `pnpm test` 198 and
   `pnpm typecheck` pass. With this folder's servers on 3000 / 3001 / 3002, the four that had failed (port 3000 was another folder's) now pass:
   `:online-app`, `:riders` (first run: a screenshot timed out waiting for fonts after all its checks; passed when run again), `:connected`, `:previews`.
@@ -315,6 +320,20 @@ walkthrough scripts clear localStorage themselves; the POS bill panel remounts w
 changes (state that must survive, such as `payNow`, lives in the draft, `screens/pos/draft.ts`).
 
 ## 9. Pending tasks and next steps (in this order)
+
+**Inventory compact UI built 2026-11-11 (styling only), approved and committed with W2 on this branch, not pushed** (owner: "Approve, commit karo") (his brief: clean the 8 screens Suppliers, Stock,
+Recipes overview, Stock Movements, Cooking Plan, Available Food, Wastage, Expiry). Slim title row and smaller header buttons; section tabs lower; Stock
+sub-tabs in one grey row that scrolls sideways; light-red chips instead of red gradients; compact tables and phone cards (an ingredient card ~115 px, was
+~250 px); Cooking Plan without the red banner, "Nothing planned" once; Available Food and Wastage headers on one row; Expiry rows with a small Record waste
+link; Recipes overview with small figures and three wide rows to tap. No label, workflow, calculation or data changed; Recipe Builder, Prepared Items and
+the supplier screen (his pictures) untouched. New: `Button size="sm"`, `scripts/screenshots-inventory.mjs`; pictures in `screenshots/inventory-ui-before`
+and `-after`. This is part of IM2 of the audit; its button moves and renames were NOT done (they change labels the walkthroughs and he know).
+
+**W2 Wastage built 2026-11-11 (DEMO), approved and committed on branch `claude/lala-restaurant-os-continue-9e41aa`, not pushed, not on main** (owner: "Approve, commit karo") (owner: "Approved — Start W2 with both recommended
+decisions"; W3–W5 each need his separate approval). Details: `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` §10c. Cooked stock in Record Waste (one movement on the
+cooked dish, raw never again, batch cost); cancelled-order / Available Food waste in the same Waste Log with no second movement; Staff meal and Donation
+counted apart (Owner / Manager only); Reverse and Correct with a reason, linked, nothing deleted. Open for W3: reversed stock is usable again at once
+("held until released" needs usable stock and lots); a discard time per cooked lot. Next, each only after his approval: merge into `main`, push, W3.
 
 **W1 Stock Wastage built 2026-11-11 (DEMO), approved for a local commit on branch `claude/sleepy-shamir-5e83b0` only — not merged into `main`, not pushed** (owner: "Approved. Start W1 … Do not commit or push").
 On 2026-11-11 the owner asked to restore it in worktree `lala-restaurant-os-continue-9e41aa` (branch `claude/lala-restaurant-os-continue-9e41aa`): applied there

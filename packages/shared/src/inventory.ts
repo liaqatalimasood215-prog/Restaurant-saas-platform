@@ -411,7 +411,8 @@ export function suggestIngredientCode(name: string, existingCodes: readonly stri
 /** PURCHASE = received from a supplier (Suppliers S1); the khata entry and supplier are kept on the movement. */
 /** COOK_USE = raw ingredients taken by a cooking batch, COOKED = the cooked dish it made (I3, owner 2026-11-09; batchId on both). */
 /** WASTE = thrown away, from a waste event (W1, 2026-11-11; wasteId and wasteReason on it). */
-export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE', 'COOK_USE', 'COOKED', 'SALE_USE', 'SALE_RETURN', 'WASTE'] as const;
+/** STAFF_MEAL / DONATION = eaten by the staff / given away, apart from waste; WASTE_REVERSAL = put back by a reversal (W2; wasteId). */
+export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE', 'COOK_USE', 'COOKED', 'SALE_USE', 'SALE_RETURN', 'WASTE', 'STAFF_MEAL', 'DONATION', 'WASTE_REVERSAL'] as const;
 export type MovementType = (typeof MOVEMENT_TYPES)[number];
 
 export const ADJUST_REASONS = ['RECOUNT', 'ENTRY_MISTAKE', 'FOUND', 'OTHER'] as const;

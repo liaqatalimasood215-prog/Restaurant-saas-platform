@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BookOpen, CakeSlice, ChefHat, ChevronLeft, CircleCheck, CircleX, Layers, LayoutGrid, List, Pencil, Percent, Plus, Search, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { BookOpen, CakeSlice, ChefHat, ChevronLeft, ChevronRight, CircleCheck, CircleX, Layers, LayoutGrid, List, Pencil, Percent, Plus, Search, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { formatBps, formatPaisa, summarizeFoodCost, type FoodCost, type MenuRecipeRow, type RecipesView } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -174,16 +174,16 @@ export function RecipesTab({ canManage, onBuilder, openItemId }: { canManage: bo
     .filter(({ row, dish }) => showPrepared(dish) && (!pq || row.ingredient.name.toLowerCase().includes(pq) || Boolean(dish?.main.name.toLowerCase().includes(pq))));
 
   return (
-    <div className="space-y-4">
+    <div className={section === null ? 'space-y-2.5' : 'space-y-4'}>
       {section === null && (
         <>
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
             <Summary icon={BookOpen} tone="bg-brand-soft text-brand" label={t('inventory.recipes.summary.items')} value={t('inventory.recipes.summary.ofTotal', { n: summary.itemsWithRecipe, of: summary.items })} />
             <Summary icon={CircleCheck} tone="bg-green-50 text-green-700" label={t('inventory.recipes.summary.verified')} value={t('inventory.recipes.summary.ofTotal', { n: summary.verified, of: summary.recipes })} />
             <Summary icon={Percent} tone="bg-slate-100 text-slate-700" label={t('inventory.recipes.summary.average')} value={summary.averageBps === null ? '—' : formatBps(summary.averageBps)} hint={t('inventory.recipes.summary.averageHint')} />
             <Summary icon={TriangleAlert} tone="bg-red-50 text-red-700" label={t('inventory.recipes.summary.high')} value={String(summary.high)} hint={t('inventory.recipes.summary.highHint')} />
           </div>
-          <p className="text-sm text-slate-600">{t('inventory.recipes.sections.openHint')}</p>
+          <p className="px-1 text-xs text-slate-500">{t('inventory.recipes.sections.openHint')}</p>
         </>
       )}
 
@@ -201,7 +201,7 @@ export function RecipesTab({ canManage, onBuilder, openItemId }: { canManage: bo
             {t('inventory.recipes.sections.back')}
           </button>
         )}
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('inventory.recipes.sections.label')}>
+      <div className={cn('flex flex-wrap gap-2', section === null && 'w-full')} role="tablist" aria-label={t('inventory.recipes.sections.label')}>
         {SECTIONS.map(({ key, icon: Icon }) => (
           <button
             key={key}
@@ -210,12 +210,15 @@ export function RecipesTab({ canManage, onBuilder, openItemId }: { canManage: bo
             aria-selected={section === key}
             onClick={() => setSection(key)}
             className={cn(
-              'press flex min-h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold',
-              section === key ? 'border-brand bg-brand bg-brand-gradient text-white shadow-brand' : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-brand-soft/50',
+              'press flex items-center gap-2 rounded-xl border text-sm font-bold',
+              // On the overview: three wide rows to tap, each opening its list on the whole screen
+              section === null ? 'min-h-12 flex-1 basis-48 px-3' : 'min-h-11 px-4',
+              section === key ? 'border-brand bg-brand bg-brand-gradient text-white shadow-brand' : section === null ? 'border-slate-200 bg-white text-slate-800 hover:border-brand/40 hover:bg-brand-soft/40' : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-brand-soft/50',
             )}
           >
-            <Icon className="size-4" aria-hidden />
+            <Icon className={cn('size-4', section === null && 'text-brand')} aria-hidden />
             {t(`inventory.recipes.sections.${key}`)}
+            {section === null && <ChevronRight className="ml-auto size-4 text-slate-400" aria-hidden />}
           </button>
         ))}
       </div>
@@ -451,8 +454,9 @@ export function RecipesTab({ canManage, onBuilder, openItemId }: { canManage: bo
         </div>
       )}
 
-      <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{t('inventory.recipes.demoNote')}</p>
-      <p className="text-xs text-slate-500">{t('inventory.recipes.guide')}</p>
+      <p className="px-1 text-xs text-slate-500">
+        <span className="font-semibold text-amber-800">{t('inventory.recipes.demoNote')}</span> {t('inventory.recipes.guide')}
+      </p>
 
       {picking !== null && (
         <Dialog
@@ -501,16 +505,14 @@ export function RecipesTab({ canManage, onBuilder, openItemId }: { canManage: bo
 
 function Summary({ icon: Icon, tone, label, value, hint }: { icon: LucideIcon; tone: string; label: string; value: string; hint?: string }) {
   return (
-    <Card className="flex min-h-28 flex-col justify-between gap-2 p-4" data-recipe-summary={label}>
-      <span className="flex items-start justify-between gap-2">
-        <span className="text-sm font-bold leading-snug text-slate-600">{label}</span>
-        <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', tone)}>
-          <Icon className="size-5" aria-hidden />
-        </span>
+    <Card className="flex items-center gap-3 rounded-xl px-3 py-2.5 shadow-none" data-recipe-summary={label}>
+      <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg', tone)}>
+        <Icon className="size-4" aria-hidden />
       </span>
-      <span>
-        <span className="block text-2xl font-black tabular-nums text-slate-900">{value}</span>
-        {hint && <span className="block text-xs text-slate-500">{hint}</span>}
+      <span className="min-w-0">
+        <span className="block text-xs font-bold leading-tight text-slate-500">{label}</span>
+        <span className="block text-lg font-black leading-tight tabular-nums text-slate-900">{value}</span>
+        {hint && <span className="block text-[11px] leading-tight text-slate-500">{hint}</span>}
       </span>
     </Card>
   );

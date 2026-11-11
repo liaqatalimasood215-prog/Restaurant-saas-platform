@@ -199,12 +199,18 @@ import {
   balancesAfter,
   type StockLedgerQuery,
   type StockLedgerView,
+  MILLI,
+  checkReverse,
   checkWaste,
+  cookedWasteCost,
   summarizeWaste,
   wasteBusinessDate,
   wasteCost,
   wasteStockMilli,
+  type CookedPrice,
+  type ReverseProblem,
   type WasteEvent,
+  type WasteLine,
   type WasteProblem,
   type WasteView,
   checkPortion,
@@ -478,7 +484,7 @@ const WASTE_MESSAGES: Record<WasteProblem, string> = {
   STAGE_INVALID: 'Choose where it happened.',
   TIME_INVALID: 'The time cannot be in the future or more than 7 days back.',
   NOTE_TOO_LONG: 'The note is too long (140 letters at most).',
-  ITEM_REQUIRED: 'Choose a raw ingredient or packaging in use.',
+  ITEM_REQUIRED: 'Choose a raw ingredient, packaging or cooked food in use.',
   DUPLICATE_ITEM: 'This item is in the entry twice. Use “+ another unit” on one line.',
   TOO_MANY_PARTS: 'At most 3 units on one line.',
   DUPLICATE_UNIT: 'The same unit twice on one line.',
@@ -486,6 +492,15 @@ const WASTE_MESSAGES: Record<WasteProblem, string> = {
   REASON_REQUIRED: 'Choose why it was thrown away.',
   NOTE_REQUIRED: 'Write what happened (reason Other).',
   MORE_THAN_ON_HAND: 'More than is in stock. Correct the stock first if the stock is wrong.',
+  KIND_INVALID: 'Choose Waste, Staff meal or Donation.',
+};
+
+/** W2: why an entry cannot be reversed */
+const REVERSE_MESSAGES: Record<ReverseProblem, string> = {
+  NOT_POSTED: 'This entry was already reversed.',
+  ORDER_FOOD: 'Order food that was wasted or eaten cannot be reversed: it has left the kitchen.',
+  REASON_REQUIRED: 'Write why it is reversed.',
+  NOTE_TOO_LONG: 'The reason is too long (140 letters at most).',
 };
 
 function menuMessage(check: NonNullable<MenuCheck>, name: string, where: string): string {
@@ -2874,12 +2889,15 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const today = this.branchToday(data);
       const events = [...(inv.wasteEvents ?? [])].sort((a, b) => b.at.localeCompare(a.at) || b.createdAt.localeCompare(a.createdAt));
       const all = events.flatMap((event) =>
-        event.lines.map((line) => {
+        event.lines.map((line, index) => {
           const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId);
+          const food = line.orderFood;
           return {
             event,
             line,
-            ingredientName: ingredient?.name ?? '—',
+            ingredientName: food ? [food.name, food.variantName].filter(Boolean).join(' · ') : (ingredient?.name ?? '—'),
+            first: index === 0,
+            reversedByName: this.staffName(data, event.reversal?.by ?? null),
             purchaseUnit: ingredient?.purchaseUnit ?? 'kg',
             stockUnit: ingredient?.stockUnit ?? 'g',
             byName: this.staffName(data, event.createdBy),
@@ -2887,19 +2905,175 @@ export class DemoAdapter implements ApiClient, DemoControls {
         }),
       );
       const limit = 200;
-      return { today, summary: summarizeWaste(events, today), rows: all.slice(0, limit), total: all.length, limit };
+      const cookedPrices = Object.fromEntries(inv.ingredients.filter((i) => i.kind === 'PREPARED' && i.isActive).map((i) => [i.id, this.cookedPrice(data, i.id)]));
+      return {
+        today,
+        summary: summarizeWaste(events, today),
+        meals: summarizeWaste(events, today, 'STAFF_MEAL'),
+        donations: summarizeWaste(events, today, 'DONATION'),
+        cookedPrices,
+        rows: all.slice(0, limit),
+        total: all.length,
+        limit,
+      };
     });
   }
 
   /**
-   * W1: one waste incident in one change: one WASTE movement per line with the event and the reason on it, the loss at the
-   * last purchase price kept on the line and the movement (null = no price), and the event itself. A double tap or retry with
-   * the same key returns the first event. Every line is checked first: nothing is written while one line is wrong.
+   * W2: what a cooked dish costs for a waste line: its newest batch that is not reversed (the batch cost shared by what it
+   * actually made), else the recipe estimate for 1,000 stock units. Null = Unknown. Its raw ingredients are never costed again.
+   */
+  private cookedPrice(data: DemoData, preparedId: string): CookedPrice | null {
+    const batch = [...(data.inventory.cookingBatches ?? [])]
+      .filter((b) => b.preparedId === preparedId && b.status === 'DONE' && b.cost !== null && b.actualMilli > 0)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (batch) return { basis: 'BATCH', paisa: batch.cost!, perMilli: batch.actualMilli };
+    const perMilli = 1000 * MILLI;
+    const recipe = ingredientCost(this.costBook(data), preparedId, perMilli);
+    return recipe === null ? null : { basis: 'RECIPE', paisa: recipe, perMilli };
+  }
+
+  /** W2: Staff meals, donations and Reverse / Correct are for the Owner and the Manager only (owner, 2026-11-11). */
+  private requireOwnerOrManager(user: StaffUser): void {
+    if (user.role !== 'OWNER' && user.role !== 'MANAGER') throw new ApiError('FORBIDDEN', 'Only the Owner or a Manager may do this.');
+  }
+
+  /**
+   * Writes one checked incident: one movement per line (WASTE, STAFF_MEAL or DONATION) on that item only — a cooked dish's
+   * raw ingredients left at its batch and are never taken again — with the cost kept on the line and the movement.
+   */
+  private writeStockWaste(data: DemoData, input: StockWasteInput, user: StaffUser, extra: Partial<WasteEvent> = {}): WasteEvent {
+    const inv = data.inventory;
+    const kind = input.kind ?? 'WASTE';
+    const now = nowIso();
+    const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+    const eventId = newId();
+    const lines = input.lines.map((line): WasteLine => {
+      const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId)!;
+      const cooked = ingredient.kind === 'PREPARED';
+      const stockMilli = wasteStockMilli(line.parts, ingredient)!;
+      const valued = cooked ? null : wasteCost(ingredient, stockMilli);
+      const price = cooked ? this.cookedPrice(data, ingredient.id) : null;
+      const cost = cooked ? cookedWasteCost(price, stockMilli) : (valued?.cost ?? null);
+      const beforeMilli = onHandOf(ingredient.id, inv.movements);
+      const movementId = newId();
+      const note = line.note.trim();
+      const reason = kind === 'WASTE' ? line.reason : null;
+      inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: kind, quantityMilli: -stockMilli, reason: null, note, createdBy: user.id, createdAt: now, wasteId: eventId, ...(reason ? { wasteReason: reason } : {}), cost });
+      return {
+        ingredientId: ingredient.id,
+        itemKind: cooked ? 'COOKED' : 'STOCK',
+        // Each way it was typed, with the size of that unit as it is now (a later packing edit changes nothing)
+        parts: line.parts.map((p) => {
+          const option = findBuyOption(ingredient, p.unitKey)!;
+          return { unitKey: option.key, unit: option.unit, unitSizeMilli: option.sizeMilli, quantityMilli: p.quantityMilli! };
+        }),
+        stockMilli,
+        reason,
+        note,
+        cost,
+        costBasis: cooked ? (price?.basis ?? 'RECIPE') : 'PURCHASE_PRICE',
+        pricePaisa: cooked ? (price?.paisa ?? null) : (valued?.pricePaisa ?? null),
+        priceUnitMilli: cooked ? (price?.perMilli ?? null) : (valued?.priceUnitMilli ?? null),
+        beforeMilli,
+        afterMilli: beforeMilli - stockMilli,
+        movementId,
+      };
+    });
+    const event: WasteEvent = {
+      id: eventId,
+      ...scope,
+      at: new Date(input.at).toISOString(),
+      businessDate: wasteBusinessDate(input.at, data.branch.timezone, data.branch.businessDayStart),
+      stage: input.stage,
+      kind,
+      source: 'RECORD',
+      lines,
+      note: input.note.trim(),
+      status: 'POSTED',
+      createdBy: user.id,
+      createdAt: now,
+      approvedBy: user.id,
+      ...extra,
+    };
+    (inv.wasteEvents ??= []).push(event);
+    return event;
+  }
+
+  /** Throws the first problem of an incident with the item's name (checked against the stock as it is now). */
+  private checkStockWaste(data: DemoData, input: StockWasteInput): void {
+    const inv = data.inventory;
+    const problem = checkWaste(input, inv.ingredients, (id) => onHandOf(id, inv.movements), Date.now());
+    if (!problem) return;
+    const name = problem.line === null ? '' : (inv.ingredients.find((i) => i.id === input.lines[problem.line!]?.ingredientId)?.name ?? '');
+    throw new ApiError('VALIDATION', (name ? `${name}: ` : '') + WASTE_MESSAGES[problem.problem]);
+  }
+
+  /** Puts a posted event's stock back by one WASTE_REVERSAL movement per line and marks the event REVERSED (never edited otherwise). */
+  private writeReversal(data: DemoData, event: WasteEvent, reason: string, user: StaffUser): void {
+    const problem = checkReverse(event, reason);
+    if (problem) throw new ApiError(problem === 'NOT_POSTED' ? 'CONFLICT' : 'VALIDATION', REVERSE_MESSAGES[problem]);
+    const at = nowIso();
+    const movementIds = event.lines.flatMap((line) => {
+      if (!line.ingredientId || line.stockMilli <= 0) return [];
+      const id = newId();
+      data.inventory.movements.push({ id, restaurantId: event.restaurantId, branchId: event.branchId, ingredientId: line.ingredientId, type: 'WASTE_REVERSAL', quantityMilli: line.stockMilli, reason: null, note: reason.trim(), createdBy: user.id, createdAt: at, wasteId: event.id, cost: line.cost });
+      return [id];
+    });
+    event.status = 'REVERSED';
+    event.reversal = { by: user.id, at, reason: reason.trim(), movementIds, correctedById: null };
+  }
+
+  reverseStockWaste(eventId: string, reason: string): Promise<WasteEvent> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        this.requireOwnerOrManager(user);
+        const event = (data.inventory.wasteEvents ?? []).find((e) => e.id === eventId);
+        if (!event) throw new ApiError('NOT_FOUND', 'This entry was not found.');
+        this.writeReversal(data, event, reason, user);
+        return event;
+      }),
+    );
+  }
+
+  /**
+   * W2: a correction in one change: the old event is reversed (its stock back), then the new one is checked against that stock
+   * and posted with a link both ways. Nothing is written when either fails; a retry with the same key returns the new event.
+   */
+  correctStockWaste(eventId: string, reason: string, input: StockWasteInput): Promise<WasteEvent> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        this.requireOwnerOrManager(user);
+        const inv = data.inventory;
+        const key = 'stock-waste:' + input.idempotencyKey;
+        const done = data.idempotency[key];
+        const first = done ? (inv.wasteEvents ?? []).find((e) => e.id === done) : undefined;
+        if (first) return first;
+        const old = (inv.wasteEvents ?? []).find((e) => e.id === eventId);
+        if (!old) throw new ApiError('NOT_FOUND', 'This entry was not found.');
+        this.writeReversal(data, old, reason, user);
+        this.checkStockWaste(data, input);
+        const event = this.writeStockWaste(data, input, user, { correctsId: old.id });
+        old.reversal!.correctedById = event.id;
+        data.idempotency[key] = event.id;
+        return event;
+      }),
+    );
+  }
+
+  /**
+   * W1: one waste incident in one change: one movement per line with the event and the reason on it, the loss kept on the
+   * line and the movement (null = no price), and the event itself. A double tap or retry with the same key returns the first
+   * event. Every line is checked first: nothing is written while one line is wrong. W2: cooked stock, Staff meal and Donation
+   * (those two by the Owner or a Manager only).
    */
   postStockWaste(input: StockWasteInput): Promise<WasteEvent> {
     return this.request(() =>
       this.store.update((data) => {
         const user = this.require(data, 'inventory.manage');
+        if ((input.kind ?? 'WASTE') !== 'WASTE') this.requireOwnerOrManager(user);
         const inv = data.inventory;
         const key = 'stock-waste:' + input.idempotencyKey;
         const done = data.idempotency[key];
@@ -2907,55 +3081,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
           const first = (inv.wasteEvents ?? []).find((e) => e.id === done);
           if (first) return first;
         }
-        const onHand = (id: string) => onHandOf(id, inv.movements);
-        const problem = checkWaste(input, inv.ingredients, onHand, Date.now());
-        if (problem) {
-          const name = problem.line === null ? '' : (inv.ingredients.find((i) => i.id === input.lines[problem.line!]?.ingredientId)?.name ?? '');
-          throw new ApiError('VALIDATION', (name ? `${name}: ` : '') + WASTE_MESSAGES[problem.problem]);
-        }
-        const now = nowIso();
-        const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
-        const eventId = newId();
-        const lines = input.lines.map((line) => {
-          const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId)!;
-          const stockMilli = wasteStockMilli(line.parts, ingredient)!;
-          const valued = wasteCost(ingredient, stockMilli);
-          const beforeMilli = onHand(ingredient.id);
-          const movementId = newId();
-          const note = line.note.trim();
-          inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: 'WASTE', quantityMilli: -stockMilli, reason: null, note, createdBy: user.id, createdAt: now, wasteId: eventId, wasteReason: line.reason!, cost: valued?.cost ?? null });
-          return {
-            ingredientId: ingredient.id,
-            // Each way it was typed, with the size of that unit as it is now (a later packing edit changes nothing)
-            parts: line.parts.map((p) => {
-              const option = findBuyOption(ingredient, p.unitKey)!;
-              return { unitKey: option.key, unit: option.unit, unitSizeMilli: option.sizeMilli, quantityMilli: p.quantityMilli! };
-            }),
-            stockMilli,
-            reason: line.reason!,
-            note,
-            cost: valued?.cost ?? null,
-            pricePaisa: valued?.pricePaisa ?? null,
-            priceUnitMilli: valued?.priceUnitMilli ?? null,
-            beforeMilli,
-            afterMilli: beforeMilli - stockMilli,
-            movementId,
-          };
-        });
-        const event: WasteEvent = {
-          id: eventId,
-          ...scope,
-          at: new Date(input.at).toISOString(),
-          businessDate: wasteBusinessDate(input.at, data.branch.timezone, data.branch.businessDayStart),
-          stage: input.stage,
-          lines,
-          note: input.note.trim(),
-          status: 'POSTED',
-          createdBy: user.id,
-          createdAt: now,
-          approvedBy: user.id,
-        };
-        (inv.wasteEvents ??= []).push(event);
+        this.checkStockWaste(data, input);
+        const event = this.writeStockWaste(data, input, user);
         data.idempotency[key] = event.id;
         return event;
       }),
@@ -3877,8 +4004,47 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return food;
   }
 
+  /**
+   * Order food that left without a sale. Kept in the Available Food list and, from W2, as a waste event of the same Waste Log
+   * (wastage or staff meal) with one ORDER_FOOD line and NO stock movement: its stock left once, at the kitchen's Ready. The
+   * callers write it once (a cancelled line's outcome is chosen once; Available Food is closed once, remaining → 0).
+   */
   private recordWaste(data: DemoData, waste: Omit<FoodWaste, 'id' | 'restaurantId' | 'branchId' | 'createdBy' | 'createdAt'>, userId: string, at: string): void {
-    (data.inventory.foodWaste ??= []).push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ...waste, createdBy: userId, createdAt: at });
+    const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+    (data.inventory.foodWaste ??= []).push({ id: newId(), ...scope, ...waste, createdBy: userId, createdAt: at });
+    const fromAvailable = waste.availableId !== null;
+    (data.inventory.wasteEvents ??= []).push({
+      id: newId(),
+      ...scope,
+      at,
+      businessDate: wasteBusinessDate(at, data.branch.timezone, data.branch.businessDayStart),
+      stage: fromAvailable ? 'HOLDING' : 'CANCELLED_ORDER',
+      kind: waste.kind,
+      source: fromAvailable ? 'AVAILABLE_FOOD' : 'ORDER_CANCEL',
+      lines: [
+        {
+          ingredientId: null,
+          itemKind: 'ORDER_FOOD',
+          orderFood: { menuItemId: waste.menuItemId, name: waste.name, variantName: waste.variantName, quantity: waste.quantity, unit: waste.unit, orderId: waste.orderId, dailyNumber: waste.dailyNumber, availableId: waste.availableId },
+          parts: [],
+          stockMilli: 0,
+          reason: waste.kind === 'WASTE' ? (fromAvailable ? 'CLOSING_DISCARD' : 'CANCELLED_DISCARD') : null,
+          note: waste.reason,
+          cost: waste.cost,
+          costBasis: 'ORDER',
+          pricePaisa: null,
+          priceUnitMilli: null,
+          beforeMilli: 0,
+          afterMilli: 0,
+          movementId: null,
+        },
+      ],
+      note: '',
+      status: 'POSTED',
+      createdBy: userId,
+      createdAt: at,
+      approvedBy: userId,
+    });
   }
 
   /** The date the closing review is due for (food still left), or null. */

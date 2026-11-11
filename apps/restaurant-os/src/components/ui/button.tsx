@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'ghost';
-type Size = 'md' | 'lg';
+type Size = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<Variant, string> = {
   primary: 'bg-brand bg-brand-gradient text-white shadow-brand hover:brightness-105 disabled:bg-none disabled:bg-brand/50 disabled:shadow-none',
@@ -11,8 +11,9 @@ const VARIANTS: Record<Variant, string> = {
   ghost: 'text-slate-700 hover:bg-slate-100 disabled:text-slate-400',
 };
 
-/** Touch targets are at least 48 px high (MASTER_PROMPT.md §11). */
+/** Touch targets are at least 48 px high (MASTER_PROMPT.md §11); 'sm' (40 px, 44 px on touch screens) is for dense management lists. */
 const SIZES: Record<Size, string> = {
+  sm: 'min-h-10 px-3 text-sm pointer-coarse:min-h-11',
   md: 'min-h-12 px-4 text-sm',
   lg: 'min-h-14 px-6 text-base',
 };

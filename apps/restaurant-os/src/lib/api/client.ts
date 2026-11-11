@@ -67,6 +67,7 @@ import type {
   KhataEntry,
   StockLedgerQuery,
   StockLedgerView,
+  WasteKind,
   WasteLineInput,
   WasteStage,
   WasteView,
@@ -576,10 +577,12 @@ export interface StockAdjustInput {
   idempotencyKey: string;
 }
 
-/** W1: one waste incident of raw ingredients and packaging (Owner / Manager post it at once). */
+/** W1: one waste incident of raw ingredients and packaging (Owner / Manager post it at once); W2: also cooked stock, staff meals and donations. */
 export interface StockWasteInput {
   /** When it happened (ISO); not in the future, at most 7 days back */
   at: string;
+  /** W2: missing = WASTE; Staff meal and Donation are Owner / Manager only */
+  kind?: WasteKind;
   stage: WasteStage;
   lines: WasteLineInput[];
   note: string;
@@ -788,6 +791,10 @@ export interface ApiClient {
   getWasteView(): Promise<WasteView>;
   /** W1: post one waste incident: one WASTE movement per line, all or none, once per key (Owner / Manager) */
   postStockWaste(input: StockWasteInput): Promise<WasteEvent>;
+  /** W2: reverse a posted event with a reason: its stock comes back by linked movements, the event stays as REVERSED (Owner / Manager) */
+  reverseStockWaste(eventId: Uuid, reason: string): Promise<WasteEvent>;
+  /** W2: correct = reverse the old event and post the new one in one change, both linked (Owner / Manager) */
+  correctStockWaste(eventId: Uuid, reason: string, input: StockWasteInput): Promise<WasteEvent>;
   /** Recipes & Food Cost (Step B): every menu size, add-on and prepared item with its current recipe and food cost. */
   getRecipes(): Promise<RecipesView>;
   /**

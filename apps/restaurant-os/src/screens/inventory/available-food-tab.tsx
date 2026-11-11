@@ -6,7 +6,7 @@ import { WASTE_REASONS, formatPaisa, formatQuantity, type AvailableFood } from '
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
+import { ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { t } from '@/i18n';
 import { getApi, type AvailableFoodRow } from '@/lib/api';
@@ -42,16 +42,22 @@ export function AvailableFoodTab({ canManage }: { canManage: boolean }) {
   };
 
   return (
-    <div className="space-y-4" data-available-food-tab>
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-900">
-          <PackageCheck className="size-5 text-green-700" aria-hidden />
-          {t('food.tabTitle')}
-        </h2>
-        <p className="mt-1 text-sm text-slate-600">{t('food.tabHint')}</p>
-        <p className="mt-1 text-xs font-semibold text-slate-500">{t('food.closingAt', { time: closingTime })}</p>
+    <div className="space-y-2.5" data-available-food-tab>
+      {/* A slim title with the closing time beside it; the explanation is one small line */}
+      <section>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="mr-auto flex items-center gap-2 text-lg font-extrabold text-slate-900">
+            <PackageCheck className="size-5 text-green-700" aria-hidden />
+            {t('food.tabTitle')}
+          </h2>
+          <p className="flex items-center gap-1 text-xs font-semibold text-slate-500">
+            <AlarmClock className="size-3.5" aria-hidden />
+            {t('food.closingAt', { time: closingTime })}
+          </p>
+        </div>
+        <p className="text-xs text-slate-500">{t('food.tabHint')}</p>
         {reviewDue && open.length > 0 && (
-          <p className="mt-3 flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-800" role="status" data-closing-review>
+          <p className="mt-2 flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-800" role="status" data-closing-review>
             <AlarmClock className="size-4 shrink-0" aria-hidden />
             {t('food.reviewDue', { n: open.length })}
           </p>
@@ -59,15 +65,18 @@ export function AvailableFoodTab({ canManage }: { canManage: boolean }) {
       </section>
 
       {rows.length === 0 ? (
-        <EmptyState title={t('food.none')}>{t('food.noneBody')}</EmptyState>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-5 text-center">
+          <p className="text-sm font-bold text-slate-800">{t('food.none')}</p>
+          <p className="text-xs text-slate-500">{t('food.noneBody')}</p>
+        </div>
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {rows.map((row) => {
             const { food, state } = row;
             return (
               <li
                 key={food.id}
-                className={cn('rounded-2xl border bg-white p-3 shadow-sm', state === 'TIME_OVER' ? 'border-red-300' : state === 'AVAILABLE' ? 'border-green-300' : 'border-slate-200 opacity-80')}
+                className={cn('rounded-xl border bg-white p-3', state === 'TIME_OVER' ? 'border-red-300' : state === 'AVAILABLE' ? 'border-green-300' : 'border-slate-200 opacity-80')}
                 data-available-food={label(food)}
                 data-state={state}
               >
@@ -106,14 +115,14 @@ export function AvailableFoodTab({ canManage }: { canManage: boolean }) {
                 {canManage && food.remaining > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {row.overnight && (
-                      <Button variant="outline" onClick={() => void keep(row)}>
+                      <Button size="sm" variant="outline" onClick={() => void keep(row)}>
                         {t('food.keepTomorrow')}
                       </Button>
                     )}
-                    <Button variant="secondary" onClick={() => setClosing({ row, kind: 'STAFF_MEAL' })}>
+                    <Button size="sm" variant="secondary" onClick={() => setClosing({ row, kind: 'STAFF_MEAL' })}>
                       {t('food.staffMeal')}
                     </Button>
-                    <Button variant="secondary" className="text-red-700" onClick={() => setClosing({ row, kind: 'WASTE' })}>
+                    <Button size="sm" variant="secondary" className="text-red-700" onClick={() => setClosing({ row, kind: 'WASTE' })}>
                       {t('food.WASTE')}
                     </Button>
                   </div>
@@ -124,10 +133,10 @@ export function AvailableFoodTab({ canManage }: { canManage: boolean }) {
         </ul>
       )}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-food-waste>
-        <h3 className="font-extrabold text-slate-900">{t('food.wasteToday')}</h3>
+      <section className="rounded-xl border border-slate-200 bg-white px-3 py-2.5" data-food-waste>
+        <h3 className="text-sm font-extrabold text-slate-900">{t('food.wasteToday')}</h3>
         {waste.length === 0 ? (
-          <p className="mt-1 text-sm text-slate-500">{t('food.noWaste')}</p>
+          <p className="text-xs text-slate-500">{t('food.noWaste')}</p>
         ) : (
           <ul className="mt-2 divide-y divide-slate-100 text-sm">
             {waste.map((w) => (

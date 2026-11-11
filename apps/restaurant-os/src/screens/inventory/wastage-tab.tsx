@@ -1,20 +1,26 @@
 'use client';
 
 import { useState } from 'react';
-import { CalendarClock, Clock3, Plus, Trash2, TriangleAlert, X } from 'lucide-react';
+import { CalendarClock, Clock3, PencilLine, Plus, RotateCcw, Trash2, TriangleAlert, X } from 'lucide-react';
 import {
-  RAW_WASTE_REASONS,
-  RAW_WASTE_STAGES,
+  STOCK_WASTE_STAGES,
+  WASTE_KINDS,
   buyOptions,
   checkWaste,
+  cookedWasteCost,
   formatMilli,
   formatPaisa,
+  kindOf,
   parseQuantity,
   wasteCost,
+  wasteReasonsFor,
   wasteStockMilli,
+  type CookedPrice,
   type IngredientRow,
   type InventoryView,
   type StockWasteReason,
+  type WasteEvent,
+  type WasteKind,
   type WasteLogRow,
   type WasteStage,
 } from '@restaurant-saas/shared';
@@ -29,6 +35,7 @@ import { getApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { newId } from '@/lib/new-id';
+import { useSession } from '@/lib/session';
 import { expiryLabel, stockText, unitLabel, whenText } from './inventory-format';
 import { optionLabel } from './purchase-bill';
 
@@ -37,18 +44,23 @@ type Section = 'log' | 'soon' | 'expired' | 'pending';
 /**
  * Stock → Wastage & Expiry (owner's Prompt 1, step W1, 2026-11-11): Record Waste for raw ingredients and packaging, the Waste Log,
  * four small cards and the expiring / expired ingredients. Expiry is still one date per ingredient until every delivery gets its
- * own (W3); prepared food, staff requests and approval follow in W2 and W4. Owner / Manager post.
+ * own (W3); staff requests and approval follow in W4. Owner / Manager post. W2: cooked stock, Staff meal and Donation (counted
+ * apart), order food from Available Food in the same log, and Reverse / Correct (Owner / Manager, a reason, nothing deleted).
  */
 export function WastageTab({ view, canManage }: { view: InventoryView; canManage: boolean }) {
   const waste = useApiQuery(() => getApi().getWasteView(), []);
+  const { data: session } = useSession();
+  const role = session?.user.role;
+  const ownerOrManager = canManage && (role === 'OWNER' || role === 'MANAGER');
   const [section, setSection] = useState<Section>('log');
-  const [recording, setRecording] = useState<{ row: IngredientRow | null; reason: StockWasteReason | null } | null>(null);
+  const [recording, setRecording] = useState<{ row: IngredientRow | null; reason: StockWasteReason | null; correct?: WasteEvent } | null>(null);
+  const [reversing, setReversing] = useState<WasteEvent | null>(null);
   const soon = view.ingredients.filter((r) => r.status !== 'NOT_IN_USE' && r.expiry === 'SOON');
   const expired = view.ingredients.filter((r) => r.status !== 'NOT_IN_USE' && r.expiry === 'EXPIRED');
 
   if (waste.loading && !waste.data) return <LoadingState />;
   if (!waste.data) return <ErrorState message={waste.error?.message} onRetry={waste.reload} />;
-  const { summary, rows, total, limit } = waste.data;
+  const { summary, meals, donations, cookedPrices, rows, total, limit } = waste.data;
 
   const unknownHint = (n: number) => (n > 0 ? ` · ${t('inventory.waste.unknownCount', { n })}` : '');
   const tab = (key: Section, label: string, count?: number) => (
@@ -59,24 +71,24 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
       aria-selected={section === key}
       onClick={() => setSection(key)}
       className={cn(
-        'press flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-bold',
-        section === key ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-brand-soft/50',
+        'press flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-bold pointer-coarse:min-h-10',
+        section === key ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white text-slate-700 hover:border-brand/40',
       )}
     >
       {label}
-      {count !== undefined && <span className={cn('rounded-full px-1.5 text-xs tabular-nums', section === key ? 'bg-white/20' : 'bg-slate-100 text-slate-600')}>{count}</span>}
+      {count !== undefined && <span className={cn('rounded-full px-1.5 text-xs tabular-nums', section === key ? 'bg-white text-brand' : 'bg-slate-100 text-slate-600')}>{count}</span>}
     </button>
   );
 
   return (
-    <div className="space-y-3" data-wastage>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="mr-auto min-w-0">
+    <div className="space-y-2.5" data-wastage>
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
           <h2 className="text-lg font-extrabold text-slate-900">{t('inventory.waste.title')}</h2>
-          <p className="text-sm text-slate-500">{t('inventory.waste.subtitle')}</p>
+          <p className="text-xs text-slate-500">{t('inventory.waste.subtitle')}</p>
         </div>
         {canManage && (
-          <Button onClick={() => setRecording({ row: null, reason: null })}>
+          <Button size="sm" className="shrink-0" onClick={() => setRecording({ row: null, reason: null })}>
             <Trash2 className="size-4" aria-hidden />
             {t('inventory.waste.record')}
           </Button>
@@ -95,15 +107,27 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
         />
         <SmallCard label={t('inventory.waste.cards.pending')} value="—" hint={t('inventory.waste.pendingLater')} />
       </div>
+      <p className="px-1 text-xs font-semibold text-slate-500" data-waste-apart>
+        {t('inventory.waste.otherTotals', { meals: formatPaisa(meals.todayCost), mealLines: meals.todayLines, donations: formatPaisa(donations.todayCost), donationLines: donations.todayLines })}
+      </p>
 
-      <div role="tablist" aria-label={t('inventory.waste.title')} className="flex gap-2 overflow-x-auto pb-1">
+      <div role="tablist" aria-label={t('inventory.waste.title')} className="flex gap-1.5 overflow-x-auto pb-0.5">
         {tab('log', t('inventory.waste.tabs.log'), total)}
         {tab('soon', t('inventory.waste.tabs.soon'), soon.length)}
         {tab('expired', t('inventory.waste.tabs.expired'), expired.length)}
         {tab('pending', t('inventory.waste.tabs.pending'))}
       </div>
 
-      {section === 'log' && <WasteLog rows={rows} total={total} limit={limit} />}
+      {section === 'log' && (
+        <WasteLog
+          rows={rows}
+          total={total}
+          limit={limit}
+          canFix={ownerOrManager}
+          onReverse={setReversing}
+          onCorrect={(event) => setRecording({ row: null, reason: null, correct: event })}
+        />
+      )}
       {(section === 'soon' || section === 'expired') && (
         <ExpiryList
           rows={section === 'soon' ? soon : expired}
@@ -119,8 +143,19 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
         </Card>
       )}
 
-      <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{t('inventory.waste.demoNote')}</p>
-      {recording && <RecordWasteDialog view={view} first={recording.row} reason={recording.reason} onClose={() => setRecording(null)} />}
+      <p className="px-1 text-xs font-semibold text-amber-800">{t('inventory.waste.demoNote')}</p>
+      {recording && (
+        <RecordWasteDialog
+          view={view}
+          first={recording.row}
+          reason={recording.reason}
+          correct={recording.correct ?? null}
+          cookedPrices={cookedPrices}
+          canChooseKind={ownerOrManager}
+          onClose={() => setRecording(null)}
+        />
+      )}
+      {reversing && <ReverseDialog event={reversing} onClose={() => setReversing(null)} />}
     </div>
   );
 }
@@ -128,12 +163,12 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
 function SmallCard({ label, value, hint, tone, alert = false, onClick }: { label: string; value: string; hint: string; tone?: 'brand'; alert?: boolean; onClick?: () => void }) {
   const body = (
     <>
-      <span className="block text-xs font-bold text-slate-600">{label}</span>
-      <span className={cn('block text-xl font-black tabular-nums', tone === 'brand' ? 'text-brand' : 'text-slate-900')}>{value}</span>
-      <span className={cn('block text-xs', alert ? 'font-bold text-red-700' : 'text-slate-500')}>{hint}</span>
+      <span className="block text-xs font-bold text-slate-500">{label}</span>
+      <span className={cn('block text-lg font-black leading-tight tabular-nums', tone === 'brand' ? 'text-brand' : 'text-slate-900')}>{value}</span>
+      <span className={cn('block text-[11px]', alert ? 'font-bold text-red-700' : 'text-slate-500')}>{hint}</span>
     </>
   );
-  const box = 'rounded-2xl border border-slate-200/80 bg-white p-3 text-left shadow-sm';
+  const box = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-left';
   return onClick ? (
     <button type="button" onClick={onClick} className={cn(box, 'press hover:border-brand/40')} data-waste-card={label}>
       {body}
@@ -154,9 +189,84 @@ function lossText(cost: number | null): string {
   return cost === null ? t('inventory.waste.unknown') : formatPaisa(cost);
 }
 
-function WasteLog({ rows, total, limit }: { rows: WasteLogRow[]; total: number; limit: number }) {
+/** Quantity of a line: "−2 litres", or "2 portion(s)" for order food */
+function quantityText(row: WasteLogRow): string {
+  const food = row.line.orderFood;
+  if (food) return t('inventory.waste.portions', { n: food.quantity });
+  return `−${stockText({ purchaseUnit: row.purchaseUnit, stockUnit: row.stockUnit }, row.line.stockMilli)}`;
+}
+
+/** Why: the reason (waste) or the kind (staff meal, donation), and where */
+function whyText(row: WasteLogRow): string {
+  const kind = kindOf(row.event);
+  const why = kind === 'WASTE' && row.line.reason ? t(`inventory.waste.reasons.${row.line.reason}`) : t(`inventory.waste.kinds.${kind}`);
+  return `${why} · ${t(`inventory.waste.stages.${row.event.stage}`)}`;
+}
+
+/** Badges: Staff meal / Donation, Cooked / Order food, Correction, Reversed */
+function RowBadges({ row }: { row: WasteLogRow }) {
+  const kind = kindOf(row.event);
+  return (
+    <span className="mt-0.5 flex flex-wrap gap-1">
+      {kind !== 'WASTE' && <Badge tone="amber">{t(`inventory.waste.kinds.${kind}`)}</Badge>}
+      {row.line.itemKind === 'COOKED' && <Badge tone="dark">{t('inventory.waste.cooked')}</Badge>}
+      {row.line.orderFood && <Badge tone="dark">{t('inventory.waste.orderFood')}</Badge>}
+      {row.event.correctsId && <Badge tone="dark">{t('inventory.waste.correctionOf')}</Badge>}
+      {row.event.status === 'REVERSED' && <Badge tone="red">{t('inventory.waste.reversed')}</Badge>}
+    </span>
+  );
+}
+
+/** Under the item: the order, how the cost was found, who reversed it and why */
+function RowDetails({ row }: { row: WasteLogRow }) {
+  const food = row.line.orderFood;
+  const basis = row.line.costBasis;
+  return (
+    <>
+      {food?.dailyNumber != null && <span className="block text-xs text-slate-500">{t('inventory.waste.orderOf', { n: food.dailyNumber })}</span>}
+      {food && <span className="block text-xs text-slate-500">{t('inventory.waste.noStockMove')}</span>}
+      {basis && basis !== 'PURCHASE_PRICE' && row.line.cost !== null && <span className="block text-xs text-slate-500">{t(`inventory.waste.basis.${basis}`)}</span>}
+      {row.event.reversal && <span className="block text-xs font-semibold text-red-700">{t('inventory.waste.reversedBy', { name: row.reversedByName ?? '—', reason: row.event.reversal.reason })}</span>}
+    </>
+  );
+}
+
+function FixButtons({ row, onReverse, onCorrect }: { row: WasteLogRow; onReverse: (e: WasteEvent) => void; onCorrect: (e: WasteEvent) => void }) {
+  if (!row.first || row.event.status !== 'POSTED' || row.line.orderFood) return null;
+  const name = row.ingredientName;
+  return (
+    <span className="mt-1 flex flex-wrap gap-1">
+      <button type="button" onClick={() => onReverse(row.event)} aria-label={`${t('inventory.waste.reverse')} ${name}`} className="press inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 px-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+        <RotateCcw className="size-3.5" aria-hidden />
+        {t('inventory.waste.reverse')}
+      </button>
+      <button type="button" onClick={() => onCorrect(row.event)} aria-label={`${t('inventory.waste.correct')} ${name}`} className="press inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 px-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+        <PencilLine className="size-3.5" aria-hidden />
+        {t('inventory.waste.correct')}
+      </button>
+    </span>
+  );
+}
+
+function WasteLog({
+  rows,
+  total,
+  limit,
+  canFix,
+  onReverse,
+  onCorrect,
+}: {
+  rows: WasteLogRow[];
+  total: number;
+  limit: number;
+  canFix: boolean;
+  onReverse: (e: WasteEvent) => void;
+  onCorrect: (e: WasteEvent) => void;
+}) {
   if (rows.length === 0) return <Card className="p-6 text-center text-sm text-slate-500">{t('inventory.waste.empty')}</Card>;
   const units = (row: WasteLogRow) => ({ purchaseUnit: row.purchaseUnit, stockUnit: row.stockUnit });
+  const keyOf = (row: WasteLogRow) => row.line.movementId ?? `${row.event.id}-${row.ingredientName}`;
+  const faded = (row: WasteLogRow) => (row.event.status === 'REVERSED' ? 'opacity-60' : undefined);
   return (
     <>
       <Card className="hidden overflow-x-auto md:block">
@@ -173,20 +283,27 @@ function WasteLog({ rows, total, limit }: { rows: WasteLogRow[]; total: number; 
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.map((row) => (
-              <tr key={row.line.movementId} data-waste-row={row.ingredientName}>
+              <tr key={keyOf(row)} data-waste-row={row.ingredientName} data-waste-status={row.event.status} className={faded(row)}>
                 <td className="px-3 py-2 whitespace-nowrap text-slate-600">{whenText(row.event.at)}</td>
-                <td className="px-3 py-2 font-bold text-slate-900">{row.ingredientName}</td>
+                <td className="px-3 py-2">
+                  <span className="block font-bold text-slate-900">{row.ingredientName}</span>
+                  <RowBadges row={row} />
+                  <RowDetails row={row} />
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums">
-                  <span className="block font-bold text-brand">−{stockText(units(row), row.line.stockMilli)}</span>
-                  {(row.line.parts.length > 1 || row.line.parts[0]?.unitKey !== 'main') && <span className="block text-xs text-slate-500">{partsText(row)}</span>}
-                  <span className="block text-xs text-slate-500">{t('inventory.waste.beforeAfter', { before: stockText(units(row), row.line.beforeMilli), after: stockText(units(row), row.line.afterMilli) })}</span>
+                  <span className="block font-bold text-brand">{quantityText(row)}</span>
+                  {!row.line.orderFood && (row.line.parts.length > 1 || row.line.parts[0]?.unitKey !== 'main') && <span className="block text-xs text-slate-500">{partsText(row)}</span>}
+                  {!row.line.orderFood && <span className="block text-xs text-slate-500">{t('inventory.waste.beforeAfter', { before: stockText(units(row), row.line.beforeMilli), after: stockText(units(row), row.line.afterMilli) })}</span>}
                 </td>
                 <td className="px-3 py-2">
-                  {t(`inventory.waste.reasons.${row.line.reason}`)} <span className="text-xs text-slate-500">· {t(`inventory.waste.stages.${row.event.stage}`)}</span>
+                  {whyText(row)}
                   {row.line.note && <span className="block text-xs text-slate-500">{row.line.note}</span>}
                 </td>
                 <td className={cn('px-3 py-2 text-right font-bold tabular-nums', row.line.cost === null ? 'text-amber-700' : 'text-slate-900')}>{lossText(row.line.cost)}</td>
-                <td className="px-3 py-2 text-slate-600">{row.byName ?? '—'}</td>
+                <td className="px-3 py-2 text-slate-600">
+                  {row.byName ?? '—'}
+                  {canFix && <FixButtons row={row} onReverse={onReverse} onCorrect={onCorrect} />}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -194,16 +311,19 @@ function WasteLog({ rows, total, limit }: { rows: WasteLogRow[]; total: number; 
       </Card>
       <ul className="space-y-2 md:hidden" data-waste-log-cards>
         {rows.map((row) => (
-          <li key={row.line.movementId}>
-            <Card className="p-3 text-sm" data-waste-row={row.ingredientName}>
+          <li key={keyOf(row)}>
+            <Card className={cn('p-3 text-sm', faded(row))} data-waste-row={row.ingredientName} data-waste-status={row.event.status}>
               <p className="flex items-start justify-between gap-2">
                 <span className="font-bold text-slate-900">{row.ingredientName}</span>
                 <span className={cn('font-black tabular-nums', row.line.cost === null ? 'text-amber-700' : 'text-slate-900')}>{lossText(row.line.cost)}</span>
               </p>
-              <p className="font-bold text-brand">−{stockText(units(row), row.line.stockMilli)}</p>
+              <RowBadges row={row} />
+              <p className="font-bold text-brand">{quantityText(row)}</p>
               <p className="text-xs text-slate-500">
-                {t(`inventory.waste.reasons.${row.line.reason}`)} · {t(`inventory.waste.stages.${row.event.stage}`)} · {whenText(row.event.at)} · {row.byName ?? '—'}
+                {whyText(row)} · {whenText(row.event.at)} · {row.byName ?? '—'}
               </p>
+              <RowDetails row={row} />
+              {canFix && <FixButtons row={row} onReverse={onReverse} onCorrect={onCorrect} />}
             </Card>
           </li>
         ))}
@@ -213,28 +333,80 @@ function WasteLog({ rows, total, limit }: { rows: WasteLogRow[]; total: number; 
   );
 }
 
+/** W2: Reverse with a reason (Owner / Manager). The stock comes back by a linked movement; the entry stays as Reversed. */
+function ReverseDialog({ event, onClose }: { event: WasteEvent; onClose: () => void }) {
+  const toast = useToast();
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    if (!reason.trim()) return setError(t('inventory.waste.reverseErrors.REASON_REQUIRED'));
+    setBusy(true);
+    setError(null);
+    try {
+      await getApi().reverseStockWaste(event.id, reason);
+      toast.show({ tone: 'success', title: t('inventory.waste.reverseDone') });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('states.errorBody'));
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('inventory.waste.reverseTitle')}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('inventory.form.cancel')}
+          </Button>
+          <Button onClick={() => void save()} disabled={busy}>
+            <RotateCcw className="size-4" aria-hidden />
+            {t('inventory.waste.reverse')}
+          </Button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-slate-600">{t('inventory.waste.reverseBody')}</p>
+      <label className="block">
+        <span className="mb-1 block text-sm font-bold text-slate-900">{t('inventory.waste.reverseReason')}</span>
+        <input value={reason} onChange={(e) => (setReason(e.target.value), setError(null))} maxLength={140} placeholder={t('inventory.waste.reverseReasonPlaceholder')} className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base" />
+      </label>
+      {error && (
+        <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
+          {error}
+        </p>
+      )}
+    </Dialog>
+  );
+}
+
 function ExpiryList({ rows, empty, canManage, onRecord }: { rows: IngredientRow[]; empty: string; canManage: boolean; onRecord: (row: IngredientRow) => void }) {
   return (
-    <Card className="divide-y divide-slate-100" data-expiry-list>
-      {rows.length === 0 && <p className="p-4 text-sm text-slate-500">{empty}</p>}
+    <Card className="divide-y divide-slate-100 overflow-hidden rounded-xl" data-expiry-list>
+      {rows.length === 0 && <p className="px-3 py-2.5 text-sm text-slate-500">{empty}</p>}
       {rows.map((row) => {
         const label = expiryLabel(row.expiry, row.ingredient.expiryDate);
         return (
-          <div key={row.ingredient.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-sm" data-expiry-row={row.ingredient.name}>
-            <CalendarClock className="size-4 shrink-0 text-slate-400" aria-hidden />
+          <div key={row.ingredient.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1 text-sm hover:bg-brand-soft/30" data-expiry-row={row.ingredient.name}>
+            <CalendarClock className={cn('size-4 shrink-0', row.expiry === 'EXPIRED' ? 'text-red-600' : 'text-amber-600')} aria-hidden />
             <span className="min-w-0 flex-1 font-bold text-slate-900">{row.ingredient.name}</span>
-            <span className="tabular-nums text-slate-600">{stockText(row.ingredient, row.onHandMilli)}</span>
+            <span className="font-semibold tabular-nums text-slate-700">{stockText(row.ingredient, row.onHandMilli)}</span>
             {label.tone && <Badge tone={label.tone}>{label.text}</Badge>}
-            {canManage && row.onHandMilli > 0 && (
-              <Button variant="outline" onClick={() => onRecord(row)}>
-                <Trash2 className="size-4" aria-hidden />
+            {canManage && row.onHandMilli > 0 ? (
+              <button type="button" onClick={() => onRecord(row)} className="press inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-bold text-brand hover:bg-brand-soft pointer-coarse:min-h-10">
+                <Trash2 className="size-3.5" aria-hidden />
                 {t('inventory.waste.recordThis')}
-              </Button>
+              </button>
+            ) : (
+              <span className="min-h-9" aria-hidden />
             )}
           </div>
         );
       })}
-      <p className="px-3 py-2 text-xs text-slate-500">{t('inventory.waste.oneDate')}</p>
+      <p className="bg-slate-50/60 px-3 py-2 text-xs text-slate-500">{t('inventory.waste.oneDate')}</p>
     </Card>
   );
 }
@@ -256,32 +428,70 @@ function localInput(at: Date): string {
   return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
 
+/** The form lines of an event being corrected: same items, units, quantities, reasons and notes */
+function linesOf(event: WasteEvent): LineDraft[] {
+  return event.lines
+    .filter((l) => l.ingredientId)
+    .map((l) => ({
+      key: newId(),
+      ingredientId: l.ingredientId!,
+      parts: l.parts.map((p) => ({ key: newId(), unitKey: p.unitKey, quantity: String(p.quantityMilli / 1000) })),
+      reason: l.reason,
+      note: l.note,
+    }));
+}
+
 /**
- * One incident, several lines: item → quantity and unit (+ another unit) → reason → preview (in stock now → after, loss) →
- * Post waste. Raw ingredients and packaging only (W1); one key per form, so a double tap posts once.
+ * One incident, several lines: what happened (Waste / Staff meal / Donation) → item → quantity and unit (+ another unit) →
+ * reason → preview (in stock now → after, loss) → Post. Raw ingredients, packaging and cooked food; one key per form, so a
+ * double tap posts once. Correct opens it filled with the old entry and posts the new one in place of it.
  */
-function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryView; first: IngredientRow | null; reason: StockWasteReason | null; onClose: () => void }) {
+function RecordWasteDialog({
+  view,
+  first,
+  reason,
+  correct,
+  cookedPrices,
+  canChooseKind,
+  onClose,
+}: {
+  view: InventoryView;
+  first: IngredientRow | null;
+  reason: StockWasteReason | null;
+  correct: WasteEvent | null;
+  cookedPrices: Record<string, CookedPrice | null>;
+  canChooseKind: boolean;
+  onClose: () => void;
+}) {
   const toast = useToast();
   const items = view.ingredients.filter((r) => r.status !== 'NOT_IN_USE');
   const raw = items.filter((r) => r.ingredient.category !== 'PACKAGING');
   const packaging = items.filter((r) => r.ingredient.category === 'PACKAGING');
+  const cooked = view.cooked ?? [];
+  const all = [...items, ...cooked];
   // The latest time that may be typed: when the form opened (a later minute is checked again when posting)
   const [opened] = useState(() => localInput(new Date()));
-  const [at, setAt] = useState(opened);
-  const [stage, setStage] = useState<WasteStage>('STORAGE');
-  const [lines, setLines] = useState<LineDraft[]>(() => [lineDraft(first?.ingredient.id ?? '', reason)]);
-  const [note, setNote] = useState('');
+  const [at, setAt] = useState(() => (correct ? localInput(new Date(correct.at)) : opened));
+  const [kind, setKind] = useState<WasteKind>(correct ? kindOf(correct) : 'WASTE');
+  const [stage, setStage] = useState<WasteStage>(correct?.stage ?? 'STORAGE');
+  const [lines, setLines] = useState<LineDraft[]>(() => (correct ? linesOf(correct) : [lineDraft(first?.ingredient.id ?? '', reason)]));
+  const [note, setNote] = useState(correct?.note ?? '');
+  const [why, setWhy] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [idempotencyKey] = useState(() => newId());
 
-  const rowOf = (id: string) => items.find((r) => r.ingredient.id === id);
+  const rowOf = (id: string) => all.find((r) => r.ingredient.id === id);
+  // While correcting, the old entry's quantity counts as in stock again (the server puts it back first)
+  const back = (id: string) => (correct ? correct.lines.reduce((sum, l) => (l.ingredientId === id ? sum + l.stockMilli : sum), 0) : 0);
+  const stockOf = (id: string) => (rowOf(id)?.onHandMilli ?? 0) + back(id);
   const setLine = (key: string, change: (l: LineDraft) => LineDraft) => (setLines((all) => all.map((l) => (l.key === key ? change(l) : l))), setError(null));
-  const inputLines = lines.map((l) => ({ ingredientId: l.ingredientId, parts: l.parts.map((p) => ({ unitKey: p.unitKey, quantityMilli: parseQuantity(p.quantity, { allowZero: false }) })), reason: l.reason, note: l.note }));
+  const inputLines = lines.map((l) => ({ ingredientId: l.ingredientId, parts: l.parts.map((p) => ({ unitKey: p.unitKey, quantityMilli: parseQuantity(p.quantity, { allowZero: false }) })), reason: kind === 'WASTE' ? l.reason : null, note: l.note }));
+  const costOf = (row: IngredientRow, stockMilli: number) => (row.ingredient.kind === 'PREPARED' ? cookedWasteCost(cookedPrices[row.ingredient.id], stockMilli) : (wasteCost(row.ingredient, stockMilli)?.cost ?? null));
   const previews = lines.map((l, index) => {
     const row = rowOf(l.ingredientId);
     const stockMilli = row ? wasteStockMilli(inputLines[index]!.parts, row.ingredient) : null;
-    return { row, stockMilli, cost: row && stockMilli ? (wasteCost(row.ingredient, stockMilli)?.cost ?? null) : null };
+    return { row, stockMilli, cost: row && stockMilli ? costOf(row, stockMilli) : null };
   });
   const totalCost = previews.reduce((sum, p) => sum + (p.cost ?? 0), 0);
   const unknown = previews.filter((p) => p.row && p.stockMilli && p.cost === null).length;
@@ -289,21 +499,23 @@ function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryVi
   const save = async () => {
     const iso = new Date(at).toISOString();
     const problem = checkWaste(
-      { at: iso, stage, lines: inputLines, note },
-      items.map((r) => r.ingredient),
-      (id) => rowOf(id)?.onHandMilli ?? 0,
+      { at: iso, kind, stage, lines: inputLines, note },
+      all.map((r) => r.ingredient),
+      stockOf,
       clock(),
     );
     if (problem) {
       const name = problem.line === null ? '' : (rowOf(lines[problem.line]?.ingredientId ?? '')?.ingredient.name ?? t('inventory.waste.lineN', { n: problem.line + 1 }));
       return setError((name ? `${name}: ` : '') + t(`inventory.waste.errors.${problem.problem}`));
     }
+    if (correct && !why.trim()) return setError(t('inventory.waste.reverseErrors.REASON_REQUIRED'));
     setBusy(true);
     setError(null);
     try {
-      const event = await getApi().postStockWaste({ at: iso, stage, lines: inputLines, note, idempotencyKey });
+      const input = { at: iso, kind, stage, lines: inputLines, note, idempotencyKey };
+      const event = correct ? await getApi().correctStockWaste(correct.id, why, input) : await getApi().postStockWaste(input);
       const loss = event.lines.reduce((sum, l) => sum + (l.cost ?? 0), 0);
-      toast.show({ tone: 'success', title: t('inventory.waste.posted', { n: event.lines.length, loss: formatPaisa(loss) }) });
+      toast.show({ tone: 'success', title: correct ? t('inventory.waste.corrected') : t('inventory.waste.posted', { n: event.lines.length, loss: formatPaisa(loss) }) });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('states.errorBody'));
@@ -318,7 +530,7 @@ function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryVi
       open
       size="lg"
       onClose={onClose}
-      title={t('inventory.waste.record')}
+      title={correct ? t('inventory.waste.correctTitle') : t('inventory.waste.record')}
       footer={
         <>
           <span className="mr-auto text-sm font-bold text-slate-700" data-waste-total>
@@ -329,13 +541,33 @@ function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryVi
             {t('inventory.form.cancel')}
           </Button>
           <Button onClick={() => void save()} disabled={busy}>
-            <Trash2 className="size-4" aria-hidden />
-            {t('inventory.waste.post')}
+            {correct ? <PencilLine className="size-4" aria-hidden /> : <Trash2 className="size-4" aria-hidden />}
+            {correct ? t('inventory.waste.correct') : t('inventory.waste.post')}
           </Button>
         </>
       }
     >
       <div className="space-y-4" data-record-waste>
+        {canChooseKind && (
+          <div>
+            <span className="mb-1 block text-sm font-bold text-slate-900">{t('inventory.waste.kind')}</span>
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('inventory.waste.kind')}>
+              {WASTE_KINDS.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === k}
+                  onClick={() => (setKind(k), setError(null))}
+                  className={cn('press min-h-11 rounded-xl border px-3 text-sm font-semibold', kind === k ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
+                >
+                  {t(`inventory.waste.kinds.${k}`)}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{t(`inventory.waste.kindHint.${kind}`)}</p>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <span className={label}>{t('inventory.waste.when')}</span>
@@ -347,7 +579,7 @@ function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryVi
           <div>
             <span className={label}>{t('inventory.waste.stage')}</span>
             <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('inventory.waste.stage')}>
-              {RAW_WASTE_STAGES.map((s) => (
+              {STOCK_WASTE_STAGES.map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -368,7 +600,8 @@ function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryVi
             const { row, stockMilli, cost } = previews[index]!;
             const options = row ? buyOptions(row.ingredient) : [];
             const used = line.parts.map((p) => p.unitKey);
-            const after = row && stockMilli ? row.onHandMilli - stockMilli : null;
+            const inStock = row ? stockOf(row.ingredient.id) : 0;
+            const after = row && stockMilli ? inStock - stockMilli : null;
             return (
               <li key={line.key} className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50/60 p-3" data-waste-line={row?.ingredient.name ?? index + 1}>
                 <div className="flex items-center gap-2">
@@ -393,6 +626,15 @@ function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryVi
                         </option>
                       ))}
                     </optgroup>
+                    {cooked.length > 0 && (
+                      <optgroup label={t('inventory.waste.groups.cooked')}>
+                        {cooked.map((r) => (
+                          <option key={r.ingredient.id} value={r.ingredient.id} disabled={lines.some((l) => l.key !== line.key && l.ingredientId === r.ingredient.id)}>
+                            {r.ingredient.name} ({stockText(r.ingredient, r.onHandMilli)})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                   {lines.length > 1 && (
                     <button type="button" onClick={() => setLines((all) => all.filter((l) => l.key !== line.key))} aria-label={t('inventory.waste.removeLine', { n: index + 1 })} className="press grid size-11 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-white hover:text-red-700">
@@ -445,20 +687,22 @@ function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryVi
                       </button>
                     )}
 
-                    <select
-                      value={line.reason ?? ''}
-                      onChange={(e) => setLine(line.key, (l) => ({ ...l, reason: (e.target.value || null) as StockWasteReason | null }))}
-                      aria-label={t('inventory.waste.reasonOf', { name: row.ingredient.name })}
-                      className={field}
-                    >
-                      <option value="">{t('inventory.waste.chooseReason')}</option>
-                      {RAW_WASTE_REASONS.map((r) => (
-                        <option key={r} value={r}>
-                          {t(`inventory.waste.reasons.${r}`)}
-                        </option>
-                      ))}
-                    </select>
-                    {line.reason === 'OTHER' && (
+                    {kind === 'WASTE' && (
+                      <select
+                        value={line.reason ?? ''}
+                        onChange={(e) => setLine(line.key, (l) => ({ ...l, reason: (e.target.value || null) as StockWasteReason | null }))}
+                        aria-label={t('inventory.waste.reasonOf', { name: row.ingredient.name })}
+                        className={field}
+                      >
+                        <option value="">{t('inventory.waste.chooseReason')}</option>
+                        {wasteReasonsFor(row.ingredient.kind).map((r) => (
+                          <option key={r} value={r}>
+                            {t(`inventory.waste.reasons.${r}`)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {kind === 'WASTE' && line.reason === 'OTHER' && (
                       <input
                         value={line.note}
                         onChange={(e) => setLine(line.key, (l) => ({ ...l, note: e.target.value }))}
@@ -473,11 +717,17 @@ function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryVi
                       {stockMilli ? (
                         <>
                           {t('inventory.waste.preview', {
-                            before: stockText(row.ingredient, row.onHandMilli),
+                            before: stockText(row.ingredient, inStock),
                             after: after !== null && after < 0 ? `−${stockText(row.ingredient, -after)}` : stockText(row.ingredient, after ?? 0),
                             qty: stockText(row.ingredient, stockMilli),
                           })}
-                          <span className="block text-xs font-normal text-slate-500">{cost === null ? t('inventory.waste.lossUnknown') : t('inventory.waste.loss', { loss: formatPaisa(cost) })}</span>
+                          <span className="block text-xs font-normal text-slate-500">
+                            {cost === null
+                              ? t('inventory.waste.lossUnknown')
+                              : row.ingredient.kind === 'PREPARED'
+                                ? t('inventory.waste.cookedLossEstimate', { loss: formatPaisa(cost), basis: t(`inventory.waste.basis.${cookedPrices[row.ingredient.id]?.basis ?? 'RECIPE'}`) })
+                                : t('inventory.waste.loss', { loss: formatPaisa(cost) })}
+                          </span>
                           {after !== null && after < 0 && (
                             <span className="mt-1 flex items-center gap-1 text-xs font-bold">
                               <TriangleAlert className="size-3.5" aria-hidden />
@@ -486,7 +736,7 @@ function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryVi
                           )}
                         </>
                       ) : (
-                        t('inventory.waste.inStock', { qty: stockText(row.ingredient, row.onHandMilli) })
+                        t('inventory.waste.inStock', { qty: stockText(row.ingredient, inStock) })
                       )}
                     </p>
                   </>
@@ -506,6 +756,13 @@ function RecordWasteDialog({ view, first, reason, onClose }: { view: InventoryVi
           <span className={label}>{t('inventory.waste.note')}</span>
           <input value={note} onChange={(e) => (setNote(e.target.value), setError(null))} maxLength={140} placeholder={t('inventory.waste.notePlaceholder')} aria-label={t('inventory.waste.note')} className={field} />
         </label>
+        {correct && (
+          <label className="block">
+            <span className={label}>{t('inventory.waste.correctReason')}</span>
+            <input value={why} onChange={(e) => (setWhy(e.target.value), setError(null))} maxLength={140} placeholder={t('inventory.waste.reverseReasonPlaceholder')} aria-label={t('inventory.waste.correctReason')} className={field} />
+            <span className="mt-1 block text-xs text-slate-500">{t('inventory.waste.correctHint')}</span>
+          </label>
+        )}
         <p className="text-xs text-slate-500">{t('inventory.waste.hint')}</p>
         {error && (
           <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
