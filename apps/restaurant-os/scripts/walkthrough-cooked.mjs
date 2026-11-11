@@ -334,7 +334,7 @@ try {
   for (const name of COOKED) await card(owner, name).waitFor();
   await card(owner, 'Cooked Chana Pulao').waitFor();
   const upgraded = await saved(owner);
-  assert.equal(upgraded.version, 24);
+  assert.equal(upgraded.version, 25);
   assert.ok(upgraded.inventory.ingredients.some((i) => i.name === 'Daal masoor' && i.kind === 'BOUGHT'));
   assert.ok(upgraded.inventory.suppliers.find((s) => s.name === KIRYANA).productIds.includes(ING(81)), 'daal masoor joins the kiryana range');
   ok('version 21 → 22: cooked dishes, daal masoor, kali daal and beef qeema added; "Cooked Chana Pulao" kept');

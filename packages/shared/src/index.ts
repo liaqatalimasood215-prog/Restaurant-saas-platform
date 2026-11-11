@@ -30,3 +30,4 @@ export * from './suppliers';
 export * from './size-mix';
 export * from './wastage';
 export * from './lots';
+export * from './counts';

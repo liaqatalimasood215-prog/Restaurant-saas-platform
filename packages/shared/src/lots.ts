@@ -128,8 +128,8 @@ export interface LotLedger {
   overdrawn: Set<Uuid>;
 }
 
-/** Thrown away, or held for a waste report (W4): the expired stock first */
-const WASTE_TYPES = new Set(['WASTE', 'WASTE_HOLD']);
+/** Thrown away, held for a waste report (W4) or missing at a stock count (Stage A): the expired stock first */
+const WASTE_TYPES = new Set(['WASTE', 'WASTE_HOLD', 'COUNT']);
 
 /**
  * Replays the movements, oldest first. Before `since` (the day lots started) everything belongs to the item's old-stock lot. After

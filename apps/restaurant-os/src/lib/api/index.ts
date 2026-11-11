@@ -30,6 +30,7 @@ export type {
   StaffLink,
   StationInput,
   TableInput,
+  CountLineInput,
   WasteDecisionInput,
   WasteReportView,
   WasteRequestInput,

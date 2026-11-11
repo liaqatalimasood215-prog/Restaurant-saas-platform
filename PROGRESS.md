@@ -216,6 +216,12 @@ vibration; Call Waiter also speaks. DEMO sync: between tabs of one browser only 
 backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.tsx`, `src/lib/sound.ts`.
 
 ## 7. Test status (last run, all green)
+- **2026-11-12 (Stage A Stock Count, committed on this branch):** `pnpm test` 214 (5 new), `pnpm typecheck`, `pnpm lint` pass. Walkthroughs pass: new `:counts` (8 steps:
+  category count, 1 carton + 3 bottles = 27, a 0 count, blank rows; 2 bottles wasted during counting not taken twice (27 − 2 = 25); a Manager cannot approve
+  his own count; the Owner approves from the bell, one COUNT per difference, history; storage-place count cancelled with a reason; sent back; phone),
+  `:wastage` (20), `:staff`, `:kds`, `:inventory`, `:im1`, `:suppliers`, `:supplier-order`, `:units`, `:recipes`, `:cooked`, `:auto-scale`, `:integration`.
+  Changed tests: data version 24 → 25 (5 walkthroughs). Not run: `:cooking` and `:sales-stock` (between midnight and 06:00), the others, customer, rider,
+  `pnpm build`, a real phone.
 - **2026-11-12 (W4 staff waste reports, committed on this branch):** `pnpm test` 209 (2 new), `pnpm typecheck`, `pnpm lint` pass. Walkthroughs pass: `:wastage` (20 steps; W4 =
   17 chef reports 1 L milk, held, no prices, no loss; 18 bell + Approve = one waste entry from the held food; 19 Reject + Release needs the safe tick,
   Reject + Keep on hold; 20 phone), `:staff`, `:kds`, `:inventory`, `:im1`, `:suppliers`, `:supplier-order`, `:units`, `:recipes`, `:cooked`,
@@ -332,6 +338,11 @@ walkthrough scripts clear localStorage themselves; the POS bill panel remounts w
 changes (state that must survive, such as `payNow`, lives in the draft, `screens/pos/draft.ts`).
 
 ## 9. Pending tasks and next steps (in this order)
+
+**Stage A Stock Count built 2026-11-12 (DEMO), approved ("Approve, commit karo") and committed on this branch — not pushed, not on main** (plan `docs/INVENTORY_NEXT_STAGES_2026-11-12.md`,
+approved with its 5 decisions and the order A → F). Stock → Stock Counts; `counts.ts`; COUNT movements; permissions `inventory.count` /
+`inventory.count.approve` (data version 25); bell alert. Next, each after his approval: Stage B (Stock Movement History:
+dates, lot and source on each row, Load more, CSV); run `:cooking` and `:sales-stock` after 06:00.
 
 **W4 staff waste reports built 2026-11-12 (DEMO), approved and committed on this branch — not pushed, not on main** (owner: "Approved. Start W4 with all four
 recommended settings"). Details: `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` §10e. Kitchen / KDS → Report waste (no prices; the food is held at once, no

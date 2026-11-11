@@ -57,6 +57,10 @@ export const PERMISSIONS = {
   'inventory.waste.submit': ['OWNER', 'MANAGER', 'KITCHEN'],
   /** W4: approve or reject waste reports — the Owner and a Manager only */
   'inventory.waste.approve': ['OWNER', 'MANAGER'],
+  /** Stage A (owner, 2026-11-12): start a stock count and type what is on the shelf */
+  'inventory.count': ['OWNER', 'MANAGER'],
+  /** Stage A: approve a count and post its differences — the Owner and a Manager (never a Manager's own count) */
+  'inventory.count.approve': ['OWNER', 'MANAGER'],
   /** Publish the website and the Android app, domain and Google Play setup — the Owner only (owner, 2026-10-30) */
   'onlineApp.publish': ['OWNER'],
   /** See the staff list (read-only for the Manager) */

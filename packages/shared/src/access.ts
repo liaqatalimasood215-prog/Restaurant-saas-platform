@@ -150,6 +150,11 @@ export const PERMISSION_ROWS: readonly PermissionRow[] = [
     cells: { CREATE: cell('inventory.waste.submit', 'Report waste for approval (Kitchen / KDS)'), APPROVE: cell('inventory.waste.approve', 'Approve or reject waste reports') },
   },
   {
+    key: 'stockCounts',
+    label: 'Stock Counts',
+    cells: { CREATE: cell('inventory.count', 'Start a stock count and count'), APPROVE: cell('inventory.count.approve', 'Approve a count and post its differences') },
+  },
+  {
     key: 'onlineApp',
     label: 'Online App',
     cells: { VIEW: cell('onlineApp.view', 'Open the Online App page'), APPROVE: cell('onlineApp.publish', 'Publish the website and the Android app') },

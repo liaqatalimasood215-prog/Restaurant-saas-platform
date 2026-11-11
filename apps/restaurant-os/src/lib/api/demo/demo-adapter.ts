@@ -219,6 +219,20 @@ import {
   type ReleaseProblem,
   type StockLot,
   checkDecision,
+  checkApprove,
+  checkReturnOrCancel,
+  checkSubmit,
+  countDiff,
+  countStockMilli,
+  inScope,
+  summarizeCount,
+  MAX_COUNT_NOTE,
+  type CountListRow,
+  type CountProblem,
+  type CountRow,
+  type CountScope,
+  type CountView,
+  type StockCount,
   checkReverse,
   checkWaste,
   cookedWasteCost,
@@ -333,6 +347,7 @@ import {
   StockWasteInput,
   LotDateInput,
   WasteDecisionInput,
+  CountLineInput,
   WasteReportView,
   WasteRequestInput,
 } from '../client';
@@ -521,6 +536,19 @@ const WASTE_MESSAGES: Record<WasteProblem, string> = {
   LOT_INVALID: 'Choose a delivery of this item.',
   MORE_THAN_IN_LOT: 'More than is left in this delivery.',
   NOT_USABLE: 'Only stock that may be used: expired or held food is never eaten or given away.',
+};
+
+/** Stage A: why a stock count cannot go on */
+const COUNT_MESSAGES: Record<CountProblem | 'QUANTITY_INVALID', string> = {
+  NOT_COUNTING: 'This count is not open for counting any more.',
+  NOT_SUBMITTED: 'This count is not waiting for approval.',
+  NOTHING_COUNTED: 'Count at least one item first. A blank row is not counted.',
+  OWN_COUNT: 'A Manager does not approve his own count. Ask the Owner or another Manager.',
+  REASON_REQUIRED: 'Write the reason.',
+  NOTE_TOO_LONG: 'The note is too long (140 letters at most).',
+  ALREADY_OPEN: 'Some of these items are already in an open count. Finish or cancel it first.',
+  NO_ITEMS: 'No items in use here.',
+  QUANTITY_INVALID: 'Type 0 or more in each unit, each unit once.',
 };
 
 /** W4: why a waste report cannot be decided */
@@ -3211,6 +3239,234 @@ export class DemoAdapter implements ApiClient, DemoControls {
     );
   }
 
+  // ── Stock counts (Stage A, owner 2026-11-12) ────────────────────────────────────────────────
+
+  /** Stock of an item at a moment: the movements up to it (what a count line expected when it was counted) */
+  private onHandAt(data: DemoData, ingredientId: string, at: string): number {
+    return data.inventory.movements.reduce((sum, m) => (m.ingredientId === ingredientId && m.createdAt <= at ? sum + m.quantityMilli : sum), 0);
+  }
+
+  /** The value of a difference at cost: raw at the last purchase price, cooked food at its batch cost; null without a price */
+  private countCost(data: DemoData, item: Ingredient, milli: number): number | null {
+    if (milli === 0) return 0;
+    return item.kind === 'PREPARED' ? cookedWasteCost(this.cookedPrice(data, item.id), Math.abs(milli)) : (wasteCost(item, Math.abs(milli))?.cost ?? null);
+  }
+
+  private findCount(data: DemoData, countId: string): StockCount {
+    const count = (data.inventory.stockCounts ?? []).find((c) => c.id === countId);
+    if (!count) throw new ApiError('NOT_FOUND', 'This stock count was not found.');
+    return count;
+  }
+
+  private countRows(data: DemoData, count: StockCount): CountRow[] {
+    const inv = data.inventory;
+    const book = this.lotBook(data);
+    return count.lines.flatMap((line): CountRow[] => {
+      const item = inv.ingredients.find((i) => i.id === line.ingredientId);
+      if (!item) return [];
+      // Approved: what was posted; counted: the stock at the moment it was counted; not counted: the stock now
+      const expectedMilli = line.expectedMilli ?? (line.countedAt ? this.onHandAt(data, item.id, line.countedAt) : onHandOf(item.id, inv.movements));
+      const diffMilli = line.countedMilli === null ? null : (line.diffMilli ?? countDiff(line.countedMilli, expectedMilli));
+      const blockedMilli = book.lots.filter((l) => l.ingredientId === item.id && ['EXPIRED', 'HELD'].includes(book.state(l))).reduce((sum, l) => sum + book.remaining(l.id), 0);
+      return [
+        {
+          line,
+          name: item.name,
+          cooked: item.kind === 'PREPARED',
+          purchaseUnit: item.purchaseUnit,
+          stockUnit: item.stockUnit,
+          expectedMilli,
+          diffMilli,
+          cost: line.cost !== undefined ? line.cost : diffMilli === null ? null : this.countCost(data, item, diffMilli),
+          blockedMilli,
+          countedByName: this.staffName(data, line.countedBy),
+        },
+      ];
+    });
+  }
+
+  private countScopeLabel(data: DemoData, scope: CountScope): string {
+    return scope.kind === 'LOCATION' ? (data.inventory.locations.find((l) => l.id === scope.locationId)?.name ?? '—') : '';
+  }
+
+  getStockCounts(): Promise<CountListRow[]> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+      const open = (c: StockCount) => c.status === 'COUNTING' || c.status === 'SUBMITTED';
+      return (data.inventory.stockCounts ?? [])
+        .filter((c) => open(c) || c.startedAt >= monthAgo)
+        .sort((a, b) => Number(open(b)) - Number(open(a)) || b.startedAt.localeCompare(a.startedAt))
+        .map((count) => ({
+          count,
+          scopeLabel: this.countScopeLabel(data, count.scope),
+          startedByName: this.staffName(data, count.startedBy),
+          lastByName: this.staffName(data, count.history.at(-1)?.by ?? null),
+          summary: summarizeCount(this.countRows(data, count)),
+        }));
+    });
+  }
+
+  getStockCount(countId: string): Promise<CountView> {
+    return this.request(() => {
+      const data = this.store.read();
+      const user = this.require(data, 'inventory.view');
+      const count = this.findCount(data, countId);
+      const rows = this.countRows(data, count);
+      const canApprove = this.permissionsOf(data, user).includes('inventory.count.approve') && (user.role === 'OWNER' || user.role === 'MANAGER') && checkApprove(count, user) === null;
+      const historyNames = Object.fromEntries(count.history.map((h) => [h.by, this.staffName(data, h.by) ?? '—']));
+      return { count, scopeLabel: this.countScopeLabel(data, count.scope), rows, summary: summarizeCount(rows), historyNames, canApprove };
+    });
+  }
+
+  /** Stage A: a new count of the active items in scope, each with the stock expected now; an item already in an open count is refused. */
+  startStockCount(scope: CountScope, note: string, idempotencyKey: string): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count');
+        const inv = data.inventory;
+        const key = 'stock-count:' + idempotencyKey;
+        const done = data.idempotency[key];
+        const first = done ? (inv.stockCounts ?? []).find((c) => c.id === done) : undefined;
+        if (first) return first;
+        if (note.trim().length > MAX_COUNT_NOTE) throw new ApiError('VALIDATION', COUNT_MESSAGES.NOTE_TOO_LONG);
+        const items = inv.ingredients.filter((i) => inScope(i, scope)).sort((a, b) => a.name.localeCompare(b.name));
+        if (items.length === 0) throw new ApiError('VALIDATION', COUNT_MESSAGES.NO_ITEMS);
+        const busy = (inv.stockCounts ?? []).find((c) => (c.status === 'COUNTING' || c.status === 'SUBMITTED') && c.lines.some((l) => items.some((i) => i.id === l.ingredientId)));
+        if (busy) throw new ApiError('CONFLICT', `${COUNT_MESSAGES.ALREADY_OPEN} (Count #${busy.number})`);
+        const now = nowIso();
+        const count: StockCount = {
+          id: newId(),
+          restaurantId: data.restaurant.id,
+          branchId: data.branch.id,
+          number: (inv.stockCounts ?? []).length + 1,
+          scope,
+          status: 'COUNTING',
+          lines: items.map((i) => ({ ingredientId: i.id, snapshotMilli: onHandOf(i.id, inv.movements), parts: null, countedMilli: null, countedAt: null, countedBy: null, note: '' })),
+          note: note.trim(),
+          startedBy: user.id,
+          startedAt: now,
+          history: [{ action: 'STARTED', by: user.id, at: now, note: note.trim() }],
+        };
+        (inv.stockCounts ??= []).push(count);
+        data.idempotency[key] = count.id;
+        return count;
+      }),
+    );
+  }
+
+  /** Stage A: one item's count in any of its units (zero is a count; null parts = not counted), at this moment; while counting only */
+  saveCountLine(input: CountLineInput): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count');
+        const count = this.findCount(data, input.countId);
+        if (count.status !== 'COUNTING') throw new ApiError('CONFLICT', COUNT_MESSAGES.NOT_COUNTING);
+        const line = count.lines.find((l) => l.ingredientId === input.ingredientId);
+        const item = data.inventory.ingredients.find((i) => i.id === input.ingredientId);
+        if (!line || !item) throw new ApiError('NOT_FOUND', 'This item is not in the count.');
+        if (input.note.trim().length > MAX_COUNT_NOTE) throw new ApiError('VALIDATION', COUNT_MESSAGES.NOTE_TOO_LONG);
+        line.note = input.note.trim();
+        if (input.parts === null) {
+          Object.assign(line, { parts: null, countedMilli: null, countedAt: null, countedBy: null });
+          return count;
+        }
+        const milli = countStockMilli(input.parts, item);
+        if (milli === null) throw new ApiError('VALIDATION', `${item.name}: ${COUNT_MESSAGES.QUANTITY_INVALID}`);
+        Object.assign(line, {
+          parts: input.parts.map((p) => {
+            const option = findBuyOption(item, p.unitKey)!;
+            return { unitKey: option.key, unit: option.unit, unitSizeMilli: option.sizeMilli, quantityMilli: p.quantityMilli! };
+          }),
+          countedMilli: milli,
+          countedAt: nowIso(),
+          countedBy: user.id,
+        });
+        return count;
+      }),
+    );
+  }
+
+  submitStockCount(countId: string): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count');
+        const count = this.findCount(data, countId);
+        const problem = checkSubmit(count);
+        if (problem) throw new ApiError(problem === 'NOT_COUNTING' ? 'CONFLICT' : 'VALIDATION', COUNT_MESSAGES[problem]);
+        count.status = 'SUBMITTED';
+        count.history.push({ action: 'SUBMITTED', by: user.id, at: nowIso(), note: '' });
+        return count;
+      }),
+    );
+  }
+
+  /**
+   * Stage A: approval posts one COUNT movement per counted item that differs: counted − the stock at the moment it was counted, so
+   * sales, cooking and waste during the count are never taken twice. Less is taken from the lots (the expired stock first); more is
+   * stock without a delivery (Needs review). Once: an approved count cannot be approved again.
+   */
+  approveStockCount(countId: string): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count.approve');
+        this.requireOwnerOrManager(user);
+        const inv = data.inventory;
+        const count = this.findCount(data, countId);
+        const problem = checkApprove(count, user);
+        if (problem) throw new ApiError(problem === 'NOT_SUBMITTED' ? 'CONFLICT' : 'FORBIDDEN', COUNT_MESSAGES[problem]);
+        const now = nowIso();
+        for (const line of count.lines) {
+          if (line.countedMilli === null || !line.countedAt) continue;
+          const item = inv.ingredients.find((i) => i.id === line.ingredientId);
+          if (!item) continue;
+          const expectedMilli = this.onHandAt(data, item.id, line.countedAt);
+          const diffMilli = countDiff(line.countedMilli, expectedMilli);
+          const cost = this.countCost(data, item, diffMilli);
+          let movementId: string | null = null;
+          if (diffMilli !== 0) {
+            movementId = newId();
+            inv.movements.push({ id: movementId, restaurantId: count.restaurantId, branchId: count.branchId, ingredientId: item.id, type: 'COUNT', quantityMilli: diffMilli, reason: null, note: `Count #${count.number}${line.note ? ` — ${line.note}` : ''}`.slice(0, MAX_MOVEMENT_NOTE), createdBy: user.id, createdAt: now, countId: count.id, cost });
+          }
+          Object.assign(line, { expectedMilli, diffMilli, cost, movementId });
+        }
+        count.status = 'APPROVED';
+        count.history.push({ action: 'APPROVED', by: user.id, at: now, note: '' });
+        return count;
+      }),
+    );
+  }
+
+  returnStockCount(countId: string, reason: string): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count.approve');
+        this.requireOwnerOrManager(user);
+        const count = this.findCount(data, countId);
+        const problem = checkReturnOrCancel(count, reason, 'RETURN');
+        if (problem) throw new ApiError(problem === 'NOT_SUBMITTED' ? 'CONFLICT' : 'VALIDATION', COUNT_MESSAGES[problem]);
+        count.status = 'COUNTING';
+        count.history.push({ action: 'RETURNED', by: user.id, at: nowIso(), note: reason.trim() });
+        return count;
+      }),
+    );
+  }
+
+  cancelStockCount(countId: string, reason: string): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count');
+        const count = this.findCount(data, countId);
+        const problem = checkReturnOrCancel(count, reason, 'CANCEL');
+        if (problem) throw new ApiError(problem === 'NOT_COUNTING' ? 'CONFLICT' : 'VALIDATION', COUNT_MESSAGES[problem]);
+        count.status = 'CANCELLED';
+        count.history.push({ action: 'CANCELLED', by: user.id, at: nowIso(), note: reason.trim() });
+        return count;
+      }),
+    );
+  }
+
   /** W3: held (returned) food back to use, only when a person confirms it is safe and never after its date. Owner / Manager. */
   releaseLot(lotId: string, safe: boolean, note: string): Promise<StockLot> {
     return this.request(() =>
@@ -5067,6 +5323,13 @@ export class DemoAdapter implements ApiClient, DemoControls {
           for (const r of (data.inventory.wasteRequests ?? []).filter((x) => x.status === 'PENDING')) {
             const names = r.lines.map((l) => data.inventory.ingredients.find((i) => i.id === l.ingredientId)?.name ?? '');
             list.push({ kind: 'WASTE_REQUEST', id: `waste-request:${r.id}`, count: r.lines.length, names: names.slice(0, 3), byName: this.staffName(data, r.requestedBy) ?? '', at: r.requestedAt });
+          }
+        }
+        // Stage A: a submitted stock count waits for someone who may approve it (never a Manager's own count)
+        if (this.permissionsOf(data, user).includes('inventory.count.approve')) {
+          for (const c of (data.inventory.stockCounts ?? []).filter((x) => x.status === 'SUBMITTED' && checkApprove(x, user) === null)) {
+            const submitted = [...c.history].reverse().find((h) => h.action === 'SUBMITTED');
+            list.push({ kind: 'COUNT_SUBMITTED', id: `count-submitted:${c.id}:${submitted?.at ?? ''}`, countId: c.id, number: c.number, differences: summarizeCount(this.countRows(data, c)).withDifference, byName: this.staffName(data, submitted?.by ?? c.startedBy) ?? '', at: submitted?.at ?? c.startedAt });
           }
         }
         // I4: the closing review of the ready food that is left

@@ -36,7 +36,8 @@
     "walkthrough:previews": "node scripts/walkthrough-previews.mjs",
     "walkthrough:sales-stock": "node scripts/walkthrough-sales-stock.mjs",
     "walkthrough:im1": "node scripts/walkthrough-im1.mjs",
-    "walkthrough:wastage": "node scripts/walkthrough-wastage.mjs"
+    "walkthrough:wastage": "node scripts/walkthrough-wastage.mjs",
+    "walkthrough:counts": "node scripts/walkthrough-counts.mjs"
   },
   "dependencies": {
     "@restaurant-saas/shared": "workspace:*",

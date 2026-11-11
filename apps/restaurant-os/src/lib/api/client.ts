@@ -71,6 +71,10 @@ import type {
   StockLot,
   WasteRequest,
   WasteRequestRow,
+  CountListRow,
+  CountScope,
+  CountView,
+  StockCount,
   WasteKind,
   WasteLineInput,
   WasteStage,
@@ -602,6 +606,14 @@ export interface StockWasteInput {
   idempotencyKey: string;
 }
 
+/** Stage A: one counted item: its units as typed (null = not counted, a blank row) and a note */
+export interface CountLineInput {
+  countId: Uuid;
+  ingredientId: Uuid;
+  parts: { unitKey: string; quantityMilli: number | null }[] | null;
+  note: string;
+}
+
 /** W4: a staff waste report: what, how much, why; the food is held at once, nothing is a loss until approved */
 export interface WasteRequestInput {
   at: string;
@@ -852,6 +864,20 @@ export interface ApiClient {
   submitWasteRequest(input: WasteRequestInput): Promise<WasteRequest>;
   /** W4: approve (one waste entry from the held food) or reject a report (Owner / Manager), once */
   decideWasteRequest(input: WasteDecisionInput): Promise<WasteRequest>;
+  /** Stage A: the stock counts (open ones first, then the last 30 days) */
+  getStockCounts(): Promise<CountListRow[]>;
+  /** Stage A: one count with its rows: expected, counted, difference and its value */
+  getStockCount(countId: Uuid): Promise<CountView>;
+  /** Stage A: start a count of all stock, a category or a storage place (snapshot of what is expected), once per key */
+  startStockCount(scope: CountScope, note: string, idempotencyKey: string): Promise<StockCount>;
+  /** Stage A: save what was counted of one item (null parts = not counted); the moment it is saved is its counting time */
+  saveCountLine(input: CountLineInput): Promise<StockCount>;
+  submitStockCount(countId: Uuid): Promise<StockCount>;
+  /** Stage A: the Owner or a Manager (never a Manager's own count) posts the differences, once */
+  approveStockCount(countId: Uuid): Promise<StockCount>;
+  /** Stage A: back to counting (a reason), or cancel (a reason); never after approval */
+  returnStockCount(countId: Uuid, reason: string): Promise<StockCount>;
+  cancelStockCount(countId: Uuid, reason: string): Promise<StockCount>;
   /** Recipes & Food Cost (Step B): every menu size, add-on and prepared item with its current recipe and food cost. */
   getRecipes(): Promise<RecipesView>;
   /**
