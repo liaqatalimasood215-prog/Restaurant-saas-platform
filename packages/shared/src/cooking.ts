@@ -1,5 +1,6 @@
 import { businessDate, DEFAULT_TIME_ZONE } from './business-day';
 import { MILLI, mulDivRound } from './inventory';
+import { sameDish } from './menu';
 import { grossQuantity, scaleBatch, scaleLines, type RecipeLine, type RecipeVersion } from './recipes';
 import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
 
@@ -98,9 +99,14 @@ export function stockNeeds(uses: readonly { ingredientId: Uuid; quantityMilli: n
   });
 }
 
-/** Stock that may be cooked with: none when it has expired, never below zero. */
-export function usableMilli(onHandMilli: number, expired: boolean): number {
-  return expired ? 0 : Math.max(0, onHandMilli);
+/**
+ * Stock that may be cooked with, never below zero. An ingredient has one expiry date for all its stock until every receipt is
+ * its own lot (IM7): once that date has passed, only what came in AFTER it is usable (fresh stock is never the expired stock),
+ * and never more than is on hand.
+ */
+export function usableMilli(onHandMilli: number, expired: boolean, receivedAfterExpiryMilli: number = 0): number {
+  const onHand = Math.max(0, onHandMilli);
+  return expired ? Math.min(onHand, Math.max(0, receivedAfterExpiryMilli)) : onHand;
 }
 
 /** Cost of one unit of the cooked dish (1 kg, one plate …): the batch cost shared over what was actually made. */
@@ -147,6 +153,31 @@ export const EMPTY_PLAN: CookingPlan = { daily: [], days: [] };
 export function planOf(plan: CookingPlan | undefined, date: string): PlanRow[] {
   const p = plan ?? EMPTY_PLAN;
   return p.days.find((d) => d.date === date)?.rows ?? p.daily;
+}
+
+/**
+ * What a plan row still has to cook on its day: its amount minus the batches recorded for that day in the same way (reversed
+ * batches do not count), never below zero. Plan 5 kg and cook 2 kg: 3 kg are left, the row is not done.
+ */
+export function planLeft(row: PlanRow, batches: readonly Pick<CookingBatch, 'preparedId' | 'mode' | 'amountMilli' | 'status' | 'planDate'>[], date: string): { cookedMilli: number; leftMilli: number } {
+  const cookedMilli = batches.reduce((sum, b) => (b.status === 'DONE' && b.planDate === date && b.preparedId === row.preparedId && b.mode === row.mode ? sum + b.amountMilli : sum), 0);
+  return { cookedMilli, leftMilli: Math.max(0, row.amountMilli - cookedMilli) };
+}
+
+/**
+ * Would the raw stock be taken twice? A menu product that is the same dish as a cooked dish ("Daal Mash" and "Cooked Daal Mash")
+ * but is not linked to it, and whose own verified recipe uses ingredients of the dish's recipe: a cooking batch takes them, and
+ * every sale of the product takes them again. Linked (Sell on POS), a sale takes the cooked dish instead.
+ */
+export function takesRawTwice(
+  dish: { id: Uuid; name: string },
+  dishLines: readonly Pick<RecipeLine, 'ingredientId'>[],
+  product: { name: string; preparedItemId?: Uuid | null },
+  productLines: readonly Pick<RecipeLine, 'ingredientId'>[],
+): boolean {
+  if (product.preparedItemId === dish.id || !sameDish(product.name, dish.name)) return false;
+  const raw = new Set(dishLines.map((l) => l.ingredientId));
+  return productLines.some((l) => raw.has(l.ingredientId));
 }
 
 /** All raw ingredients the rows still to cook need, added up (oil for daal and biryani together). */

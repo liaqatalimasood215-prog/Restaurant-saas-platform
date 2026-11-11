@@ -424,7 +424,8 @@ export interface CookingPlanView {
   /** The date has its own plan (else the daily plan) */
   ownPlan: boolean;
   daily: PlanRow[];
-  rows: (PlanRow & { name: string; stockUnit: Ingredient['stockUnit']; mainName: string | null; verified: boolean; expectedMilli: number | null; cooked: boolean })[];
+  /** cookedMilli = that day's batches of the dish, leftMilli = what is still to cook; cooked = nothing left (IM1: by quantity) */
+  rows: (PlanRow & { name: string; stockUnit: Ingredient['stockUnit']; mainName: string | null; verified: boolean; expectedMilli: number | null; cooked: boolean; cookedMilli: number; leftMilli: number })[];
   /** Every raw ingredient the rows still to cook need, added up */
   needs: { ingredient: Ingredient; needMilli: number; haveMilli: number; shortMilli: number; low: boolean; expired: boolean; supplierName: string | null }[];
   /** Dishes that can be planned: cooked food and other prepared items */

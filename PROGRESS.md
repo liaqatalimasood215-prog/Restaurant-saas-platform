@@ -216,6 +216,7 @@ vibration; Call Waiter also speaks. DEMO sync: between tabs of one browser only 
 backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.tsx`, `src/lib/sound.ts`.
 
 ## 7. Test status (last run, all green)
+- **2026-11-10 (IM1 Stabilise):** `pnpm test` 193, `pnpm typecheck`, `pnpm lint` pass. All 25 older Restaurant OS walkthroughs pass, the new `walkthrough:im1`, customer (182 checks) and rider (275 checks) too. In the first run of the 25, `:inventory` and `:recipes` each stopped on a 30-second timeout (a click on the All filter; the page load); both passed when run again alone, the cause was not found. `pnpm build` not run (the dev servers were running).
 - **2026-11-09 (bug run + phone fixes on this newest version, commit `d026d93`, pushed 2026-11-10):** `pnpm test` 189, `pnpm typecheck`, `pnpm lint` and `pnpm build`
   pass. ALL walkthroughs pass: the 25 Restaurant OS ones, customer, rider, the new rider `walkthrough:phone` (Wi-Fi address, storage blocked), and on
   the Wi-Fi address `walkthrough`, `:pos` and the customer walkthrough (181 checks). `:sales-stock` failed once while two test groups ran at the same
@@ -307,13 +308,18 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
+**All work of 2026-11-10 is on `main` (owner: "Approve, main par lao"), not pushed:** the IM1 branch (`98255ac`) and the search / Find customer / Wastage-plan
+branch (`claude/sleepy-shamir-5e83b0`) were merged, README, PROGRESS and PROJECT_RULES joined by hand. `origin/main` is still `0eb219d`; a push needs his
+approval. **Next only after his approval: W1** of `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` (Record Waste for raw ingredients and packaging). His order of the
+inventory work is now Prompt 1 Wastage & Expiry (W1–W5), Prompt 2 Stock Counts, Prompt 3 Reports; IM2–IM5 of the audit wait.
+
 **Wastage & Expiry audit and plan shown 2026-11-10 (owner's Prompt 1 of `LALA_Inventory_Three_Detailed_Prompts-1.md`), waiting for his approval.
 Nothing built.** Plan: `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` — what exists (placeholder tab; one expiry date per ingredient; no WASTE movement; order-food
 waste in a separate `foodWaste` list only shown on Available Food), what is missing, screens, stock and cost rules, lots and expiry, permissions, steps
 **W0–W5** and 6 decisions. **W0:** the IM1 work (movement cost, needed here) is uncommitted in worktree `restaurant-software-deploy-1b7e21`. Owner:
 "Approve, W0 karo" — its regression run is done (all 25 older walkthroughs, `:im1`, customer, rider pass; `:inventory` and `:recipes` timed out once and
-passed when run again). Still to do, only after he says so: commit IM1 and join both branches on `main`. Prompt 2 (Stock
-Counts) and Prompt 3 (Reports) come after, each with its own audit. The plan file and this note are not committed.
+passed when run again). Then ("Approve, main par lao") IM1 was committed and both branches joined on `main`: W0 is done. Prompt 2 (Stock
+Counts) and Prompt 3 (Reports) come after, each with its own audit.
 
 **POS Find customer in the title row, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, not pushed, not yet on `main`** (owner: "table search can remove,
 his place customer search"). The box beside Running bills now finds a customer by name or phone (from 2 letters, earlier customers from the orders) and puts
@@ -328,6 +334,24 @@ Enter on another screen opens the POS) and the POS title-row box finds orders (n
 POS box stays the menu search. Someone with Orders but no POS keeps the old header order search. `src/lib/menu-search.ts`, `header.tsx`, `pos-screen.tsx`,
 `walkthrough:pos` (new last step). Also `.claude/launch.json` `restaurant-os-3010`: another worktree's server held port 3000. Tests: typecheck, lint,
 `walkthrough:pos`, `walkthrough`, `:online` pass on port 3010. The IM1 work is in the other worktree `restaurant-software-deploy-1b7e21`, also not committed.
+
+**IM1 (Stabilise) built 2026-11-10 (DEMO), approved after the full regression run ("Approve, main par lao") and committed; not pushed.** Owner: "Approve, IM1 karo". What changed, bug by bug: `docs/INVENTORY_AUDIT_2026-11-10.md` §8
+(B1 Cook refused until the dish is linked with Sell on POS, B2 stock bought after a passed expiry date is usable, B3 one business day, B4 / B5 texts and one
+`postPurchase`, B6 plan row by quantity, B9 toasts, B10 `StockMovement.cost`). B7 waits for IM4, B8 for IM2, lots for IM7. New: `planLeft`, `takesRawTwice`,
+`usableMilli` third argument (`cooking.ts`), `lineCosts` (`suppliers.ts`), `PreparedRow.rawTwice`, `CookingPlanView` rows `cookedMilli` / `leftMilli`,
+`walkthrough:im1`. No data version change. His own browser data was not changed: his cooked dishes are still not linked, so Cook shows the red
+message until he links each one. IM2 (compact UI, raw / planned / cooked labels, recipe kinds) waits: he chose Wastage & Expiry first.
+
+**Inventory & Suppliers audit and improvement plan shown 2026-11-10 (owner then approved IM1).** His video (`123.mp4`,
+7 minutes of the Inventory screens) and two briefs (workflow audit, compact UI, purchasing, daily plan modes, auto posting, recipe kinds, Available
+Food; then Wastage, Expiry, Stock Count, Reports, cleaner Overview). Full audit: `docs/INVENTORY_AUDIT_2026-11-10.md` — the six flows traced, the
+stock trigger per product type, 10 bugs read from the code (B1 raw stock taken twice when a cooked dish is not linked to its menu product, B2 one
+expiry date per ingredient blocks fresh stock, B3 three different "today", B4 / B5 stale texts and the unused `receiveStock` path, B6 a plan row
+"cooked" after any batch, B7 a shared raw ingredient given in full to every dish, B8 Sell on POS defaults, B9 stacked toasts, B10 no cost on a
+movement), what is missing, DEMO limits against production, the compact UI and the plan **IM1–IM9** (IM1 stabilise, IM2 compact UI, IM3 purchasing
++ returns, IM4 daily plan, IM5 auto posting, IM6 Stock Count + Wastage, IM7 lot expiry, IM8 Reports + Overview, IM9 full check). It replaces the
+open steps I5–I7 and Suppliers S2. Five owner decisions are still open (§9 of the audit, #2–#6; #2 changes the approved "3 safe hours" default). Checked with
+`pnpm test` (189 pass); walkthroughs not run for the audit; no bug reproduced by clicking.
 
 **On GitHub since 2026-11-10 (owner: "Haan, push karo").** Private repository `liaqatalimasood215-prog/Restaurant-saas-platform`, remote `origin`,
 branch `main` at `d026d93` then this docs update (375 files, 98 commits, placeholder email only). Before the push: read-only audit 2026-11-09 — no

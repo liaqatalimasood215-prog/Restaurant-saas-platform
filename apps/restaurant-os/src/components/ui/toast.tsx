@@ -29,7 +29,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback(
     (toast: Omit<Toast, 'id'>) => {
       const id = nextId++;
-      setToasts((list) => [...list.slice(-3), { ...toast, id }]);
+      // The same message again (two saves in a row) takes the place of the one on screen: it never stacks
+      setToasts((list) => [...list.filter((x) => x.title !== toast.title || x.body !== toast.body || x.tone !== toast.tone).slice(-3), { ...toast, id }]);
       setTimeout(() => dismiss(id), DISMISS_MS);
     },
     [dismiss],

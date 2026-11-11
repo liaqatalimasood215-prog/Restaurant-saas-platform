@@ -160,3 +160,12 @@ test('multiple units: Rice in kg — 1 bag of 25 kg + 5 kg loose = 30 kg; 500 g 
   assert.deepEqual(checkPackings([{ kind: 'tray', sizeMilli: 0, pricePaisa: 1 }]), { index: 0, problem: 'SIZE_INVALID' });
   assert.deepEqual(checkPackings([{ kind: 'bag', sizeMilli: 1, pricePaisa: 1 }, { kind: 'bag', sizeMilli: 1, pricePaisa: 2 }]), { index: 1, problem: 'DUPLICATE' });
 });
+
+test('IM1: each bill line keeps what it cost after the discount; the lines add up to the bill total', async () => {
+  const { lineCosts } = await import('./index');
+  assert.deepEqual(lineCosts([150_000, 50_000], 0), [150_000, 50_000], 'no discount: the amounts');
+  assert.deepEqual(lineCosts([150_000, 50_000], 20_000), [135_000, 45_000], 'Rs. 200 off Rs. 2,000 = 10 % off each line');
+  const uneven = lineCosts([33_333, 33_333, 33_334], 10_000);
+  assert.equal(uneven.reduce((sum, c) => sum + c, 0), 90_000, 'the last line takes the rounding');
+  assert.deepEqual(lineCosts([], 0), []);
+});

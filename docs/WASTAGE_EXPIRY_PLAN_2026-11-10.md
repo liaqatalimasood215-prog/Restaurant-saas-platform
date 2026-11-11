@@ -42,8 +42,8 @@ The IM1 work of this morning (movement cost, `lineCosts`, one business day, "sto
 usable") is **not in this checkout**. It sits uncommitted in the other folder `restaurant-software-deploy-1b7e21`. Its
 regression run is done (W0, 2026-11-10): all 25 older walkthroughs, `walkthrough:im1`, customer and rider pass; `:inventory` and
 `:recipes` timed out once in the first run and passed when run again. Wastage needs the movement cost from it. This checkout holds
-the two search commits (`c2757c1`, `ded7921`). **Step W0, rest:** commit IM1 after his approval, and bring
-both branches together on `main`. Wastage is then built on `main`.
+the two search commits (`c2757c1`, `ded7921`). **W0 is done (2026-11-10, "Approve, main par lao"):** IM1 is committed and both
+branches are joined on `main`. Wastage is built on `main`.
 
 ## 4. "Cook now" against "no daily cooking confirmation"
 

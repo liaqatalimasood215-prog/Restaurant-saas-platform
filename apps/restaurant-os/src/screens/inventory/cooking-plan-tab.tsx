@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { CalendarDays, CookingPot, ShoppingCart, Trash2 } from 'lucide-react';
-import { MILLI, nextDate, parseQuantity, type PlanRow } from '@restaurant-saas/shared';
+import { MILLI, formatMilli, nextDate, parseQuantity, type PlanRow } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -149,6 +149,8 @@ function PlanView({
                   const main = row.mode === 'MAIN' ? mainOf(row.preparedId) : undefined;
                   const unit = main ? unitLabel(main.stockUnit === 'g' ? 'kg' : main.stockUnit === 'ml' ? 'l' : main.stockUnit, 2 * MILLI) : t('inventory.cooking.batchUnit');
                   const dishIngredient = recipes?.prepared.find((p) => p.ingredient.id === row.preparedId)?.ingredient;
+                  // "2 kg" of the main raw ingredient, or "0.5 batch"
+                  const part = (milli: number) => (main ? amountText(milli, main.stockUnit) : `${formatMilli(milli)} ${t('inventory.cooking.batchUnit')}`);
                   return (
                     <tr key={row.key} data-plan-row={dish?.name}>
                       <td className="px-3 py-2 font-bold text-slate-900">{dish?.name ?? '—'}</td>
@@ -163,11 +165,21 @@ function PlanView({
                       </td>
                       <td className="px-3 py-2 text-slate-700">{saved?.expectedMilli && dishIngredient ? cookedText(saved.expectedMilli, dishIngredient) : saved?.expectedMilli ? amountText(saved.expectedMilli, saved.stockUnit) : '—'}</td>
                       <td className="px-3 py-2">
-                        {saved?.cooked ? <Badge tone="green">{t('inventory.cooking.plan.cooked')}</Badge> : !dish?.verified ? <Badge tone="amber">{t('inventory.cooking.plan.notVerified')}</Badge> : <Badge tone="grey">{t('inventory.cooking.plan.planned')}</Badge>}
+                        {saved?.cooked ? (
+                          <Badge tone="green">{t('inventory.cooking.plan.cooked')}</Badge>
+                        ) : !dish?.verified ? (
+                          <Badge tone="amber">{t('inventory.cooking.plan.notVerified')}</Badge>
+                        ) : saved && saved.cookedMilli > 0 ? (
+                          <Badge tone="amber">
+                            <span data-plan-partly>{t('inventory.cooking.plan.partly', { done: part(saved.cookedMilli), all: part(saved.amountMilli) })}</span>
+                          </Badge>
+                        ) : (
+                          <Badge tone="grey">{t('inventory.cooking.plan.planned')}</Badge>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
                         {canManage && view.date === view.today && saved && !saved.cooked && dish?.verified && recipes && (
-                          <button type="button" onClick={() => setCooking({ preparedId: row.preparedId, amountMilli: saved.amountMilli })} className="press bg-brand-gradient mr-1 inline-flex min-h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-extrabold text-white shadow-brand">
+                          <button type="button" onClick={() => setCooking({ preparedId: row.preparedId, amountMilli: saved.leftMilli })} className="press bg-brand-gradient mr-1 inline-flex min-h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-extrabold text-white shadow-brand">
                             <CookingPot className="size-3.5" aria-hidden />
                             {t('inventory.cooking.plan.cookNow')}
                           </button>

@@ -153,7 +153,6 @@ import {
   checkReceipt,
   checkSupplierPayment,
   deliveriesPerProduct,
-  MILLI,
   averageMainPrice,
   mulDivRound,
   billTotals,
@@ -170,8 +169,7 @@ import {
   khataSummary,
   sortByUse,
   sortSuppliers,
-  lineAmount,
-  receivedStockMilli,
+  lineCosts,
   type KhataEntry,
   type SuppliersView,
   type SupplierWorkspace,
@@ -224,9 +222,11 @@ import {
   localClock,
   nextDate,
   paisaToInput,
+  planLeft,
   planOf,
   planUses,
   stockNeeds,
+  takesRawTwice,
   usableMilli,
   type BatchProblem,
   type CookingBatch,
@@ -2683,7 +2683,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const data = this.store.read();
       this.require(data, 'inventory.view');
       const inv = data.inventory;
-      const today = businessDate(new Date(), data.branch.timezone, '00:00');
+      // An expiry date is a calendar date; everything else on this screen follows the business day
+      const today = this.calendarToday(data);
       const rowOf = (ingredient: Ingredient) => {
         const onHandMilli = onHandOf(ingredient.id, inv.movements);
         return {
@@ -2700,7 +2701,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const rows = inv.ingredients.filter((ingredient) => ingredient.kind !== 'PREPARED').map(rowOf).sort(byName);
       // I3: cooked food apart from the raw ingredients, and what today's and tomorrow's plans are short of
       const cooked = inv.ingredients.filter((ingredient) => ingredient.kind === 'PREPARED' && ingredient.isActive).map(rowOf).sort(byName);
-      const cookingDay = this.cookingToday(data);
+      const cookingDay = this.branchToday(data);
       const shortOf = (date: string) => this.planCheck(data, date).needs.filter((n) => n.shortMilli > 0).length;
       const movements = [...inv.movements]
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -2785,6 +2786,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         note: '',
         createdBy: user.id,
         createdAt: now,
+        cost: ingredientCost(this.costBook(data), ingredient.id, input.openingMilli),
       });
     }
     return ingredient;
@@ -2830,6 +2832,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           note: input.note.trim(),
           createdBy: user.id,
           createdAt: nowIso(),
+          cost: ingredientCost(this.costBook(data), ingredient.id, input.quantityMilli),
         });
         data.idempotency[key] = movementId;
       }),
@@ -2982,6 +2985,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
             batchCost: version ? linesCost(book, version.lines).total : null,
             unitCost: ingredientCost(book, ingredient.id, displayFactorMilli(ingredient)),
             soldAs: data.items.filter((i) => !i.archivedAt && i.preparedItemId === ingredient.id).map((i) => ({ menuItemId: i.id, name: i.name })),
+            rawTwice: ((twice) => (twice ? { menuItemId: twice.id, name: twice.name } : null))(this.rawTwiceWith(data, ingredient, recipe ? verifiedVersion(recipe) : null)),
           };
         });
       const people = new Set(inv.recipes.flatMap((r) => r.versions.flatMap((v) => [v.savedBy, v.verifiedBy ?? ''])).values());
@@ -3267,33 +3271,61 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return { dish, recipe, version, mode };
   }
 
-  /** The branch's calendar date today (the cooking day), not the business day. */
-  private cookingToday(data: DemoData): string {
+  /**
+   * The menu product that would take a cooked dish's raw ingredients a second time (IM1): the same dish, not linked to it, with a
+   * verified recipe of its own that uses them. Null when there is none.
+   */
+  private rawTwiceWith(data: DemoData, dish: Ingredient, version: RecipeVersion | null): MenuItem | null {
+    if (!version) return null;
+    return (
+      data.items.find((item) => {
+        if (item.archivedAt) return false;
+        const lines = (item.variants.length ? item.variants.map((v) => v.id) : [null]).flatMap((variantId) => {
+          const recipe = this.recipeFor(data, { kind: 'ITEM', menuItemId: item.id, variantId });
+          return (recipe ? verifiedVersion(recipe) : null)?.lines ?? [];
+        });
+        return takesRawTwice(dish, version.lines, item, lines);
+      }) ?? null
+    );
+  }
+
+  /**
+   * The branch's calendar date today: only for expiry dates, which are calendar dates. Sales, purchases, the cooking plan and
+   * its batches all follow the business day (branchToday), so every screen means the same "today" (IM1).
+   */
+  private calendarToday(data: DemoData): string {
     return localClock(new Date(), data.branch.timezone).date;
   }
 
   /** Stock that may be cooked with: on hand, nothing when it has expired, never below zero. */
   private usableStock(data: DemoData): (ingredientId: string) => number {
     const inv = data.inventory;
-    const today = this.cookingToday(data);
+    const today = this.calendarToday(data);
+    const tz = data.branch.timezone;
     return (ingredientId) => {
       const ingredient = inv.ingredients.find((i) => i.id === ingredientId);
       const onHand = onHandOf(ingredientId, inv.movements);
-      const expired = ingredient ? expiryState(ingredient.expiryDate, today, onHand, inv.expiringSoonDays) === 'EXPIRED' : false;
-      return usableMilli(onHand, expired);
+      const expiryDate = ingredient?.expiryDate ?? null;
+      if (!expiryDate || expiryState(expiryDate, today, onHand, inv.expiringSoonDays) !== 'EXPIRED') return usableMilli(onHand, false);
+      // One date for all the stock until lots (IM7): what was bought or cooked after that date is not the expired stock
+      const after = inv.movements.reduce(
+        (sum, m) => (m.ingredientId === ingredientId && (m.type === 'PURCHASE' || m.type === 'COOKED') && localClock(new Date(m.createdAt), tz).date > expiryDate ? sum + m.quantityMilli : sum),
+        0,
+      );
+      return usableMilli(onHand, true, after);
     };
   }
 
-  /** What a day's plan still has to cook (dishes without a done batch for that day) needs, against the usable stock. */
+  /** What a day's plan still has to cook (each row's amount minus its batches of that day) needs, against the usable stock. */
   private planCheck(data: DemoData, date: string) {
     const inv = data.inventory;
-    const rows = planOf(inv.cookingPlan, date);
-    const cooked = new Set((inv.cookingBatches ?? []).filter((b) => b.status === 'DONE' && b.planDate === date).map((b) => b.preparedId));
+    const rows = planOf(inv.cookingPlan, date).map((row) => ({ ...row, ...planLeft(row, inv.cookingBatches ?? [], date) }));
+    // Only what is left to cook is needed: 2 of 5 kg cooked leaves 3 kg (IM1; before, any batch made the row done)
     const uses = planUses(
-      rows.filter((r) => !cooked.has(r.preparedId)),
+      rows.filter((r) => r.leftMilli > 0).map((r) => ({ preparedId: r.preparedId, mode: r.mode, amountMilli: r.leftMilli })),
       (preparedId) => this.cookingRecipe(data, preparedId).version,
     );
-    return { rows, cooked, needs: stockNeeds(uses, this.usableStock(data)) };
+    return { rows, needs: stockNeeds(uses, this.usableStock(data)) };
   }
 
   recordCookingBatch(input: CookingBatchInput): Promise<CookingBatch> {
@@ -3311,6 +3343,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const { dish, recipe, version, mode } = this.cookingRecipe(data, input.preparedId);
         if (!dish || !recipe) throw new ApiError('NOT_FOUND', 'This dish or its recipe was not found.');
         if (input.mode !== mode) throw new ApiError('VALIDATION', 'Please open the Cook box again: the recipe changed.');
+        const twice = this.rawTwiceWith(data, dish, version);
+        if (twice) throw new ApiError('CONFLICT', `${twice.name} on the POS still takes its raw ingredients by its own recipe. Link it first: Sell on POS on ${dish.name}. Then a sale takes the cooked dish and the raw stock is taken once.`);
         const plan = version ? batchPlan(version, mode, input.amountMilli) : null;
         const needs = plan ? stockNeeds(plan.uses, this.usableStock(data)) : [];
         const problem = checkBatch({ verified: Boolean(version), plan, actualMilli: input.actualMilli, plateMilli: input.plateMilli, needs });
@@ -3321,6 +3355,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (problem || !plan || !version) throw new ApiError('VALIDATION', BATCH_MESSAGES[problem ?? 'AMOUNT_INVALID']);
         const now = nowIso();
         const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+        const book = this.costBook(data);
         const batch: CookingBatch = {
           id: newId(),
           ...scope,
@@ -3332,9 +3367,9 @@ export class DemoAdapter implements ApiClient, DemoControls {
           uses: plan.uses,
           expectedMilli: plan.expectedMilli,
           actualMilli: input.actualMilli,
-          cost: linesCost(this.costBook(data), plan.lines).total,
+          cost: linesCost(book, plan.lines).total,
           plateMilli: input.plateMilli,
-          planDate: input.planDate ?? this.cookingToday(data),
+          planDate: input.planDate ?? this.branchToday(data),
           note: input.note.trim().slice(0, MAX_MOVEMENT_NOTE),
           status: 'DONE',
           createdBy: user.id,
@@ -3342,9 +3377,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
         };
         const note = `Cooked ${dish.name}`;
         for (const use of plan.uses) {
-          inv.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'COOK_USE', quantityMilli: -use.quantityMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id });
+          inv.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'COOK_USE', quantityMilli: -use.quantityMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: ingredientCost(book, use.ingredientId, use.quantityMilli) });
         }
-        inv.movements.push({ id: newId(), ...scope, ingredientId: dish.id, type: 'COOKED', quantityMilli: input.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id });
+        // The raw cost moves into the cooked food: the same money, not a second expense
+        inv.movements.push({ id: newId(), ...scope, ingredientId: dish.id, type: 'COOKED', quantityMilli: input.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: batch.cost });
         (inv.cookingBatches ??= []).push(batch);
         Object.assign(dish, { plateMilli: input.plateMilli, updatedAt: now });
         data.idempotency[key] = batch.id;
@@ -3374,7 +3410,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (delta === 0) return batch;
         if (delta < 0 && onHandOf(batch.preparedId, inv.movements) < -delta) throw new ApiError('CONFLICT', 'Less of this dish is left than the correction takes away.');
         const now = nowIso();
-        inv.movements.push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: delta, reason: null, note: `Correction: ${why}`.slice(0, MAX_MOVEMENT_NOTE), createdBy: user.id, createdAt: now, batchId: batch.id });
+        // A corrected weight changes the amount, not what the batch cost
+        inv.movements.push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: delta, reason: null, note: `Correction: ${why}`.slice(0, MAX_MOVEMENT_NOTE), createdBy: user.id, createdAt: now, batchId: batch.id, cost: 0 });
         (batch.corrections ??= []).push({ fromMilli: batch.actualMilli, toMilli: actualMilli, reason: why, by: user.id, at: now });
         batch.actualMilli = actualMilli;
         return batch;
@@ -3396,9 +3433,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
         const note = `Reversed: ${why}`.slice(0, MAX_MOVEMENT_NOTE);
         for (const use of batch.uses) {
-          inv.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'COOK_USE', quantityMilli: use.quantityMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id });
+          // The same value goes back that the batch took (missing on a batch from before IM1)
+          const taken = inv.movements.find((m) => m.batchId === batch.id && m.type === 'COOK_USE' && m.ingredientId === use.ingredientId && m.quantityMilli < 0);
+          inv.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'COOK_USE', quantityMilli: use.quantityMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, ...(taken?.cost !== undefined && { cost: taken.cost }) });
         }
-        inv.movements.push({ id: newId(), ...scope, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: -batch.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id });
+        inv.movements.push({ id: newId(), ...scope, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: -batch.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: batch.cost });
         Object.assign(batch, { status: 'REVERSED', reversedBy: user.id, reversedAt: now, reverseReason: why });
         return batch;
       }),
@@ -3410,10 +3449,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const data = this.store.read();
       this.require(data, 'inventory.view');
       const inv = data.inventory;
-      const today = this.cookingToday(data);
+      const today = this.branchToday(data);
       // 'today' comes from the cooked-stock alert (I4)
       const day = date === 'today' ? today : date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : nextDate(today);
-      const { rows, cooked, needs } = this.planCheck(data, day);
+      const { rows, needs } = this.planCheck(data, day);
       const nameOf = (id: string | null | undefined) => (id ? (inv.ingredients.find((i) => i.id === id)?.name ?? null) : null);
       const dishes = inv.ingredients
         .filter((i) => i.kind === 'PREPARED' && i.isActive)
@@ -3438,7 +3477,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
             mainName: dish?.mainName ?? null,
             verified: dish?.verified ?? false,
             expectedMilli: version ? (batchPlan(version, row.mode, row.amountMilli)?.expectedMilli ?? null) : null,
-            cooked: cooked.has(row.preparedId),
+            cooked: row.leftMilli === 0,
           };
         }),
         needs: needs
@@ -3450,7 +3489,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
               ...need,
               ingredient,
               low: status === 'LOW' || status === 'OUT',
-              expired: expiryState(ingredient.expiryDate, today, onHand, inv.expiringSoonDays) === 'EXPIRED',
+              expired: expiryState(ingredient.expiryDate, this.calendarToday(data), onHand, inv.expiringSoonDays) === 'EXPIRED',
               supplierName: nameOfSupplier(inv.suppliers, this.supplierFor(data, ingredient.id)),
             };
           })
@@ -3586,10 +3625,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
     const at = nowIso();
     const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
     const note = `Order #${order.dailyNumber} · ${item.quantity} × ${this.lineLabel(item)}`.slice(0, MAX_MOVEMENT_NOTE);
-    for (const use of uses) {
-      data.inventory.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'SALE_USE', quantityMilli: -use.quantityMilli, reason: null, note, createdBy: userId, createdAt: at, orderId: order.id, orderItemId: item.id });
-    }
     const book = this.costBook(data);
+    for (const use of uses) {
+      data.inventory.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'SALE_USE', quantityMilli: -use.quantityMilli, reason: null, note, createdBy: userId, createdAt: at, orderId: order.id, orderItemId: item.id, cost: ingredientCost(book, use.ingredientId, use.quantityMilli) });
+    }
     const costs = [...uses.map((u) => ingredientCost(book, u.ingredientId, u.quantityMilli)), ...(stock.fromAvailable ?? []).map((f) => this.foodCostShare(data, f.availableId, f.quantity))];
     stock.takenAt = at;
     stock.how = how;
@@ -3604,8 +3643,13 @@ export class DemoAdapter implements ApiClient, DemoControls {
     const at = nowIso();
     const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
     const note = `${why} · Order #${order.dailyNumber} · ${this.lineLabel(item)}`.slice(0, MAX_MOVEMENT_NOTE);
-    for (const back of netTaken(data.inventory.movements.filter((m) => m.orderItemId === item.id))) {
-      data.inventory.movements.push({ id: newId(), ...scope, ingredientId: back.ingredientId, type: 'SALE_RETURN', quantityMilli: back.quantityMilli, reason: null, note, createdBy: userId, createdAt: at, orderId: order.id, orderItemId: item.id });
+    const own = data.inventory.movements.filter((m) => m.orderItemId === item.id);
+    for (const back of netTaken(own)) {
+      // What comes back is worth what the line took of it (its share when only a part is still held)
+      const taken = own.filter((m) => m.ingredientId === back.ingredientId && m.type === 'SALE_USE');
+      const takenMilli = taken.reduce((sum, m) => sum - m.quantityMilli, 0);
+      const cost = takenMilli > 0 && taken.every((m) => typeof m.cost === 'number') ? mulDivRound(taken.reduce((sum, m) => sum + (m.cost ?? 0), 0), back.quantityMilli, takenMilli) : null;
+      data.inventory.movements.push({ id: newId(), ...scope, ingredientId: back.ingredientId, type: 'SALE_RETURN', quantityMilli: back.quantityMilli, reason: null, note, createdBy: userId, createdAt: at, orderId: order.id, orderItemId: item.id, cost });
     }
     if (keepHandled) return;
     stock.takenAt = null;
@@ -3817,16 +3861,17 @@ export class DemoAdapter implements ApiClient, DemoControls {
       this.require(data, 'inventory.view');
       const now = Date.now();
       const tz = data.branch.timezone;
-      const today = localClock(new Date(now), tz).date;
+      const today = this.branchToday(data);
+      const dayOf = (iso: string) => businessDate(new Date(iso), tz, data.branch.businessDayStart);
       const rows = (data.inventory.availableFood ?? [])
         .map((food) => ({ food, state: availableState(food, now), overnight: this.reuseFor(data, food).overnight }))
-        .filter((r) => r.state !== 'DONE' || localClock(new Date(r.food.createdAt), tz).date === today)
+        .filter((r) => r.state !== 'DONE' || dayOf(r.food.createdAt) === today)
         .sort((a, b) => Number(a.state === 'DONE') - Number(b.state === 'DONE') || b.food.madeAt.localeCompare(a.food.madeAt));
       return {
         closingTime: data.inventory.closingTime ?? DEFAULT_CLOSING_TIME,
         reviewDue: this.foodReviewDue(data),
         rows,
-        waste: (data.inventory.foodWaste ?? []).filter((w) => localClock(new Date(w.createdAt), tz).date === today).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        waste: (data.inventory.foodWaste ?? []).filter((w) => dayOf(w.createdAt) === today).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       };
     });
   }
@@ -4020,39 +4065,63 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const supplier = inv.suppliers.find((s) => s.id === input.supplierId && s.isActive);
         if (!supplier) throw new ApiError('NOT_FOUND', 'Supplier not found.');
         if (checkReceipt(input, inv.ingredients)) throw new ApiError('VALIDATION', 'Please check the quantities and rates.');
-        const now = nowIso();
-        const entryId = newId();
-        const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
-        const lines = input.lines.map((line) => {
-          const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId)!;
-          const stockMilli = receivedStockMilli(line.quantityMilli, ingredient)!;
-          const movementId = newId();
-          inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: 'PURCHASE', quantityMilli: stockMilli, reason: null, note: input.note.trim(), createdBy: user.id, createdAt: now, supplierId: supplier.id, khataEntryId: entryId });
-          // The rate paid becomes the product's purchase price, so recipe costs follow real prices (owner, 2026-11-05).
-          Object.assign(ingredient, { purchasePrice: line.ratePaisa, updatedAt: now });
-          if (!supplier.productIds.includes(ingredient.id)) supplier.productIds.push(ingredient.id);
-          supplier.rates = { ...supplier.rates, [ingredient.id]: line.ratePaisa };
-          return { ingredientId: ingredient.id, quantityMilli: line.quantityMilli, ratePaisa: line.ratePaisa, amount: lineAmount(line.quantityMilli, line.ratePaisa), stockMilli, movementId, unit: ingredient.purchaseUnit, unitSizeMilli: mulDivRound(stockMilli, MILLI, line.quantityMilli), rateDivisor: 1 };
-        });
-        const entry: KhataEntry = {
-          id: entryId,
-          ...scope,
-          supplierId: supplier.id,
-          kind: 'PURCHASE',
-          amount: lines.reduce((sum, l) => sum + l.amount, 0),
-          lines,
-          method: null,
-          businessDate: this.branchToday(data),
-          note: input.note.trim(),
-          createdBy: user.id,
-          createdAt: now,
-        };
-        inv.khata.push(entry);
-        this.addPurchaseRecipes(data, entry);
-        data.idempotency[key] = entryId;
-        return entry;
+        // IM1: a quick receive is a bill of its own with nothing paid, posted the same way as New Purchase (Bill)
+        const { purchase } = this.postPurchase(data, user, supplier, { lines: input.lines.map((l) => ({ ...l, unitKey: 'main' })), billNo: '', date: this.branchToday(data), discount: 0, paid: 0, method: null, note: input.note.trim() });
+        this.addPurchaseRecipes(data, purchase);
+        data.idempotency[key] = purchase.id;
+        return purchase;
       }),
     );
+  }
+
+  /**
+   * Every purchase is posted here, in one change (IM1): one PURCHASE khata entry (the lines minus the discount), one PURCHASE
+   * stock movement per line with what the line cost after the discount, the supplier's last rate for each way to buy, the
+   * product's price from this bill's average, and what was paid at once as a PAYMENT linked to the bill. Stock goes up here only.
+   */
+  private postPurchase(
+    data: DemoData,
+    user: StaffUser,
+    supplier: Supplier,
+    bill: Pick<PurchaseBillInput, 'lines' | 'billNo' | 'date' | 'discount' | 'paid' | 'method' | 'note'>,
+  ): { purchase: KhataEntry; payment: KhataEntry | null } {
+    const inv = data.inventory;
+    const now = nowIso();
+    const entryId = newId();
+    const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+    const billNo = bill.billNo.trim();
+    const note = bill.note.trim();
+    const lines = bill.lines.map((line) => {
+      const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId)!;
+      // Every way to buy turns into the stock unit: 2 cartons of 12 = 24 bottles, a 25 kg bag = 25,000 g.
+      const option = findBuyOption(ingredient, line.unitKey)!;
+      // His last rate for this way to buy, and the product's usual price for it.
+      supplier.rates = { ...supplier.rates, [supplierRateKey(ingredient.id, line.unitKey)]: line.ratePaisa };
+      if (option.packing) ingredient.packings = (ingredient.packings ?? []).map((p) => (p.id === option.packing!.id ? { ...p, pricePaisa: line.ratePaisa } : p));
+      else if (option.key !== 'main') ingredient.loosePrice = line.ratePaisa;
+      if (!supplier.productIds.includes(ingredient.id)) supplier.productIds.push(ingredient.id);
+      return { ingredientId: ingredient.id, quantityMilli: line.quantityMilli, ratePaisa: line.ratePaisa, amount: buyAmount(line.quantityMilli, line.ratePaisa, option.rateDivisor), stockMilli: buyStockMilli(line.quantityMilli, option.sizeMilli), movementId: newId(), unit: option.unit, unitSizeMilli: option.sizeMilli, rateDivisor: option.rateDivisor };
+    });
+    // Each movement keeps what its line cost on this bill, so a later price never changes an old report.
+    const costs = lineCosts(lines.map((l) => l.amount), bill.discount);
+    for (const [index, line] of lines.entries()) {
+      inv.movements.push({ id: line.movementId, ...scope, ingredientId: line.ingredientId, type: 'PURCHASE', quantityMilli: line.stockMilli, reason: null, note: billNo ? `Bill ${billNo}` : note, createdBy: user.id, createdAt: now, supplierId: supplier.id, khataEntryId: entryId, cost: costs[index] ?? null });
+    }
+    // Recipes cost from this bill's average (owner's choice): all lines of a product, as the price of one main unit.
+    for (const ingredientId of new Set(lines.map((l) => l.ingredientId))) {
+      const ingredient = inv.ingredients.find((i) => i.id === ingredientId)!;
+      const average = averageMainPrice(lines.filter((l) => l.ingredientId === ingredientId), findBuyOption(ingredient, 'main')!.sizeMilli);
+      if (average !== null) Object.assign(ingredient, { purchasePrice: average, updatedAt: now });
+    }
+    const { total } = billTotals(lines, bill.discount);
+    const purchase: KhataEntry = { id: entryId, ...scope, supplierId: supplier.id, kind: 'PURCHASE', amount: total, lines, method: null, businessDate: bill.date, note, createdBy: user.id, createdAt: now, billNo, discount: bill.discount };
+    inv.khata.push(purchase);
+    let payment: KhataEntry | null = null;
+    if (bill.paid > 0) {
+      payment = { id: newId(), ...scope, supplierId: supplier.id, kind: 'PAYMENT', amount: -bill.paid, lines: [], method: bill.method, businessDate: bill.date, note: '', createdBy: user.id, createdAt: now, billId: entryId, billNo };
+      inv.khata.push(payment);
+    }
+    return { purchase, payment };
   }
 
   paySupplier(input: SupplierPaymentInput): Promise<KhataEntry> {
@@ -4204,43 +4273,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const today = this.branchToday(data);
         const problem = checkPurchaseBill(input, inv.ingredients, today);
         if (problem) throw new ApiError('VALIDATION', PURCHASE_BILL_MESSAGES[problem.problem]);
-        const now = nowIso();
-        const entryId = newId();
-        const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
-        const billNo = input.billNo.trim();
-        const note = input.note.trim();
-        const lines = input.lines.map((line) => {
-          const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId)!;
-          // Every way to buy turns into the stock unit: 2 cartons of 12 = 24 bottles, a 25 kg bag = 25,000 g.
-          const option = findBuyOption(ingredient, line.unitKey)!;
-          const stockMilli = buyStockMilli(line.quantityMilli, option.sizeMilli);
-          const movementId = newId();
-          inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: 'PURCHASE', quantityMilli: stockMilli, reason: null, note: billNo ? `Bill ${billNo}` : note, createdBy: user.id, createdAt: now, supplierId: supplier.id, khataEntryId: entryId });
-          // His last rate for this way to buy, and the product's usual price for it.
-          supplier.rates = { ...supplier.rates, [supplierRateKey(ingredient.id, line.unitKey)]: line.ratePaisa };
-          if (option.packing) ingredient.packings = (ingredient.packings ?? []).map((p) => (p.id === option.packing!.id ? { ...p, pricePaisa: line.ratePaisa } : p));
-          else if (option.key !== 'main') ingredient.loosePrice = line.ratePaisa;
-          if (!supplier.productIds.includes(ingredient.id)) supplier.productIds.push(ingredient.id);
-          return { ingredientId: ingredient.id, quantityMilli: line.quantityMilli, ratePaisa: line.ratePaisa, amount: buyAmount(line.quantityMilli, line.ratePaisa, option.rateDivisor), stockMilli, movementId, unit: option.unit, unitSizeMilli: option.sizeMilli, rateDivisor: option.rateDivisor };
-        });
-        // Recipes cost from this bill's average (owner's choice): all lines of a product, as the price of one main unit.
-        for (const ingredientId of new Set(lines.map((l) => l.ingredientId))) {
-          const ingredient = inv.ingredients.find((i) => i.id === ingredientId)!;
-          const average = averageMainPrice(lines.filter((l) => l.ingredientId === ingredientId), findBuyOption(ingredient, 'main')!.sizeMilli);
-          if (average !== null) Object.assign(ingredient, { purchasePrice: average, updatedAt: now });
-        }
-        const { total } = billTotals(lines, input.discount);
-        const purchase: KhataEntry = { id: entryId, ...scope, supplierId: supplier.id, kind: 'PURCHASE', amount: total, lines, method: null, businessDate: input.date, note, createdBy: user.id, createdAt: now, billNo, discount: input.discount };
-        inv.khata.push(purchase);
-        let payment: KhataEntry | null = null;
-        if (input.paid > 0) {
-          payment = { id: newId(), ...scope, supplierId: supplier.id, kind: 'PAYMENT', amount: -input.paid, lines: [], method: input.method, businessDate: input.date, note: '', createdBy: user.id, createdAt: now, billId: entryId, billNo };
-          inv.khata.push(payment);
-        }
+        const { purchase, payment } = this.postPurchase(data, user, supplier, input);
         inv.purchaseDrafts = (inv.purchaseDrafts ?? []).filter((d) => d.supplierId !== supplier.id);
-        data.idempotency[key] = entryId;
+        data.idempotency[key] = purchase.id;
         this.addPurchaseRecipes(data, purchase);
-        return { purchase, payment, recipeUpdates: this.recipeUpdates(data, lines), purchaseRecipes: this.purchaseRecipeRows(data, purchase.id) };
+        return { purchase, payment, recipeUpdates: this.recipeUpdates(data, purchase.lines), purchaseRecipes: this.purchaseRecipeRows(data, purchase.id) };
       }),
     );
   }

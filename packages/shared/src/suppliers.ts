@@ -142,6 +142,21 @@ export function billTotals(lines: readonly { quantityMilli: number | null; rateP
 }
 
 /**
+ * What each line of a bill cost after the discount (paisa): the discount is shared by the lines' amounts and the last line
+ * takes the rounding, so the lines add up to the bill total exactly. Kept on the stock movements.
+ */
+export function lineCosts(amounts: readonly Paisa[], discount: Paisa): Paisa[] {
+  const subtotal = amounts.reduce((sum, a) => sum + a, 0);
+  if (discount <= 0 || subtotal <= 0) return [...amounts];
+  let left = subtotal - discount;
+  return amounts.map((amount, index) => {
+    const cost = index === amounts.length - 1 ? left : mulDivRound(amount, subtotal - discount, subtotal);
+    left -= cost;
+    return cost;
+  });
+}
+
+/**
  * Owner's choice (2026-11-07): recipes cost from this bill's average. All lines of one product together: their amount
  * per stock unit, given as the price of one main purchase unit. 2 cartons (24 bottles) Rs. 9,600 + 6 bottles Rs. 2,520 =
  * Rs. 12,120 for 30 bottles = Rs. 404 a bottle.

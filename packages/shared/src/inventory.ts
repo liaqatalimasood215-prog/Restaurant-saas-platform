@@ -433,6 +433,12 @@ export interface StockMovement extends BranchScoped {
   /** SALE_USE / SALE_RETURN (I4): the order line whose stock it is */
   orderId?: Uuid;
   orderItemId?: Uuid;
+  /**
+   * What this quantity was worth when it moved (paisa, never negative; the quantity carries the sign): a purchase line's share
+   * of its bill, else the cost of that day. Kept so a later price never rewrites an old report. Missing on movements from
+   * before 2026-11-10; null = a price was missing.
+   */
+  cost?: Paisa | null;
 }
 
 export const MAX_MOVEMENT_NOTE = 120;

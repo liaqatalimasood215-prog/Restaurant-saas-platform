@@ -670,6 +670,11 @@ export interface PreparedRow {
   unitCost: Paisa | null;
   /** The menu products sold from it (MenuItem.preparedItemId); empty = not on the POS */
   soldAs?: { menuItemId: Uuid; name: string }[];
+  /**
+   * IM1: a menu product that is the same dish, is not linked to it and has its own verified raw recipe. Cooking a batch AND
+   * selling that product would take the raw stock twice, so a batch is refused until they are linked (Sell on POS).
+   */
+  rawTwice?: { menuItemId: Uuid; name: string } | null;
 }
 
 export interface RecipesView {
