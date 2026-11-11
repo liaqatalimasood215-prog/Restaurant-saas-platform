@@ -29,3 +29,4 @@ export * from './sales-stock';
 export * from './suppliers';
 export * from './size-mix';
 export * from './wastage';
+export * from './lots';

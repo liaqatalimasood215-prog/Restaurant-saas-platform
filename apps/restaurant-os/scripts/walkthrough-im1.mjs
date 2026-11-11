@@ -173,14 +173,21 @@ try {
   assert.equal(await owner.getByRole('status').filter({ hasText: 'Cooking plan saved' }).count(), 1, 'one "Cooking plan saved"');
   ok('two saves in a row: one "Cooking plan saved" on screen');
 
-  console.log('\n6. One expiry date for all the stock: what was bought after it can still be cooked with (B2, until lots in IM7)');
-  // 8 kg daal mash are left: 3 kg of the old stock and the 5 kg bought today. The date on the ingredient passed yesterday.
+  console.log('\n6. The old stock expired: it is blocked, never cooked with; fresh stock is (B2; from W3 every delivery is its own lot)');
+  // 8 kg old daal mash + 5 kg bought today (its own lot); today's cooking took 5 kg. The old stock's use-by is set to yesterday:
+  // so it was already expired when today's cooking ran, and W3 judges every use as the lots were then (FEFO never uses expired
+  // stock): the cooking took the fresh 5 kg, the old 8 kg stay on hand, blocked. Before W3 one date for all the stock made
+  // this "3 kg old + 5 kg fresh".
   const todayDate = karachiDate(new Date());
   const yesterday = new Date(Date.parse(`${todayDate}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
   await owner.evaluate(
     ([key, ingredientId, date]) => {
       const all = JSON.parse(window.localStorage.getItem(key));
       all.inventory.ingredients.find((i) => i.id === ingredientId).expiryDate = date;
+      Object.assign(
+        all.inventory.lots.find((l) => l.ingredientId === ingredientId && l.source === 'OLD_STOCK'),
+        { date, dateKind: 'USE_BY' },
+      );
       window.localStorage.setItem(key, JSON.stringify(all));
     },
     [DATA_KEY, DAAL, yesterday],
@@ -190,12 +197,14 @@ try {
   await owner.getByLabel('+ Add a dish').selectOption({ label: 'Cooked Daal Mash' });
   await owner.getByLabel('Amount of Cooked Daal Mash').fill('6');
   await owner.getByRole('button', { name: /^Save for / }).click();
-  await daalNeed(owner).locator('[data-short="yes"]').getByText('1 kg', { exact: true }).waitFor();
+  await daalNeed(owner).locator('[data-short="yes"]').getByText('6 kg', { exact: true }).waitFor();
   const needText = await daalNeed(owner).innerText();
-  assert.match(needText, /5 kg/, 'usable: the 5 kg bought after the date, not 0 and not all 8 kg');
+  assert.match(needText, /0 g/, 'usable: nothing; the expired 8 kg are not counted');
   assert.match(needText, /Expired/);
+  const lotsNow = await owner.evaluate(([key, ingredientId]) => JSON.parse(window.localStorage.getItem(key)).inventory.lots.filter((l) => l.ingredientId === ingredientId).map((l) => l.source), [DATA_KEY, DAAL]);
+  assert.deepEqual(lotsNow, ['OLD_STOCK', 'PURCHASE'], 'two lots: the old stock and the bill');
   await shot(owner, '05-desktop-plan-expired-date-fresh-stock');
-  ok(`expiry ${yesterday} passed, 8 kg on hand: 5 kg (bought today) usable, 6 kg planned → 1 kg short, badge Expired`);
+  ok(`old stock use-by ${yesterday}: 8 kg on hand but blocked; today's cooking used the fresh 5 kg (never the expired stock); 6 kg planned → 6 kg short, badge Expired`);
 
   console.log('\n7. After midnight "Today" is still the business day (B3)');
   // The business day starts at 06:00: at 01:30 of the next calendar day the plan's Today is the day that is still running

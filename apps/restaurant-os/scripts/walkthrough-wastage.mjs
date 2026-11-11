@@ -159,12 +159,12 @@ try {
 
   console.log('\n7. Expiring / Expired lists; the Manager records too');
   await owner.getByRole('tab', { name: /^Expiring soon/ }).click();
-  await owner.locator('main [data-expiry-list]').getByText('One expiry date per ingredient for now', { exact: false }).waitFor();
+  await owner.locator('main [data-expiry-list]').getByText('Every delivery has its own date', { exact: false }).waitFor();
   const manager = await openAs(USER.manager, '/inventory', DESKTOP);
   await openWastage(manager);
   await manager.locator('main [data-wastage]').getByRole('button', { name: 'Record Waste' }).waitFor();
   await manager.locator('main [data-waste-log] [data-waste-row="Fresh milk"]').waitFor();
-  ok('Expiring soon lists the ingredients by their one date (lots in W3); the Manager sees the log and Record Waste');
+  ok('Expiring soon lists every delivery by its own date (W3); the Manager sees the log and Record Waste');
 
   console.log('\n8. Phone');
   const phone = await openAs(USER.owner, '/inventory', PHONE);
@@ -301,6 +301,83 @@ try {
   assert.deepEqual({ entries: data.inventory.khata.length, total: khataTotal(data) }, khataBefore, 'the supplier khata still does not change');
   await owner.locator('main [data-waste-log] [data-waste-row="Fresh milk"]', { hasText: 'Correction' }).waitFor();
   ok('corrected: old entry Reversed ("It was 3 litres"), new entry "Correction" 3 L; milk 8 + 2 − 3 = 7 L; cold drink and khata unchanged; double tap once');
+
+  // ── W3 ──────────────────────────────────────────────────────────────────────────────────────
+  console.log('\n13. W3: expired stock is blocked: listed under Expired, shown in the stock list, never eaten by the staff');
+  await openWastage(owner);
+  await owner.getByRole('tab', { name: /^Expired/ }).click();
+  const expiredRow = owner.locator('main [data-expiry-list] [data-expiry-row][data-lot-state="EXPIRED"]').first();
+  await expiredRow.waitFor();
+  const expiredName = await expiredRow.getAttribute('data-expiry-row');
+  await expiredRow.getByText('Expired — blocked').waitFor();
+  data = await saved(owner);
+  const expiredItem = data.inventory.ingredients.find((i) => i.name === expiredName);
+  await owner.locator('main [data-wastage]').getByRole('button', { name: 'Record Waste', exact: true }).click();
+  await recordBox(owner).getByRole('radio', { name: 'Staff meal' }).click();
+  await recordBox(owner).getByLabel('Item 1').selectOption(expiredItem.id);
+  await recordBox(owner).getByLabel(`Quantity of ${expiredName} (1)`).fill('0.1');
+  await recordBox(owner).getByRole('button', { name: 'Post waste' }).click();
+  await recordBox(owner).getByRole('alert').getByText('expired or held food is never eaten or given away', { exact: false }).waitFor();
+  await recordBox(owner).getByRole('button', { name: 'Cancel' }).click();
+  await shot(owner, '11-desktop-w3-expired');
+  ok(`${expiredName}: its old stock passed its use-by date → Expired — blocked; a staff meal of it is refused`);
+
+  console.log('\n14. W3: a supplier bill line with its own date makes its own lot (two lots of milk, different dates)');
+  const inTen = new Date(Date.now() + 10 * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' });
+  await owner.getByRole('tab', { name: 'Suppliers', exact: true }).click();
+  await owner.locator('main [data-supplier-card="Fresh Doodh Dairy — DEMO"]').click();
+  await owner.locator('main [data-supplier-workspace] [data-product-row="Fresh milk"]').click();
+  const milkLine = owner.locator('main [data-purchase-bill] [data-bill-line="Fresh milk"]');
+  await milkLine.getByRole('textbox', { name: 'Quantity of Fresh milk received' }).fill('5');
+  await milkLine.getByLabel('Expiry date of Fresh milk').fill(inTen);
+  await shot(owner, '12-desktop-w3-bill-date');
+  const lotsBefore = (await saved(owner)).inventory.lots.length;
+  await owner.locator('main [data-purchase-bill]').getByRole('button', { name: 'Save Purchase' }).click();
+  await owner.locator('main [data-supplier-workspace]').waitFor();
+  data = await saved(owner);
+  const newLot = data.inventory.lots.at(-1);
+  assert.equal(data.inventory.lots.length, lotsBefore + 1, 'one lot per bill line');
+  assert.deepEqual([newLot.ingredientId, newLot.source, newLot.date, newLot.dateKind, newLot.unverified, newLot.firstMilli], [MILK, 'PURCHASE', inTen, 'USE_BY', false, 5_000_000]);
+  assert.equal(data.inventory.movements.find((m) => m.lotId === newLot.id).type, 'PURCHASE');
+  const milkLots = data.inventory.lots.filter((l) => l.ingredientId === MILK && l.source !== 'RETURNED');
+  assert.ok(milkLots.length >= 2 && new Set(milkLots.map((l) => l.date)).size >= 2, 'two lots of milk with different dates');
+  ok(`5 L milk on a bill with use-by ${inTen}: its own lot (Supplier bill), apart from the old stock (use-by ${milkLots[0].date}, not confirmed)`);
+
+  console.log('\n15. W3: Needs review: the old milk has a date nobody confirmed; Set date confirms it');
+  await openWastage(owner);
+  await owner.getByRole('tab', { name: /^Needs review/ }).click();
+  const oldMilk = owner.locator('main [data-expiry-list] [data-expiry-row="Fresh milk"]', { hasText: 'Old stock' }).first();
+  await oldMilk.getByText('not confirmed', { exact: false }).waitFor();
+  await oldMilk.getByRole('button', { name: 'Set date of Fresh milk' }).click();
+  const dateBox = owner.getByRole('dialog', { name: /^Date of this delivery: Fresh milk/ });
+  await dateBox.getByLabel('Date on the label').fill(inTen);
+  await dateBox.getByRole('button', { name: 'Set date' }).click();
+  await dateBox.waitFor({ state: 'detached' });
+  data = await saved(owner);
+  const confirmed = data.inventory.lots.find((l) => l.ingredientId === MILK && l.source === 'OLD_STOCK');
+  assert.deepEqual([confirmed.date, confirmed.unverified, confirmed.dateSetBy], [inTen, false, USER.owner]);
+  assert.equal(await owner.locator('main [data-expiry-list] [data-expiry-row="Fresh milk"]', { hasText: 'Old stock' }).count(), 0, 'no longer needs review');
+  ok(`old milk: "not confirmed" in Needs review → Set date ${inTen} → confirmed by the Owner, leaves the list`);
+
+  console.log('\n16. W3: the reversed donation came back ON HOLD; released only after "safe" is ticked');
+  await owner.getByRole('tab', { name: /^On hold/ }).click();
+  const heldMilk = owner.locator('main [data-expiry-list] [data-expiry-row="Fresh milk"][data-lot-state="HELD"]');
+  await heldMilk.getByText('Not given, recorded by mistake').waitFor();
+  data = await saved(owner);
+  const heldLot = data.inventory.lots.find((l) => l.source === 'RETURNED' && l.ingredientId === MILK && l.held);
+  assert.ok(heldLot, 'the donation reversal made a held lot');
+  await heldMilk.getByRole('button', { name: 'Release Fresh milk' }).click();
+  const release = owner.getByRole('dialog', { name: /^Release held food: Fresh milk/ });
+  await release.getByRole('button', { name: 'Release' }).click();
+  await release.getByRole('alert').getByText('Confirm that it is safe to use', { exact: false }).waitFor();
+  await release.getByRole('checkbox').check();
+  await shot(owner, '13-desktop-w3-release');
+  await release.getByRole('button', { name: 'Release' }).click();
+  await release.waitFor({ state: 'detached' });
+  data = await saved(owner);
+  const releasedLot = data.inventory.lots.find((l) => l.id === heldLot.id);
+  assert.deepEqual([releasedLot.held, releasedLot.release.by], [false, USER.owner]);
+  ok('1 L milk from the reversed donation: On hold → Release refused without the safe tick → released by the Owner');
 
   assert.deepEqual(errors, [], 'no page errors');
   console.log('\nWastage walkthrough passed.');

@@ -187,8 +187,10 @@ export interface Ingredient extends BranchScoped {
   preferredSupplierId: Uuid | null;
   locationId: Uuid | null;
   batchNo: string;
-  /** Expiry of the stock on hand (YYYY-MM-DD), null = does not expire or not tracked */
+  /** Expiry of the stock on hand (YYYY-MM-DD), null = does not expire or not tracked. From W3 each lot has its own date; this one is the old-stock lot's */
   expiryDate: string | null;
+  /** W3, cooked food only: every batch is thrown away this many hours after it is made; missing = no discard time (no default) */
+  discardHours?: number | null;
   /** false = Not in use: hidden from lists, kept for its history */
   isActive: boolean;
   createdAt: IsoDateTime;
@@ -439,6 +441,10 @@ export interface StockMovement extends BranchScoped {
   /** WASTE (W1): the waste event and why it was thrown away */
   wasteId?: Uuid;
   wasteReason?: StockWasteReason;
+  /** W3: the lot it went into or came from (a bill line, a cooking batch, a waste line that named its lot, returned food) */
+  lotId?: Uuid;
+  /** W3: a corrected waste puts back exactly what this movement took, into the same lots */
+  restoresMovementId?: Uuid;
   /**
    * What this quantity was worth when it moved (paisa, never negative; the quantity carries the sign): a purchase line's share
    * of its bill, else the cost of that day. Kept so a later price never rewrites an old report. Missing on movements from
@@ -513,6 +519,13 @@ export function stockValueOf(item: Pick<Ingredient, 'purchaseUnit' | 'stockUnit'
 export interface IngredientRow {
   ingredient: Ingredient;
   onHandMilli: number;
+  /** W3: on hand minus expired and held lots (what may be used); the status counts it */
+  usableMilli?: number;
+  /** W3: expired or held stock, and stock without a confirmed date */
+  blockedMilli?: number;
+  reviewMilli?: number;
+  /** W3: the earliest date among its lots with stock (shown with `expiry`) */
+  expiryDate?: string | null;
   status: StockStatus;
   expiry: ExpiryState;
   value: Paisa;

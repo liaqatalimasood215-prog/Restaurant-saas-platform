@@ -105,3 +105,15 @@ test('W2: Reverse once, with a reason; order food that left the kitchen cannot b
   assert.equal(checkReverse({ status: 'REVERSED', lines: [stockLine] }, 'again'), 'NOT_POSTED', 'a second reversal is refused');
   assert.equal(checkReverse({ status: 'POSTED', lines: [{ itemKind: 'ORDER_FOOD' } as WasteLine] }, 'oops'), 'ORDER_FOOD');
 });
+
+test('W3: a waste line may name its delivery; a staff meal or donation only from usable stock', () => {
+  const lots = {
+    lot: (id: string) => (id === 'fresh' ? { ingredientId: 'milk', remainingMilli: 3_000_000, usable: true } : id === 'expired' ? { ingredientId: 'milk', remainingMilli: 4_000_000, usable: false } : null),
+    usable: (id: string) => (id === 'milk' ? 3_000_000 : 0),
+  };
+  assert.equal(checkWaste(incident([line({ lotId: 'expired' })]), items, onHand, NOW, lots), null, 'expired milk may be thrown away');
+  assert.equal(checkWaste(incident([line({ lotId: 'expired', reason: null })], { kind: 'STAFF_MEAL' }), items, onHand, NOW, lots)?.problem, 'NOT_USABLE', 'never eaten by the staff');
+  assert.equal(checkWaste(incident([line({ reason: null, parts: [{ unitKey: 'main', quantityMilli: 4_000 }] })], { kind: 'DONATION' }), items, onHand, NOW, lots)?.problem, 'NOT_USABLE', '4 L of 3 L usable');
+  assert.equal(checkWaste(incident([line({ lotId: 'fresh', parts: [{ unitKey: 'main', quantityMilli: 3_500 }] })]), items, onHand, NOW, lots)?.problem, 'MORE_THAN_IN_LOT');
+  assert.equal(checkWaste(incident([line({ lotId: 'other' })]), items, onHand, NOW, lots)?.problem, 'LOT_INVALID');
+});

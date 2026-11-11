@@ -137,7 +137,6 @@ import {
   checkAdjustment,
   checkIngredient,
   cleanIngredientName,
-  expiryState,
   onHandOf,
   purchaseRecipeCost,
   recipeForAmount,
@@ -200,6 +199,25 @@ import {
   type StockLedgerQuery,
   type StockLedgerView,
   MILLI,
+  MAX_REVERSE_REASON,
+  daysBetween,
+  fefoOrder,
+  checkDiscardHours,
+  checkLotDate,
+  checkRelease,
+  discardAtOf,
+  isUsableState,
+  lotDateState,
+  lotLedger,
+  lotState,
+  needsReview,
+  usableOfLots,
+  type ExpiryState,
+  type LotClock,
+  type LotDateProblem,
+  type LotRow,
+  type ReleaseProblem,
+  type StockLot,
   checkReverse,
   checkWaste,
   cookedWasteCost,
@@ -241,7 +259,6 @@ import {
   planUses,
   stockNeeds,
   takesRawTwice,
-  usableMilli,
   type BatchProblem,
   type CookingBatch,
   type CookingCheckTime,
@@ -310,6 +327,7 @@ import {
   type SupplierPaymentInput,
   type SupplierProfileInput,
   StockWasteInput,
+  LotDateInput,
 } from '../client';
 import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
@@ -493,6 +511,22 @@ const WASTE_MESSAGES: Record<WasteProblem, string> = {
   NOTE_REQUIRED: 'Write what happened (reason Other).',
   MORE_THAN_ON_HAND: 'More than is in stock. Correct the stock first if the stock is wrong.',
   KIND_INVALID: 'Choose Waste, Staff meal or Donation.',
+  LOT_INVALID: 'Choose a delivery of this item.',
+  MORE_THAN_IN_LOT: 'More than is left in this delivery.',
+  NOT_USABLE: 'Only stock that may be used: expired or held food is never eaten or given away.',
+};
+
+/** W3: why a date or a discard time cannot be saved, and why held food cannot be released */
+const LOT_DATE_MESSAGES: Record<LotDateProblem, string> = {
+  DATE_INVALID: 'Type the date from the label.',
+  KIND_INVALID: 'Choose Use-by or Best-before.',
+  HOURS_INVALID: 'Discard time: whole hours, 1 to 72.',
+};
+const RELEASE_MESSAGES: Record<ReleaseProblem, string> = {
+  NOT_HELD: 'This stock is not on hold.',
+  NOTHING_LEFT: 'Nothing is left of this stock.',
+  EXPIRED: 'Its date has passed: expired food is never released. Record it as waste.',
+  NOT_SAFE: 'Confirm that it is safe to use, else record it as waste.',
 };
 
 /** W2: why an entry cannot be reversed */
@@ -2726,13 +2760,30 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const inv = data.inventory;
       // An expiry date is a calendar date; everything else on this screen follows the business day
       const today = this.calendarToday(data);
+      // W3: status and expiry from the lots: low / out count the usable stock; the expiry is the worst lot with stock left
+      const book = this.lotBook(data);
+      const lotsOf = new Map<string, StockLot[]>();
+      for (const lot of book.lots) if (book.remaining(lot.id) > 0) lotsOf.set(lot.ingredientId, [...(lotsOf.get(lot.ingredientId) ?? []), lot]);
       const rowOf = (ingredient: Ingredient) => {
         const onHandMilli = onHandOf(ingredient.id, inv.movements);
+        const lots = lotsOf.get(ingredient.id) ?? [];
+        const states = lots.map((lot) => ({ lot, state: book.state(lot), milli: book.remaining(lot.id) }));
+        const sum = (keep: (s: (typeof states)[number]) => boolean) => states.filter(keep).reduce((total, s) => total + s.milli, 0);
+        const usableMilli = book.usable(ingredient.id);
+        const dated = lots
+          .map((l) => (l.discardAt ? localClock(new Date(l.discardAt), data.branch.timezone).date : l.dateKind !== 'UNKNOWN' ? l.date : null))
+          .filter((d): d is string => Boolean(d))
+          .sort();
+        const expiry: ExpiryState = states.some((s) => s.state === 'EXPIRED') ? 'EXPIRED' : states.some((s) => s.state === 'SOON') ? 'SOON' : dated.length ? 'OK' : 'NONE';
         return {
           ingredient,
           onHandMilli,
-          status: stockStatus({ onHandMilli, minStockMilli: ingredient.minStockMilli, isActive: ingredient.isActive }),
-          expiry: expiryState(ingredient.expiryDate, today, onHandMilli, inv.expiringSoonDays),
+          usableMilli,
+          blockedMilli: sum((s) => s.state === 'EXPIRED' || s.state === 'HELD'),
+          reviewMilli: sum((s) => needsReview(s.lot, s.state)) + Math.max(0, book.ledger.none.get(ingredient.id) ?? 0),
+          expiryDate: dated[0] ?? null,
+          status: stockStatus({ onHandMilli: Math.min(onHandMilli, usableMilli), minStockMilli: ingredient.minStockMilli, isActive: ingredient.isActive }),
+          expiry,
           value: stockValueOf(ingredient, onHandMilli),
           supplierName: inv.suppliers.find((s) => s.id === ingredient.preferredSupplierId)?.name ?? null,
           locationName: inv.locations.find((l) => l.id === ingredient.locationId)?.name ?? null,
@@ -2811,13 +2862,22 @@ export class DemoAdapter implements ApiClient, DemoControls {
       if (existing.stockUnit !== input.stockUnit && inv.movements.some((m) => m.ingredientId === existing.id)) {
         throw new ApiError('CONFLICT', 'The stock unit cannot change after stock was recorded.');
       }
+      // W3: a date changed here is the old-stock lot's date, typed by a person (it no longer needs review)
+      const oldLot = (inv.lots ?? []).find((l) => l.ingredientId === existing.id && l.source === 'OLD_STOCK');
+      if (oldLot && input.expiryDate !== existing.expiryDate) {
+        Object.assign(oldLot, { date: input.expiryDate, dateKind: input.expiryDate ? 'USE_BY' : 'UNKNOWN', dateFrom: input.expiryDate ? 'TYPED' : 'NONE', unverified: false, dateSetBy: user.id, dateSetAt: now });
+      }
       Object.assign(existing, fields);
       return existing;
     }
     const ingredient: Ingredient = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, kind: input.kind ?? 'BOUGHT', ...fields, isActive: true, createdAt: now };
     inv.ingredients.push(ingredient);
     if (input.openingMilli > 0) {
+      // W3: the opening stock of a new item is its first lot, with the date typed in the form (none = Unknown)
+      const date = input.expiryDate || null;
+      const lot = this.newLot(data, { ingredientId: ingredient.id, source: 'OLD_STOCK', sourceId: null, firstMilli: input.openingMilli, cost: null, date, dateKind: date ? 'USE_BY' : 'UNKNOWN', dateFrom: date ? 'TYPED' : 'NONE' }, user.id, now);
       inv.movements.push({
+        lotId: lot.id,
         id: newId(),
         restaurantId: data.restaurant.id,
         branchId: data.branch.id,
@@ -2912,11 +2972,97 @@ export class DemoAdapter implements ApiClient, DemoControls {
         meals: summarizeWaste(events, today, 'STAFF_MEAL'),
         donations: summarizeWaste(events, today, 'DONATION'),
         cookedPrices,
+        lots: this.lotRows(data),
         rows: all.slice(0, limit),
         total: all.length,
         limit,
       };
     });
+  }
+
+  /** W3: every lot with stock left, with its state, earliest date first (Stock → Wastage & Expiry lists) */
+  private lotRows(data: DemoData): LotRow[] {
+    const inv = data.inventory;
+    const book = this.lotBook(data);
+    return book.lots
+      .filter((lot) => book.remaining(lot.id) > 0)
+      .sort(fefoOrder)
+      .flatMap((lot): LotRow[] => {
+        const ingredient = inv.ingredients.find((i) => i.id === lot.ingredientId);
+        if (!ingredient) return [];
+        const entry = lot.source === 'PURCHASE' ? inv.khata.find((k) => k.id === lot.sourceId) : undefined;
+        const day = lot.discardAt ? localClock(new Date(lot.discardAt), data.branch.timezone).date : lot.date;
+        return [
+          {
+            lot,
+            ingredientName: ingredient.name,
+            cooked: ingredient.kind === 'PREPARED',
+            purchaseUnit: ingredient.purchaseUnit,
+            stockUnit: ingredient.stockUnit,
+            remainingMilli: book.remaining(lot.id),
+            state: book.state(lot),
+            supplierName: nameOfSupplier(inv.suppliers, lot.supplierId ?? null),
+            billNo: entry?.billNo || null,
+            days: day ? daysBetween(book.now.date, day) : null,
+            setByName: this.staffName(data, lot.dateSetBy ?? null),
+            releasedByName: this.staffName(data, lot.release?.by ?? null),
+            dishHours: ingredient.kind === 'PREPARED' ? (ingredient.discardHours ?? null) : null,
+          },
+        ];
+      });
+  }
+
+  /**
+   * W3: the date on a lot, typed from the label (Use-by / Best-before) or Unknown; for cooked food the discard time in hours from
+   * when it was made, optionally kept for every new batch of the dish. The person confirms it: Needs review ends. Owner / Manager.
+   */
+  setLotDate(input: LotDateInput): Promise<StockLot> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        this.requireOwnerOrManager(user);
+        const lot = (data.inventory.lots ?? []).find((l) => l.id === input.lotId);
+        if (!lot) throw new ApiError('NOT_FOUND', 'This delivery was not found.');
+        const now = nowIso();
+        if (input.discardHours !== undefined && input.discardHours !== null) {
+          const problem = checkDiscardHours(input.discardHours);
+          if (problem) throw new ApiError('VALIDATION', LOT_DATE_MESSAGES[problem]);
+          Object.assign(lot, { date: null, dateKind: 'USE_BY', discardAt: discardAtOf(lot.receivedAt, input.discardHours), dateFrom: 'TYPED' });
+          if (input.forDish) {
+            const dish = data.inventory.ingredients.find((i) => i.id === lot.ingredientId && i.kind === 'PREPARED');
+            if (dish) Object.assign(dish, { discardHours: input.discardHours, updatedAt: now });
+          }
+        } else {
+          const problem = checkLotDate({ date: input.date, dateKind: input.dateKind });
+          if (problem) throw new ApiError('VALIDATION', LOT_DATE_MESSAGES[problem]);
+          Object.assign(lot, { date: input.date, dateKind: input.dateKind, discardAt: null, dateFrom: input.date ? 'TYPED' : 'NONE' });
+          if (lot.source === 'OLD_STOCK') {
+            // The item's one old date follows its old-stock lot
+            const item = data.inventory.ingredients.find((i) => i.id === lot.ingredientId);
+            if (item) Object.assign(item, { expiryDate: input.date, updatedAt: now });
+          }
+        }
+        Object.assign(lot, { unverified: false, dateSetBy: user.id, dateSetAt: now });
+        return lot;
+      }),
+    );
+  }
+
+  /** W3: held (returned) food back to use, only when a person confirms it is safe and never after its date. Owner / Manager. */
+  releaseLot(lotId: string, safe: boolean, note: string): Promise<StockLot> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        this.requireOwnerOrManager(user);
+        const lot = (data.inventory.lots ?? []).find((l) => l.id === lotId);
+        if (!lot) throw new ApiError('NOT_FOUND', 'This stock was not found.');
+        const book = this.lotBook(data);
+        const problem = checkRelease(lot, book.remaining(lot.id), safe, book.now, data.inventory.expiringSoonDays);
+        if (problem) throw new ApiError(problem === 'EXPIRED' ? 'CONFLICT' : 'VALIDATION', RELEASE_MESSAGES[problem]);
+        Object.assign(lot, { held: false, release: { by: user.id, at: nowIso(), note: note.trim().slice(0, MAX_REVERSE_REASON) } });
+        return lot;
+      }),
+    );
   }
 
   /**
@@ -2959,9 +3105,10 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const movementId = newId();
       const note = line.note.trim();
       const reason = kind === 'WASTE' ? line.reason : null;
-      inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: kind, quantityMilli: -stockMilli, reason: null, note, createdBy: user.id, createdAt: now, wasteId: eventId, ...(reason ? { wasteReason: reason } : {}), cost });
+      inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: kind, quantityMilli: -stockMilli, reason: null, note, createdBy: user.id, createdAt: now, wasteId: eventId, ...(reason ? { wasteReason: reason } : {}), cost, ...(line.lotId ? { lotId: line.lotId } : {}) });
       return {
         ingredientId: ingredient.id,
+        lotId: line.lotId ?? null,
         itemKind: cooked ? 'COOKED' : 'STOCK',
         // Each way it was typed, with the size of that unit as it is now (a later packing edit changes nothing)
         parts: line.parts.map((p) => {
@@ -3003,21 +3150,47 @@ export class DemoAdapter implements ApiClient, DemoControls {
   /** Throws the first problem of an incident with the item's name (checked against the stock as it is now). */
   private checkStockWaste(data: DemoData, input: StockWasteInput): void {
     const inv = data.inventory;
-    const problem = checkWaste(input, inv.ingredients, (id) => onHandOf(id, inv.movements), Date.now());
+    const book = this.lotBook(data);
+    const lots = {
+      lot: (lotId: string) => {
+        const lot = book.lots.find((l) => l.id === lotId);
+        return lot ? { ingredientId: lot.ingredientId, remainingMilli: book.remaining(lot.id), usable: isUsableState(book.state(lot)) } : null;
+      },
+      usable: book.usable,
+    };
+    const problem = checkWaste(input, inv.ingredients, (id) => onHandOf(id, inv.movements), Date.now(), lots);
     if (!problem) return;
     const name = problem.line === null ? '' : (inv.ingredients.find((i) => i.id === input.lines[problem.line!]?.ingredientId)?.name ?? '');
     throw new ApiError('VALIDATION', (name ? `${name}: ` : '') + WASTE_MESSAGES[problem.problem]);
   }
 
-  /** Puts a posted event's stock back by one WASTE_REVERSAL movement per line and marks the event REVERSED (never edited otherwise). */
-  private writeReversal(data: DemoData, event: WasteEvent, reason: string, user: StaffUser): void {
+  /**
+   * Puts a posted event's stock back by one WASTE_REVERSAL movement per line and marks the event REVERSED (never edited otherwise).
+   * W3: a plain reversal brings the food back HELD, on its own lot with the date of the lot it left, until the Owner or a Manager
+   * releases it (never when expired). A correction puts it back exactly into the lots it came from: it was a typing fix.
+   */
+  private writeReversal(data: DemoData, event: WasteEvent, reason: string, user: StaffUser, correction = false): void {
     const problem = checkReverse(event, reason);
     if (problem) throw new ApiError(problem === 'NOT_POSTED' ? 'CONFLICT' : 'VALIDATION', REVERSE_MESSAGES[problem]);
     const at = nowIso();
+    const ledger = correction ? null : this.lotBook(data).ledger;
     const movementIds = event.lines.flatMap((line) => {
       if (!line.ingredientId || line.stockMilli <= 0) return [];
       const id = newId();
-      data.inventory.movements.push({ id, restaurantId: event.restaurantId, branchId: event.branchId, ingredientId: line.ingredientId, type: 'WASTE_REVERSAL', quantityMilli: line.stockMilli, reason: null, note: reason.trim(), createdBy: user.id, createdAt: at, wasteId: event.id, cost: line.cost });
+      let link: { lotId?: string; restoresMovementId?: string } = {};
+      if (correction && line.movementId) link = { restoresMovementId: line.movementId };
+      else if (ledger) {
+        // The date of the lot it was taken from (the first one); a line from before lots has none: Unknown
+        const fromLot = (ledger.taken.get(line.movementId ?? '') ?? []).map((p) => (data.inventory.lots ?? []).find((l) => l.id === p.lotId)).find(Boolean);
+        const lot = this.newLot(
+          data,
+          { ingredientId: line.ingredientId, source: 'RETURNED', sourceId: event.id, firstMilli: line.stockMilli, cost: line.cost, date: fromLot?.date ?? null, dateKind: fromLot?.dateKind ?? 'UNKNOWN', discardAt: fromLot?.discardAt ?? null, dateFrom: fromLot?.dateFrom ?? 'NONE', unverified: fromLot?.unverified ?? false, held: true, holdReason: reason.trim() },
+          user.id,
+          at,
+        );
+        link = { lotId: lot.id };
+      }
+      data.inventory.movements.push({ id, restaurantId: event.restaurantId, branchId: event.branchId, ingredientId: line.ingredientId, type: 'WASTE_REVERSAL', quantityMilli: line.stockMilli, reason: null, note: reason.trim(), createdBy: user.id, createdAt: at, wasteId: event.id, cost: line.cost, ...link });
       return [id];
     });
     event.status = 'REVERSED';
@@ -3053,7 +3226,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (first) return first;
         const old = (inv.wasteEvents ?? []).find((e) => e.id === eventId);
         if (!old) throw new ApiError('NOT_FOUND', 'This entry was not found.');
-        this.writeReversal(data, old, reason, user);
+        this.writeReversal(data, old, reason, user, true);
         this.checkStockWaste(data, input);
         const event = this.writeStockWaste(data, input, user, { correctsId: old.id });
         old.reversal!.correctedById = event.id;
@@ -3547,23 +3720,55 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return localClock(new Date(), data.branch.timezone).date;
   }
 
-  /** Stock that may be cooked with: on hand, nothing when it has expired, never below zero. */
+  /**
+   * Stock that may be cooked with, sold, eaten by staff or given away (W3): the lots that are not expired or held, plus stock on
+   * no lot, never below zero. Stock without a confirmed date counts (it is Needs review, never shown as safe).
+   */
   private usableStock(data: DemoData): (ingredientId: string) => number {
+    const book = this.lotBook(data);
+    return (ingredientId) => book.usable(ingredientId);
+  }
+
+  // ── Lots and expiry (W3, owner 2026-11-11) ─────────────────────────────────────────────────
+
+  private lotClock(data: DemoData): LotClock {
+    return { date: this.calendarToday(data), at: Date.now() };
+  }
+
+  /** Every lot's state and remaining stock, worked out from the movements once per call. */
+  private lotBook(data: DemoData) {
     const inv = data.inventory;
-    const today = this.calendarToday(data);
+    const lots = inv.lots ?? [];
+    const now = this.lotClock(data);
+    const stateOf = (lot: StockLot) => lotDateState(lot, now, inv.expiringSoonDays);
+    // A past use is judged as the lots were then: expired by that day, held until it was released
     const tz = data.branch.timezone;
-    return (ingredientId) => {
-      const ingredient = inv.ingredients.find((i) => i.id === ingredientId);
-      const onHand = onHandOf(ingredientId, inv.movements);
-      const expiryDate = ingredient?.expiryDate ?? null;
-      if (!expiryDate || expiryState(expiryDate, today, onHand, inv.expiringSoonDays) !== 'EXPIRED') return usableMilli(onHand, false);
-      // One date for all the stock until lots (IM7): what was bought or cooked after that date is not the expired stock
-      const after = inv.movements.reduce(
-        (sum, m) => (m.ingredientId === ingredientId && (m.type === 'PURCHASE' || m.type === 'COOKED') && localClock(new Date(m.createdAt), tz).date > expiryDate ? sum + m.quantityMilli : sum),
-        0,
-      );
-      return usableMilli(onHand, true, after);
+    const blockedAt = (lot: StockLot, at: string) => {
+      const heldThen = lot.held || Boolean(lot.release && at < lot.release.at);
+      return heldThen || lotDateState({ ...lot, held: false }, { date: localClock(new Date(at), tz).date, at: Date.parse(at) }, inv.expiringSoonDays) === 'EXPIRED';
     };
+    const ledger = lotLedger(lots, inv.movements, inv.lotsSince ?? null, blockedAt);
+    const remaining = (lotId: string) => ledger.remaining.get(lotId) ?? 0;
+    const state = (lot: StockLot) => lotState(lot, remaining(lot.id), now, inv.expiringSoonDays);
+    const usable = (ingredientId: string) => usableOfLots(ingredientId, lots, ledger, (lot) => isUsableState(stateOf(lot)));
+    return { lots, ledger, now, remaining, state, usable };
+  }
+
+  private newLot(
+    data: DemoData,
+    fields: Pick<StockLot, 'ingredientId' | 'source' | 'sourceId' | 'firstMilli' | 'cost' | 'date' | 'dateKind' | 'dateFrom'> & Partial<Pick<StockLot, 'discardAt' | 'supplierId' | 'held' | 'holdReason' | 'unverified'>>,
+    userId: string,
+    at: string,
+  ): StockLot {
+    const lot: StockLot = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, receivedAt: at, unverified: false, held: false, createdBy: userId, createdAt: at, ...fields };
+    (data.inventory.lots ??= []).push(lot);
+    return lot;
+  }
+
+  /** The lot a cooking batch made ({} for a batch from before lots) */
+  private batchLotOf(data: DemoData, batchId: string): { lotId?: string } {
+    const lot = (data.inventory.lots ?? []).find((l) => l.source === 'BATCH' && l.sourceId === batchId);
+    return lot ? { lotId: lot.id } : {};
   }
 
   /** What a day's plan still has to cook (each row's amount minus its batches of that day) needs, against the usable stock. */
@@ -3629,8 +3834,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
         for (const use of plan.uses) {
           inv.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'COOK_USE', quantityMilli: -use.quantityMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: ingredientCost(book, use.ingredientId, use.quantityMilli) });
         }
+        // W3: the batch is its own lot, thrown away after the dish's own hours (no default: none = Needs review)
+        const hours = dish.discardHours ?? null;
+        const lot = this.newLot(data, { ingredientId: dish.id, source: 'BATCH', sourceId: batch.id, firstMilli: input.actualMilli, cost: batch.cost, date: null, dateKind: hours ? 'USE_BY' : 'UNKNOWN', discardAt: hours ? discardAtOf(now, hours) : null, dateFrom: hours ? 'DISH_HOURS' : 'NONE' }, user.id, now);
         // The raw cost moves into the cooked food: the same money, not a second expense
-        inv.movements.push({ id: newId(), ...scope, ingredientId: dish.id, type: 'COOKED', quantityMilli: input.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: batch.cost });
+        inv.movements.push({ id: newId(), ...scope, ingredientId: dish.id, type: 'COOKED', quantityMilli: input.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: batch.cost, lotId: lot.id });
         (inv.cookingBatches ??= []).push(batch);
         Object.assign(dish, { plateMilli: input.plateMilli, updatedAt: now });
         data.idempotency[key] = batch.id;
@@ -3661,7 +3869,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (delta < 0 && onHandOf(batch.preparedId, inv.movements) < -delta) throw new ApiError('CONFLICT', 'Less of this dish is left than the correction takes away.');
         const now = nowIso();
         // A corrected weight changes the amount, not what the batch cost
-        inv.movements.push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: delta, reason: null, note: `Correction: ${why}`.slice(0, MAX_MOVEMENT_NOTE), createdBy: user.id, createdAt: now, batchId: batch.id, cost: 0 });
+        inv.movements.push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: delta, reason: null, note: `Correction: ${why}`.slice(0, MAX_MOVEMENT_NOTE), createdBy: user.id, createdAt: now, batchId: batch.id, cost: 0, ...this.batchLotOf(data, batch.id) });
         (batch.corrections ??= []).push({ fromMilli: batch.actualMilli, toMilli: actualMilli, reason: why, by: user.id, at: now });
         batch.actualMilli = actualMilli;
         return batch;
@@ -3687,7 +3895,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           const taken = inv.movements.find((m) => m.batchId === batch.id && m.type === 'COOK_USE' && m.ingredientId === use.ingredientId && m.quantityMilli < 0);
           inv.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'COOK_USE', quantityMilli: use.quantityMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, ...(taken?.cost !== undefined && { cost: taken.cost }) });
         }
-        inv.movements.push({ id: newId(), ...scope, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: -batch.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: batch.cost });
+        inv.movements.push({ id: newId(), ...scope, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: -batch.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: batch.cost, ...this.batchLotOf(data, batch.id) });
         Object.assign(batch, { status: 'REVERSED', reversedBy: user.id, reversedAt: now, reverseReason: why });
         return batch;
       }),
@@ -3704,6 +3912,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const day = date === 'today' ? today : date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : nextDate(today);
       const { rows, needs } = this.planCheck(data, day);
       const nameOf = (id: string | null | undefined) => (id ? (inv.ingredients.find((i) => i.id === id)?.name ?? null) : null);
+      const lotBook = this.lotBook(data);
       const dishes = inv.ingredients
         .filter((i) => i.kind === 'PREPARED' && i.isActive)
         .sort((a, b) => a.name.localeCompare(b.name))
@@ -3739,7 +3948,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
               ...need,
               ingredient,
               low: status === 'LOW' || status === 'OUT',
-              expired: expiryState(ingredient.expiryDate, this.calendarToday(data), onHand, inv.expiringSoonDays) === 'EXPIRED',
+              // W3: some of its stock is on an expired lot (it does not count as usable)
+              expired: lotBook.lots.some((l) => l.ingredientId === ingredient.id && lotBook.state(l) === 'EXPIRED'),
               supplierName: nameOfSupplier(inv.suppliers, this.supplierFor(data, ingredient.id)),
             };
           })
@@ -4394,7 +4604,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
     // Each movement keeps what its line cost on this bill, so a later price never changes an old report.
     const costs = lineCosts(lines.map((l) => l.amount), bill.discount);
     for (const [index, line] of lines.entries()) {
-      inv.movements.push({ id: line.movementId, ...scope, ingredientId: line.ingredientId, type: 'PURCHASE', quantityMilli: line.stockMilli, reason: null, note: billNo ? `Bill ${billNo}` : note, createdBy: user.id, createdAt: now, supplierId: supplier.id, khataEntryId: entryId, cost: costs[index] ?? null });
+      // W3: every bill line is its own lot with the date typed from its label (none = Unknown: Needs review, never "safe")
+      const typed = bill.lines[index]!;
+      const date = typed.expiryDate || null;
+      const lot = this.newLot(data, { ingredientId: line.ingredientId, source: 'PURCHASE', sourceId: entryId, supplierId: supplier.id, firstMilli: line.stockMilli, cost: costs[index] ?? null, date, dateKind: date ? (typed.dateKind ?? 'USE_BY') : 'UNKNOWN', dateFrom: date ? 'TYPED' : 'NONE' }, user.id, now);
+      inv.movements.push({ id: line.movementId, ...scope, ingredientId: line.ingredientId, type: 'PURCHASE', quantityMilli: line.stockMilli, reason: null, note: billNo ? `Bill ${billNo}` : note, createdBy: user.id, createdAt: now, supplierId: supplier.id, khataEntryId: entryId, cost: costs[index] ?? null, lotId: lot.id });
     }
     // Recipes cost from this bill's average (owner's choice): all lines of a product, as the price of one main unit.
     for (const ingredientId of new Set(lines.map((l) => l.ingredientId))) {
@@ -4562,6 +4776,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const today = this.branchToday(data);
         const problem = checkPurchaseBill(input, inv.ingredients, today);
         if (problem) throw new ApiError('VALIDATION', PURCHASE_BILL_MESSAGES[problem.problem]);
+        // W3: a date on a line is a real label date with its kind; an empty one is Unknown
+        for (const line of input.lines) {
+          const dateProblem = line.expiryDate ? checkLotDate({ date: line.expiryDate, dateKind: line.dateKind ?? 'USE_BY' }) : null;
+          if (dateProblem) throw new ApiError('VALIDATION', `${inv.ingredients.find((i) => i.id === line.ingredientId)?.name ?? ''}: ${LOT_DATE_MESSAGES[dateProblem]}`);
+        }
         const { purchase, payment } = this.postPurchase(data, user, supplier, input);
         inv.purchaseDrafts = (inv.purchaseDrafts ?? []).filter((d) => d.supplierId !== supplier.id);
         data.idempotency[key] = purchase.id;

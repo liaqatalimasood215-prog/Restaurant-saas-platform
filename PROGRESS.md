@@ -216,6 +216,13 @@ vibration; Call Waiter also speaks. DEMO sync: between tabs of one browser only 
 backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.tsx`, `src/lib/sound.ts`.
 
 ## 7. Test status (last run, all green)
+- **2026-11-12 (W3 lots and expiry, committed on this branch):** `pnpm test` 207 (9 new), `pnpm typecheck`, `pnpm lint` pass. Walkthroughs pass: `:wastage` (16 steps; W3 =
+  13 expired blocked, 14 bill line date = own lot, 15 Set date confirms, 16 held → Release only with the safe tick), `:inventory`, `:im1`, `:suppliers`,
+  `:supplier-order`, `:units`, `:recipes`, `:cooked`, `:auto-scale`, `:integration`, `:kds`. Changed tests: data version 22 → 23 (5 walkthroughs);
+  `:inventory` Out of stock 1 → 2 (the expired item has no usable stock); `:im1` step 6 now sets the date on the old-stock lot and expects the W3 result
+  (cooking after the date passed used the fresh 5 kg, the expired 8 kg stay blocked → 6 kg short). `:cooking` and `:sales-stock` fail at 00:19–00:50
+  (Asia/Karachi), between midnight and the 06:00 business-day start, at the same step on the last commit without W3 too (checked in a temporary copy):
+  a test timing issue, to be run again after 06:00. Not run: the other walkthroughs, customer, rider, `pnpm build`, a real phone.
 - **2026-11-11 (Inventory compact UI, committed with W2 on this branch):** `pnpm typecheck`, `pnpm lint` pass; walkthroughs `:inventory`, `:wastage`, `:suppliers`,
   `:cooking`, `:sales-stock`, `:recipes`, `:im1`, `:cooked` pass. Not run: the other walkthroughs, customer, rider, `pnpm build`, a real phone.
 - **2026-11-11 (W2 Wastage, committed on this branch):** `pnpm test` 201 (3 new), `pnpm typecheck`, `pnpm lint` pass. `walkthrough:wastage` passes (12 steps; W2 =
@@ -320,6 +327,14 @@ walkthrough scripts clear localStorage themselves; the POS bill panel remounts w
 changes (state that must survive, such as `payNow`, lives in the draft, `screens/pos/draft.ts`).
 
 ## 9. Pending tasks and next steps (in this order)
+
+**W3 lots and expiry built 2026-11-12 (DEMO), approved ("Approve, commit karo") and committed on this branch — not pushed, not on main** (owner: "Approved to start W3 with all three
+recommended decisions"; his rules: unknown / unconfirmed dates stay Needs review, never safe; expired or unsafe returned food is never released). Details:
+`docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` §10d. Every bill line, cooking batch, new item's opening stock and reversed waste line is its own lot (`lots.ts`);
+data version 23 makes the stock on hand one old-stock lot per item (date not confirmed). Usable = on hand − expired − held (Cooking Plan, Cook, low / out,
+staff meals, donations); FEFO, each past use judged as the lots were then; held reversals released only with the safe tick, never after the date; bill
+line "Use by" date; lists Expiring soon / Expired / Needs review / On hold with Set date, Release, Record waste. Next: run `:cooking` and `:sales-stock` again after 06:00; each
+after his approval: merge into `main` / push, then W4 (staff requests and approval), W5 (full check).
 
 **Inventory compact UI built 2026-11-11 (styling only), approved and committed with W2 on this branch, not pushed** (owner: "Approve, commit karo") (his brief: clean the 8 screens Suppliers, Stock,
 Recipes overview, Stock Movements, Cooking Plan, Available Food, Wastage, Expiry). Slim title row and smaller header buttons; section tabs lower; Stock

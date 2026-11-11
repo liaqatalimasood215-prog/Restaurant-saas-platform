@@ -1,5 +1,6 @@
 import { businessDate, DEFAULT_TIME_ZONE } from './business-day';
 import { MAX_QUANTITY, MILLI, buyStockMilli, findBuyOption, mulDivRound, purchaseConversion, type Ingredient, type PurchaseUnit } from './inventory';
+import type { LotRow } from './lots';
 import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
 
 /**
@@ -79,6 +80,8 @@ export interface WasteOrderFood {
 export interface WasteLine {
   /** The stock item; null for order food */
   ingredientId: Uuid | null;
+  /** W3: the lot the line named */
+  lotId?: Uuid | null;
   /** W2: STOCK (raw / packaging, also every W1 line), COOKED (cooked stock), ORDER_FOOD (missing = STOCK) */
   itemKind?: 'STOCK' | 'COOKED' | 'ORDER_FOOD';
   orderFood?: WasteOrderFood;
@@ -138,6 +141,8 @@ export const kindOf = (event: Pick<WasteEvent, 'kind'>): WasteKind => event.kind
 
 export interface WasteLineInput {
   ingredientId: Uuid;
+  /** W3: the lot it came from; missing = the expired lots first, then the oldest (waste), or the usable lots (staff meal, donation) */
+  lotId?: Uuid | null;
   parts: { unitKey: string; quantityMilli: number | null }[];
   reason: StockWasteReason | null;
   note: string;
@@ -192,7 +197,16 @@ export type WasteProblem =
   | 'REASON_REQUIRED'
   | 'NOTE_REQUIRED'
   | 'MORE_THAN_ON_HAND'
-  | 'KIND_INVALID';
+  | 'KIND_INVALID'
+  | 'LOT_INVALID'
+  | 'MORE_THAN_IN_LOT'
+  | 'NOT_USABLE';
+
+/** W3: what the lots hold, for the check: a lot's item, what is left in it and whether it may be used; an item's usable stock */
+export interface WasteLotCheck {
+  lot: (lotId: Uuid) => { ingredientId: Uuid; remainingMilli: number; usable: boolean } | null;
+  usable: (ingredientId: Uuid) => number;
+}
 
 /**
  * The first problem with a waste incident, or null: a kind, a stage of Record Waste, a time not in the future and at most 7
@@ -204,6 +218,7 @@ export function checkWaste(
   items: readonly WasteItem[],
   onHand: (ingredientId: Uuid) => number,
   now: number,
+  lots?: WasteLotCheck,
 ): { line: number | null; problem: WasteProblem } | null {
   const kind = input.kind ?? 'WASTE';
   if (!(WASTE_KINDS as readonly string[]).includes(kind)) return { line: null, problem: 'KIND_INVALID' };
@@ -229,6 +244,16 @@ export function checkWaste(
     if (line.note.trim().length > MAX_WASTE_NOTE) return { line: index, problem: 'NOTE_TOO_LONG' };
     if (kind === 'WASTE' && line.reason === 'OTHER' && !line.note.trim()) return { line: index, problem: 'NOTE_REQUIRED' };
     if (stockMilli > onHand(item.id)) return { line: index, problem: 'MORE_THAN_ON_HAND' };
+    if (!lots) continue;
+    // W3: a named lot of this item, never more than is left in it; food for the staff or given away only from usable stock
+    if (line.lotId) {
+      const lot = lots.lot(line.lotId);
+      if (!lot || lot.ingredientId !== item.id) return { line: index, problem: 'LOT_INVALID' };
+      if (stockMilli > lot.remainingMilli) return { line: index, problem: 'MORE_THAN_IN_LOT' };
+      if (kind !== 'WASTE' && !lot.usable) return { line: index, problem: 'NOT_USABLE' };
+    } else if (kind !== 'WASTE' && stockMilli > lots.usable(item.id)) {
+      return { line: index, problem: 'NOT_USABLE' };
+    }
   }
   return null;
 }
@@ -310,6 +335,8 @@ export interface WasteView {
   donations: WasteSummary;
   /** W2: what a cooked dish costs for a waste line, by prepared item id */
   cookedPrices: Record<Uuid, CookedPrice | null>;
+  /** W3: every lot with stock left (also held and expired ones), earliest date first */
+  lots: LotRow[];
   /** One row per line, newest first, at most `limit` */
   rows: WasteLogRow[];
   total: number;

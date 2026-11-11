@@ -164,7 +164,7 @@ export function OverviewTab({
             <Empty>{t('inventory.expiringEmpty', { days: view.expiringSoonDays })}</Empty>
           ) : (
             expiring.slice(0, 6).map((r) => {
-              const label = expiryLabel(r.expiry, r.ingredient.expiryDate);
+              const label = expiryLabel(r.expiry, r.expiryDate !== undefined ? r.expiryDate : r.ingredient.expiryDate);
               return (
                 <Line
                   key={r.ingredient.id}

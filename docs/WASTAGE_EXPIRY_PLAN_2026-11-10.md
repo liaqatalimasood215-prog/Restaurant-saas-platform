@@ -183,6 +183,33 @@ comes with W3.
   types), demo server (`writeStockWaste`, `reverseStockWaste`, `correctStockWaste`, `recordWaste`), `wastage-tab.tsx`. Tests:
   3 new unit tests; `walkthrough:wastage` steps 9–12; `walkthrough:sales-stock` checks the order-food entries.
 
+## 10d. W3 — built 2026-11-12 (DEMO), approved and committed on the feature branch ("Approve, commit karo")
+
+Owner: "Approved to start W3 with all three recommended decisions" — (1) the expiry date is typed on each purchase-bill line AND with
+"Set date" on a lot; (2) held stock is released by the Owner or a Manager only; (3) the old stock becomes one lot per item with its
+current date, marked not confirmed. His two rules: unknown or unconfirmed dates stay **Needs review** and are never shown as safe;
+expired or unsafe returned food is **never released**.
+
+- **Lots** (`packages/shared/src/lots.ts`): every bill line, every cooking batch, the opening stock of a new item and every reversed
+  waste line is its own lot; data version 22 → 23 turns the stock on hand into one OLD_STOCK lot per item (its old date, not
+  confirmed). Nothing on hand changes; a lot is never deleted.
+- **States:** Use-by passed → EXPIRED (blocked); Best-before passed → PAST_BEST (usable, look at it); no date or a date nobody
+  confirmed → NEEDS_REVIEW (usable, never "safe"); held → HELD; within the warning days → SOON (shown even on an unconfirmed date,
+  which also stays in Needs review). Date-only rule: usable through the end of the day (Asia/Karachi).
+- **Usable = on hand − expired − held.** Low / out, Cooking Plan, Cook, staff meals and donations use it. Sales are never blocked
+  (2026-11-04 decision): beyond the usable lots the item is flagged "check the expired or held stock".
+- **FEFO:** sales and cooking take from the usable lots, earliest date first; an Undo, a reversed batch or a corrected waste goes
+  back to the lots it came from. Waste may name its lot; without one it takes the expired stock first.
+- **Hold:** a plain Reverse brings the food back HELD on its own lot (date of the lot it left); Release needs the "safe" tick and is
+  refused once the date has passed. A Correct puts the stock straight back into its lots (a typing fix, not held).
+- **Cooked food:** a batch is its own lot; with the dish's own discard hours (set on a cooked lot, optionally "for every new batch")
+  it expires that many hours after cooking; without hours it is Needs review. No default (owner's W2 decision). Available Food's 3
+  safe hours are unchanged.
+- **Screens:** bill line "Use by" date + "Best before" tick; Stock → Wastage & Expiry lists per delivery: Expiring soon, Expired,
+  Needs review, On hold, with Set date, Release and Record waste (pre-filled with that delivery); a waste line may pick its
+  delivery; the stock list shows "x expired / on hold" and the earliest date.
+- Not in W3: staff requests and approval (W4), the full check (W5); warning windows stay the one "expiring soon" days setting.
+
 ## 11. Limits of the DEMO
 
 One browser's storage; tabs sync by sending all data, the last writer wins. Nothing runs while no tab is open: a lot becomes

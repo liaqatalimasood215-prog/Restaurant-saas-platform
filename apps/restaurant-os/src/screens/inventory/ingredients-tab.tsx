@@ -121,7 +121,7 @@ export function IngredientsTab({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {rows.map((r) => {
-                  const expiry = expiryLabel(r.expiry, r.ingredient.expiryDate);
+                  const expiry = expiryLabel(r.expiry, r.expiryDate !== undefined ? r.expiryDate : r.ingredient.expiryDate);
                   return (
                     <tr key={r.ingredient.id} data-ingredient-row={r.ingredient.name} className={cn('transition-colors hover:bg-brand-soft/30', r.status === 'NOT_IN_USE' && 'text-slate-400')}>
                       <td className="px-3 py-1.5">
@@ -130,7 +130,11 @@ export function IngredientsTab({
                           {r.ingredient.code} · {t(`inventory.categories.${r.ingredient.category}`)}
                         </span>
                       </td>
-                      <td className={cn('px-3 py-1.5 text-right font-extrabold tabular-nums', stockTone(r))}>{stockText(r.ingredient, r.onHandMilli)}</td>
+                      <td className={cn('px-3 py-1.5 text-right font-extrabold tabular-nums', stockTone(r))}>
+                        {stockText(r.ingredient, r.onHandMilli)}
+                        {/* W3: expired or held stock is on hand but may not be used */}
+                        {(r.blockedMilli ?? 0) > 0 && <span className="block text-[11px] font-semibold text-red-700">{t('inventory.blockedOf', { qty: stockText(r.ingredient, r.blockedMilli!) })}</span>}
+                      </td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">{stockText(r.ingredient, r.ingredient.minStockMilli)}</td>
                       <td className="px-3 py-1.5 tabular-nums text-slate-700">{price(r)}</td>
                       <td className="px-3 py-1.5 text-slate-600">{r.locationName ?? '—'}</td>
@@ -167,7 +171,7 @@ export function IngredientsTab({
           {/* Phones and tablets: one small card per ingredient: name and stock first, then status, price and the actions */}
           <ul className="grid gap-2 sm:grid-cols-2 lg:hidden">
             {rows.map((r) => {
-              const expiry = expiryLabel(r.expiry, r.ingredient.expiryDate);
+              const expiry = expiryLabel(r.expiry, r.expiryDate !== undefined ? r.expiryDate : r.ingredient.expiryDate);
               return (
                 <li key={r.ingredient.id} data-ingredient-card={r.ingredient.name}>
                   <Card className={cn('flex h-full flex-col gap-1.5 rounded-xl p-3', r.status === 'NOT_IN_USE' && 'opacity-70')}>

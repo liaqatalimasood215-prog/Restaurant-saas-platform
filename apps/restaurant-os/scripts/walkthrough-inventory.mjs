@@ -86,7 +86,7 @@ const owner = await openAs(USER.owner, '/inventory', DESKTOP);
 await openOverview(owner);
 await card(owner, 'Ingredients').waitFor();
 const upgraded = await saved(owner);
-assert.equal(upgraded.version, 22, 'brought up to the newest version');
+assert.equal(upgraded.version, 23, 'brought up to the newest version');
 assert.equal(upgraded.employeeCounter, 77, 'the old data was kept');
 assert.equal(upgraded.inventory.ingredients.filter((i) => i.kind === 'BOUGHT').length, 25);
 assert.ok(upgraded.rolePermissions.MANAGER.includes('inventory.view') && upgraded.rolePermissions.MANAGER.includes('menu.view'));
@@ -96,7 +96,8 @@ console.log('2. Dashboard');
 const cardValue = async (label) => (await card(owner, label).innerText()).split('\n').map((s) => s.trim()).filter(Boolean);
 assert.ok((await cardValue('Ingredients')).includes('25'));
 assert.ok((await cardValue('Low stock')).includes('3'));
-assert.ok((await cardValue('Out of stock')).includes('1'));
+// W3: the item whose stock expired counts as out of stock too: it is on hand but may not be used
+assert.ok((await cardValue('Out of stock')).includes('2'));
 assert.ok((await cardValue('Expiring soon')).includes('3'));
 assert.ok((await cardValue('Expiring soon')).includes('1 already expired'));
 assert.ok((await cardValue('Total stock value')).includes('Rs. 78,665'));

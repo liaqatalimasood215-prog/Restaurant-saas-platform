@@ -67,6 +67,8 @@ import type {
   KhataEntry,
   StockLedgerQuery,
   StockLedgerView,
+  DateKind,
+  StockLot,
   WasteKind,
   WasteLineInput,
   WasteStage,
@@ -511,7 +513,15 @@ export interface PurchaseBillInput {
   /** Business date of the bill (YYYY-MM-DD), not in the future */
   date: string;
   /** Quantity in the way it is bought (unitKey: 'main', 'loose:kg', 'pack:<id>'; thousandths) and its rate (paisa) */
-  lines: { ingredientId: Uuid; unitKey: string; quantityMilli: number; ratePaisa: number }[];
+  lines: {
+    ingredientId: Uuid;
+    unitKey: string;
+    quantityMilli: number;
+    ratePaisa: number;
+    /** W3: the date on the label (optional; none = Unknown, Needs review) and whether it is a use-by or best-before date */
+    expiryDate?: string | null;
+    dateKind?: DateKind;
+  }[];
   /** Paisa off the subtotal */
   discount: number;
   /** Paid at once (paisa), up to this bill's total; 0 = nothing yet */
@@ -544,7 +554,7 @@ export interface PurchaseDraft {
   billNo: string;
   date: string;
   /** unitKey missing = 'main' (drafts from before 2026-11-07) */
-  lines: { ingredientId: Uuid; unitKey?: string; quantity: string; rate: string }[];
+  lines: { ingredientId: Uuid; unitKey?: string; quantity: string; rate: string; expiry?: string; bestBefore?: boolean }[];
   discount: string;
   discountMode: 'RS' | 'PERCENT';
   paid: string;
@@ -588,6 +598,15 @@ export interface StockWasteInput {
   note: string;
   /** One per form: a double tap, refresh or retry posts once */
   idempotencyKey: string;
+}
+
+/** W3: a lot's date from the label, or (cooked food) hours after it was made, optionally for every new batch of the dish */
+export interface LotDateInput {
+  lotId: Uuid;
+  date: string | null;
+  dateKind: DateKind;
+  discardHours?: number | null;
+  forDish?: boolean;
 }
 
 export interface StationInput {
@@ -795,6 +814,10 @@ export interface ApiClient {
   reverseStockWaste(eventId: Uuid, reason: string): Promise<WasteEvent>;
   /** W2: correct = reverse the old event and post the new one in one change, both linked (Owner / Manager) */
   correctStockWaste(eventId: Uuid, reason: string, input: StockWasteInput): Promise<WasteEvent>;
+  /** W3: the date of one delivery (or a cooked batch's discard hours), confirmed by a person (Owner / Manager) */
+  setLotDate(input: LotDateInput): Promise<StockLot>;
+  /** W3: held (returned) food back to use, only when confirmed safe and never after its date (Owner / Manager) */
+  releaseLot(lotId: Uuid, safe: boolean, note: string): Promise<StockLot>;
   /** Recipes & Food Cost (Step B): every menu size, add-on and prepared item with its current recipe and food cost. */
   getRecipes(): Promise<RecipesView>;
   /**

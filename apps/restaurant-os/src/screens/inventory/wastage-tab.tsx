@@ -11,6 +11,7 @@ import {
   formatMilli,
   formatPaisa,
   kindOf,
+  needsReview,
   parseQuantity,
   wasteCost,
   wasteReasonsFor,
@@ -23,6 +24,7 @@ import {
   type WasteKind,
   type WasteLogRow,
   type WasteStage,
+  type LotRow,
 } from '@restaurant-saas/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,10 +38,10 @@ import { cn } from '@/lib/cn';
 import { useApiQuery } from '@/lib/hooks/use-api-query';
 import { newId } from '@/lib/new-id';
 import { useSession } from '@/lib/session';
-import { expiryLabel, stockText, unitLabel, whenText } from './inventory-format';
+import { stockText, unitLabel, whenText } from './inventory-format';
 import { optionLabel } from './purchase-bill';
 
-type Section = 'log' | 'soon' | 'expired' | 'pending';
+type Section = 'log' | 'soon' | 'expired' | 'review' | 'held' | 'pending';
 
 /**
  * Stock → Wastage & Expiry (owner's Prompt 1, step W1, 2026-11-11): Record Waste for raw ingredients and packaging, the Waste Log,
@@ -53,14 +55,21 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
   const role = session?.user.role;
   const ownerOrManager = canManage && (role === 'OWNER' || role === 'MANAGER');
   const [section, setSection] = useState<Section>('log');
-  const [recording, setRecording] = useState<{ row: IngredientRow | null; reason: StockWasteReason | null; correct?: WasteEvent } | null>(null);
+  const [recording, setRecording] = useState<{ row: IngredientRow | null; reason: StockWasteReason | null; lotId?: string | null; correct?: WasteEvent } | null>(null);
   const [reversing, setReversing] = useState<WasteEvent | null>(null);
-  const soon = view.ingredients.filter((r) => r.status !== 'NOT_IN_USE' && r.expiry === 'SOON');
-  const expired = view.ingredients.filter((r) => r.status !== 'NOT_IN_USE' && r.expiry === 'EXPIRED');
+  const [dating, setDating] = useState<LotRow | null>(null);
+  const [releasing, setReleasing] = useState<LotRow | null>(null);
 
   if (waste.loading && !waste.data) return <LoadingState />;
   if (!waste.data) return <ErrorState message={waste.error?.message} onRetry={waste.reload} />;
-  const { summary, meals, donations, cookedPrices, rows, total, limit } = waste.data;
+  const { summary, meals, donations, cookedPrices, lots, rows, total, limit } = waste.data;
+  // W3: every list is one row per delivery (lot), with its own date
+  const byState = (state: LotRow['state']) => lots.filter((l) => l.state === state);
+  const soon = byState('SOON');
+  const expired = byState('EXPIRED');
+  const review = lots.filter((l) => needsReview(l.lot, l.state));
+  const held = byState('HELD');
+  const itemRow = (id: string) => view.ingredients.find((r) => r.ingredient.id === id) ?? (view.cooked ?? []).find((r) => r.ingredient.id === id) ?? null;
 
   const unknownHint = (n: number) => (n > 0 ? ` · ${t('inventory.waste.unknownCount', { n })}` : '');
   const tab = (key: Section, label: string, count?: number) => (
@@ -115,6 +124,8 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
         {tab('log', t('inventory.waste.tabs.log'), total)}
         {tab('soon', t('inventory.waste.tabs.soon'), soon.length)}
         {tab('expired', t('inventory.waste.tabs.expired'), expired.length)}
+        {tab('review', t('inventory.waste.tabs.review'), review.length)}
+        {tab('held', t('inventory.waste.tabs.held'), held.length)}
         {tab('pending', t('inventory.waste.tabs.pending'))}
       </div>
 
@@ -128,12 +139,23 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
           onCorrect={(event) => setRecording({ row: null, reason: null, correct: event })}
         />
       )}
-      {(section === 'soon' || section === 'expired') && (
-        <ExpiryList
-          rows={section === 'soon' ? soon : expired}
-          empty={section === 'soon' ? t('inventory.waste.noneSoon', { days: view.expiringSoonDays }) : t('inventory.waste.noneExpired')}
+      {(section === 'soon' || section === 'expired' || section === 'review' || section === 'held') && (
+        <LotList
+          rows={{ soon, expired, review, held }[section]}
+          empty={
+            {
+              soon: t('inventory.waste.noneSoon', { days: view.expiringSoonDays }),
+              expired: t('inventory.waste.noneExpired'),
+              review: t('inventory.waste.noneReview'),
+              held: t('inventory.waste.noneHeld'),
+            }[section]
+          }
+          note={{ soon: t('inventory.waste.oneDate'), expired: t('inventory.waste.oneDate'), review: t('inventory.waste.reviewNote'), held: t('inventory.waste.heldNote') }[section]}
           canManage={canManage}
-          onRecord={(row) => setRecording({ row, reason: section === 'expired' ? 'EXPIRED' : null })}
+          canFix={ownerOrManager}
+          onRecord={(lot) => setRecording({ row: itemRow(lot.lot.ingredientId), reason: lot.state === 'EXPIRED' ? (lot.cooked ? 'EXPIRED' : 'EXPIRED') : null, lotId: lot.lot.id })}
+          onSetDate={setDating}
+          onRelease={setReleasing}
         />
       )}
       {section === 'pending' && (
@@ -148,6 +170,8 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
         <RecordWasteDialog
           view={view}
           first={recording.row}
+          firstLot={recording.lotId ?? null}
+          lots={lots}
           reason={recording.reason}
           correct={recording.correct ?? null}
           cookedPrices={cookedPrices}
@@ -156,6 +180,8 @@ export function WastageTab({ view, canManage }: { view: InventoryView; canManage
         />
       )}
       {reversing && <ReverseDialog event={reversing} onClose={() => setReversing(null)} />}
+      {dating && <LotDateDialog row={dating} onClose={() => setDating(null)} />}
+      {releasing && <ReleaseDialog row={releasing} onClose={() => setReleasing(null)} />}
     </div>
   );
 }
@@ -383,41 +409,236 @@ function ReverseDialog({ event, onClose }: { event: WasteEvent; onClose: () => v
   );
 }
 
-function ExpiryList({ rows, empty, canManage, onRecord }: { rows: IngredientRow[]; empty: string; canManage: boolean; onRecord: (row: IngredientRow) => void }) {
+// ── Lots: one row per delivery (W3) ────────────────────────────────────────────────────────────
+
+const LOT_TONE: Record<LotRow['state'], 'green' | 'amber' | 'red' | 'grey' | 'dark'> = { OK: 'green', SOON: 'amber', PAST_BEST: 'amber', NEEDS_REVIEW: 'amber', EXPIRED: 'red', HELD: 'dark', EMPTY: 'grey' };
+const lotUnits = (row: LotRow) => ({ purchaseUnit: row.purchaseUnit, stockUnit: row.stockUnit }) as Parameters<typeof stockText>[0];
+
+/** "Use by 13 Nov · in 1 day(s)", "Discard at 11:30 pm", or "No date" */
+function lotDateText(row: LotRow): string {
+  const { lot } = row;
+  if (lot.discardAt) return t('inventory.lots.discardAt', { time: whenText(lot.discardAt) });
+  if (!lot.date || lot.dateKind === 'UNKNOWN') return t('inventory.lots.kinds.UNKNOWN');
+  const when = row.days === null ? '' : row.days < 0 ? t('inventory.lots.days.past', { n: -row.days }) : row.days === 0 ? t('inventory.lots.days.today') : t('inventory.lots.days.future', { n: row.days });
+  return `${t(`inventory.lots.kinds.${lot.dateKind}`)} ${shortDate(lot.date)}${when ? ` · ${when}` : ''}${lot.unverified ? ` · ${t('inventory.lots.unconfirmed')}` : ''}`;
+}
+
+const shortDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+function LotList({
+  rows,
+  empty,
+  note,
+  canManage,
+  canFix,
+  onRecord,
+  onSetDate,
+  onRelease,
+}: {
+  rows: LotRow[];
+  empty: string;
+  note: string;
+  canManage: boolean;
+  canFix: boolean;
+  onRecord: (row: LotRow) => void;
+  onSetDate: (row: LotRow) => void;
+  onRelease: (row: LotRow) => void;
+}) {
+  const link = 'press inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-bold hover:bg-brand-soft pointer-coarse:min-h-10';
   return (
     <Card className="divide-y divide-slate-100 overflow-hidden rounded-xl" data-expiry-list>
       {rows.length === 0 && <p className="px-3 py-2.5 text-sm text-slate-500">{empty}</p>}
       {rows.map((row) => {
-        const label = expiryLabel(row.expiry, row.ingredient.expiryDate);
+        const from = [t(`inventory.lots.sources.${row.lot.source}`), row.supplierName, row.billNo ? t('inventory.lots.bill', { no: row.billNo }) : null, t('inventory.lots.received', { date: whenText(row.lot.receivedAt) })].filter(Boolean).join(' · ');
         return (
-          <div key={row.ingredient.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1 text-sm hover:bg-brand-soft/30" data-expiry-row={row.ingredient.name}>
-            <CalendarClock className={cn('size-4 shrink-0', row.expiry === 'EXPIRED' ? 'text-red-600' : 'text-amber-600')} aria-hidden />
-            <span className="min-w-0 flex-1 font-bold text-slate-900">{row.ingredient.name}</span>
-            <span className="font-semibold tabular-nums text-slate-700">{stockText(row.ingredient, row.onHandMilli)}</span>
-            {label.tone && <Badge tone={label.tone}>{label.text}</Badge>}
-            {canManage && row.onHandMilli > 0 ? (
-              <button type="button" onClick={() => onRecord(row)} className="press inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-bold text-brand hover:bg-brand-soft pointer-coarse:min-h-10">
-                <Trash2 className="size-3.5" aria-hidden />
-                {t('inventory.waste.recordThis')}
-              </button>
-            ) : (
-              <span className="min-h-9" aria-hidden />
-            )}
+          <div key={row.lot.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5 text-sm hover:bg-brand-soft/30" data-expiry-row={row.ingredientName} data-lot-state={row.state}>
+            <CalendarClock className={cn('size-4 shrink-0', row.state === 'EXPIRED' ? 'text-red-600' : row.state === 'HELD' ? 'text-slate-700' : 'text-amber-600')} aria-hidden />
+            <span className="min-w-0 flex-1">
+              <span className="block font-bold leading-tight text-slate-900">
+                {row.ingredientName}
+                {row.cooked && <span className="ml-1.5 align-middle text-[11px] font-bold text-slate-500">{t('inventory.waste.cooked')}</span>}
+              </span>
+              <span className="block text-[11px] leading-tight text-slate-500">{from}</span>
+              {row.lot.holdReason && row.state === 'HELD' && <span className="block text-[11px] text-slate-600">{row.lot.holdReason}</span>}
+            </span>
+            <span className="text-right">
+              <span className="block font-semibold tabular-nums text-slate-700">{t('inventory.lots.left', { qty: stockText(lotUnits(row), row.remainingMilli) })}</span>
+              <span className="block text-[11px] text-slate-500" data-lot-date>
+                {lotDateText(row)}
+              </span>
+            </span>
+            <Badge tone={LOT_TONE[row.state]}>{t(`inventory.lots.states.${row.state}`)}</Badge>
+            <span className="flex min-h-9 items-center">
+              {canFix && (
+                <button type="button" onClick={() => onSetDate(row)} aria-label={t('inventory.lots.setDateOf', { name: row.ingredientName })} className={cn(link, 'text-slate-700')}>
+                  <CalendarClock className="size-3.5" aria-hidden />
+                  {t('inventory.lots.setDate')}
+                </button>
+              )}
+              {canFix && row.state === 'HELD' && (
+                <button type="button" onClick={() => onRelease(row)} aria-label={t('inventory.lots.releaseOf', { name: row.ingredientName })} className={cn(link, 'text-green-700')}>
+                  <RotateCcw className="size-3.5" aria-hidden />
+                  {t('inventory.lots.release')}
+                </button>
+              )}
+              {canManage && (
+                <button type="button" onClick={() => onRecord(row)} aria-label={t('inventory.lots.recordWasteOf', { name: row.ingredientName })} className={cn(link, 'text-brand')}>
+                  <Trash2 className="size-3.5" aria-hidden />
+                  {t('inventory.waste.recordThis')}
+                </button>
+              )}
+            </span>
           </div>
         );
       })}
-      <p className="bg-slate-50/60 px-3 py-2 text-xs text-slate-500">{t('inventory.waste.oneDate')}</p>
+      <p className="bg-slate-50/60 px-3 py-2 text-xs text-slate-500">{note}</p>
     </Card>
+  );
+}
+
+/** W3: the date from the label (Use-by / Best-before / none), or for cooked food the hours after cooking. Owner / Manager. */
+function LotDateDialog({ row, onClose }: { row: LotRow; onClose: () => void }) {
+  const toast = useToast();
+  const { lot } = row;
+  const [date, setDate] = useState(lot.date ?? '');
+  const [best, setBest] = useState(lot.dateKind === 'BEST_BEFORE');
+  const [hours, setHours] = useState(row.dishHours ? String(row.dishHours) : '');
+  const [forDish, setForDish] = useState(!row.dishHours);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const h = hours.trim() ? Number(hours) : null;
+      await getApi().setLotDate(
+        row.cooked && h !== null
+          ? { lotId: lot.id, date: null, dateKind: 'USE_BY', discardHours: h, forDish }
+          : { lotId: lot.id, date: date || null, dateKind: date ? (best ? 'BEST_BEFORE' : 'USE_BY') : 'UNKNOWN' },
+      );
+      toast.show({ tone: 'success', title: t('inventory.lots.saved') });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('states.errorBody'));
+      setBusy(false);
+    }
+  };
+  const field = 'min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base';
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('inventory.lots.setDateTitle', { name: row.ingredientName })}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('inventory.form.cancel')}
+          </Button>
+          <Button onClick={() => void save()} disabled={busy}>
+            {t('inventory.lots.setDate')}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3" data-lot-date-form>
+        <p className="text-sm text-slate-600">{t('inventory.lots.setDateBody')}</p>
+        <label className="block">
+          <span className="mb-1 block text-sm font-bold text-slate-900">{t('inventory.lots.date')}</span>
+          <input type="date" value={date} onChange={(e) => (setDate(e.target.value), setError(null))} aria-label={t('inventory.lots.date')} className={field} />
+        </label>
+        {date ? (
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={best} onChange={(e) => setBest(e.target.checked)} className="size-5 accent-brand" />
+            {t('inventory.lots.bestBeforeTick')}
+          </label>
+        ) : (
+          <p className="text-xs font-semibold text-amber-700">{t('inventory.lots.noDateHint')}</p>
+        )}
+        {row.cooked && (
+          <div className="space-y-2 rounded-xl bg-slate-50 p-3">
+            <label className="block">
+              <span className="mb-1 block text-sm font-bold text-slate-900">{t('inventory.lots.hours')}</span>
+              <input value={hours} onChange={(e) => (setHours(e.target.value), setError(null))} inputMode="numeric" placeholder="—" aria-label={t('inventory.lots.hours')} className={cn(field, 'max-w-32 tabular-nums')} />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={forDish} onChange={(e) => setForDish(e.target.checked)} className="size-5 accent-brand" />
+              {t('inventory.lots.forDish', { name: row.ingredientName })}
+            </label>
+          </div>
+        )}
+        {error && (
+          <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
+            {error}
+          </p>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+
+/** W3: held food back to use: only after a person ticks that it is safe; the server refuses expired food. Owner / Manager. */
+function ReleaseDialog({ row, onClose }: { row: LotRow; onClose: () => void }) {
+  const toast = useToast();
+  const [safe, setSafe] = useState(false);
+  const [note, setNote] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await getApi().releaseLot(row.lot.id, safe, note);
+      toast.show({ tone: 'success', title: t('inventory.lots.released') });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('states.errorBody'));
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('inventory.lots.releaseTitle', { name: row.ingredientName })}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {t('inventory.form.cancel')}
+          </Button>
+          <Button onClick={() => void save()} disabled={busy}>
+            {t('inventory.lots.release')}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-slate-600">{t('inventory.lots.releaseBody')}</p>
+        <p className="text-sm font-semibold text-slate-800">
+          {t('inventory.lots.left', { qty: stockText(lotUnits(row), row.remainingMilli) })} · {lotDateText(row)}
+        </p>
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+          <input type="checkbox" checked={safe} onChange={(e) => (setSafe(e.target.checked), setError(null))} className="size-5 accent-brand" />
+          {t('inventory.lots.safeTick')}
+        </label>
+        <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={140} placeholder={t('inventory.lots.releaseNote')} aria-label={t('inventory.lots.releaseNote')} className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-base" />
+        {error && (
+          <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
+            {error}
+          </p>
+        )}
+      </div>
+    </Dialog>
   );
 }
 
 // ── Record Waste ────────────────────────────────────────────────────────────────────────────
 
 type PartDraft = { key: string; unitKey: string; quantity: string };
-type LineDraft = { key: string; ingredientId: string; parts: PartDraft[]; reason: StockWasteReason | null; note: string };
+/** lotId '' = no delivery named: waste takes the expired stock first, a staff meal or donation the oldest usable (W3) */
+type LineDraft = { key: string; ingredientId: string; lotId: string; parts: PartDraft[]; reason: StockWasteReason | null; note: string };
 
 const part = (unitKey = 'main'): PartDraft => ({ key: newId(), unitKey, quantity: '' });
-const lineDraft = (ingredientId = '', reason: StockWasteReason | null = null): LineDraft => ({ key: newId(), ingredientId, parts: [part()], reason, note: '' });
+const lineDraft = (ingredientId = '', reason: StockWasteReason | null = null, lotId = ''): LineDraft => ({ key: newId(), ingredientId, lotId, parts: [part()], reason, note: '' });
 
 /** The time when Post is tapped (the server checks it again) */
 const clock = () => Date.now();
@@ -435,6 +656,7 @@ function linesOf(event: WasteEvent): LineDraft[] {
     .map((l) => ({
       key: newId(),
       ingredientId: l.ingredientId!,
+      lotId: l.lotId ?? '',
       parts: l.parts.map((p) => ({ key: newId(), unitKey: p.unitKey, quantity: String(p.quantityMilli / 1000) })),
       reason: l.reason,
       note: l.note,
@@ -449,6 +671,8 @@ function linesOf(event: WasteEvent): LineDraft[] {
 function RecordWasteDialog({
   view,
   first,
+  firstLot,
+  lots,
   reason,
   correct,
   cookedPrices,
@@ -457,6 +681,8 @@ function RecordWasteDialog({
 }: {
   view: InventoryView;
   first: IngredientRow | null;
+  firstLot: string | null;
+  lots: LotRow[];
   reason: StockWasteReason | null;
   correct: WasteEvent | null;
   cookedPrices: Record<string, CookedPrice | null>;
@@ -474,7 +700,7 @@ function RecordWasteDialog({
   const [at, setAt] = useState(() => (correct ? localInput(new Date(correct.at)) : opened));
   const [kind, setKind] = useState<WasteKind>(correct ? kindOf(correct) : 'WASTE');
   const [stage, setStage] = useState<WasteStage>(correct?.stage ?? 'STORAGE');
-  const [lines, setLines] = useState<LineDraft[]>(() => (correct ? linesOf(correct) : [lineDraft(first?.ingredient.id ?? '', reason)]));
+  const [lines, setLines] = useState<LineDraft[]>(() => (correct ? linesOf(correct) : [lineDraft(first?.ingredient.id ?? '', reason, firstLot ?? '')]));
   const [note, setNote] = useState(correct?.note ?? '');
   const [why, setWhy] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -486,7 +712,7 @@ function RecordWasteDialog({
   const back = (id: string) => (correct ? correct.lines.reduce((sum, l) => (l.ingredientId === id ? sum + l.stockMilli : sum), 0) : 0);
   const stockOf = (id: string) => (rowOf(id)?.onHandMilli ?? 0) + back(id);
   const setLine = (key: string, change: (l: LineDraft) => LineDraft) => (setLines((all) => all.map((l) => (l.key === key ? change(l) : l))), setError(null));
-  const inputLines = lines.map((l) => ({ ingredientId: l.ingredientId, parts: l.parts.map((p) => ({ unitKey: p.unitKey, quantityMilli: parseQuantity(p.quantity, { allowZero: false }) })), reason: kind === 'WASTE' ? l.reason : null, note: l.note }));
+  const inputLines = lines.map((l) => ({ ingredientId: l.ingredientId, lotId: l.lotId || null, parts: l.parts.map((p) => ({ unitKey: p.unitKey, quantityMilli: parseQuantity(p.quantity, { allowZero: false }) })), reason: kind === 'WASTE' ? l.reason : null, note: l.note }));
   const costOf = (row: IngredientRow, stockMilli: number) => (row.ingredient.kind === 'PREPARED' ? cookedWasteCost(cookedPrices[row.ingredient.id], stockMilli) : (wasteCost(row.ingredient, stockMilli)?.cost ?? null));
   const previews = lines.map((l, index) => {
     const row = rowOf(l.ingredientId);
@@ -607,7 +833,7 @@ function RecordWasteDialog({
                 <div className="flex items-center gap-2">
                   <select
                     value={line.ingredientId}
-                    onChange={(e) => setLine(line.key, (l) => ({ ...l, ingredientId: e.target.value, parts: [part()] }))}
+                    onChange={(e) => setLine(line.key, (l) => ({ ...l, ingredientId: e.target.value, lotId: '', parts: [part()] }))}
                     aria-label={t('inventory.waste.itemN', { n: index + 1 })}
                     className={field}
                   >
@@ -645,6 +871,23 @@ function RecordWasteDialog({
 
                 {row && (
                   <>
+                    {lots.some((l) => l.lot.ingredientId === row.ingredient.id) && (
+                      <select
+                        value={line.lotId}
+                        onChange={(e) => setLine(line.key, (l) => ({ ...l, lotId: e.target.value }))}
+                        aria-label={t('inventory.waste.lotOf', { name: row.ingredient.name })}
+                        className={cn(field, 'text-sm')}
+                      >
+                        <option value="">{kind === 'WASTE' ? t('inventory.waste.anyLot') : t('inventory.waste.anyUsableLot')}</option>
+                        {lots
+                          .filter((l) => l.lot.ingredientId === row.ingredient.id)
+                          .map((l) => (
+                            <option key={l.lot.id} value={l.lot.id}>
+                              {`${lotDateText(l)} · ${t('inventory.lots.left', { qty: stockText(lotUnits(l), l.remainingMilli) })} · ${t(`inventory.lots.states.${l.state}`)}`}
+                            </option>
+                          ))}
+                      </select>
+                    )}
                     {line.parts.map((p, partIndex) => (
                       <div key={p.key} className="flex items-center gap-2">
                         <input
