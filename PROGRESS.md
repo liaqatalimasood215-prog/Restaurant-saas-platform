@@ -308,7 +308,7 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
-**IM1 (Stabilise) built 2026-11-10 (DEMO), approved after the full regression run ("Approve, main par lao") and committed; not pushed.** Owner: "Approve, IM1 karo". What changed, bug by bug: `docs/INVENTORY_AUDIT_2026-11-10.md` §8
+**IM1 (Stabilise) built 2026-11-10 (DEMO), approved after the full regression run ("Approve, main par lao"), committed (`98255ac`) and pushed to GitHub `main` on 2026-11-11 (owner: "push").** Owner: "Approve, IM1 karo". What changed, bug by bug: `docs/INVENTORY_AUDIT_2026-11-10.md` §8
 (B1 Cook refused until the dish is linked with Sell on POS, B2 stock bought after a passed expiry date is usable, B3 one business day, B4 / B5 texts and one
 `postPurchase`, B6 plan row by quantity, B9 toasts, B10 `StockMovement.cost`). B7 waits for IM4, B8 for IM2, lots for IM7. New: `planLeft`, `takesRawTwice`,
 `usableMilli` third argument (`cooking.ts`), `lineCosts` (`suppliers.ts`), `PreparedRow.rawTwice`, `CookingPlanView` rows `cookedMilli` / `leftMilli`,
