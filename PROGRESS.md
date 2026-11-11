@@ -308,9 +308,9 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
-**All work of 2026-11-10 is on `main` (owner: "Approve, main par lao"), not pushed:** the IM1 branch (`98255ac`) and the search / Find customer / Wastage-plan
-branch (`claude/sleepy-shamir-5e83b0`) were merged, README, PROGRESS and PROJECT_RULES joined by hand. `origin/main` is still `0eb219d`; a push needs his
-approval. **Next only after his approval: W1** of `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` (Record Waste for raw ingredients and packaging). His order of the
+**All work of 2026-11-10 is on local `main` (owner: "Approve, main par lao").** IM1 (`98255ac`) and its docs note (`9bb7483`) were already pushed to GitHub
+`main` on 2026-11-11 by another chat (owner: "push"). The search / Find customer / Wastage-plan branch (`claude/sleepy-shamir-5e83b0`) was merged on top,
+README, PROGRESS and PROJECT_RULES joined by hand. These newer commits are **not pushed**: `origin/main` is `9bb7483`; a push needs his approval. **Next only after his approval: W1** of `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` (Record Waste for raw ingredients and packaging). His order of the
 inventory work is now Prompt 1 Wastage & Expiry (W1–W5), Prompt 2 Stock Counts, Prompt 3 Reports; IM2–IM5 of the audit wait.
 
 **Wastage & Expiry audit and plan shown 2026-11-10 (owner's Prompt 1 of `LALA_Inventory_Three_Detailed_Prompts-1.md`), waiting for his approval.
@@ -321,21 +321,21 @@ waste in a separate `foodWaste` list only shown on Available Food), what is miss
 passed when run again). Then ("Approve, main par lao") IM1 was committed and both branches joined on `main`: W0 is done. Prompt 2 (Stock
 Counts) and Prompt 3 (Reports) come after, each with its own audit.
 
-**POS Find customer in the title row, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, not pushed, not yet on `main`** (owner: "table search can remove,
+**POS Find customer in the title row, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, now on local `main`, not pushed** (owner: "table search can remove,
 his place customer search"). The box beside Running bills now finds a customer by name or phone (from 2 letters, earlier customers from the orders) and puts
 them on the bill; a bill with unsent items asks to send or hold first. Then (his second picture) a takeaway bill has no customer box: one line
 "Customer: name · phone" with ×; nobody found → add a new customer in the search (name, phone optional); on phones too. Delivery keeps name, phone,
 address. `screens/pos/customer-search.tsx`, `current-bill.tsx`. Tests: typecheck, lint, `walkthrough:pos`, `walkthrough`, `:online`, `:sub-orders`,
 `:sizes`, `:refunds` pass on port 3010. **Open:** his customer khata (regular customers buy on credit, pay later) — plan first, needs his approval.
 
-**Searches swap places, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, not pushed, not yet on `main`.** His two
+**Searches swap places, built 2026-11-10 (DEMO), approved ("Approve, commit karo") and committed on branch `claude/sleepy-shamir-5e83b0`, now on local `main`, not pushed.** His two
 screenshots: "CHICKEN" in the header found no orders, and the small POS box was the menu search. Now the header finds menu items (on the POS as he types;
 Enter on another screen opens the POS) and the POS title-row box finds orders (number, table, customer → Orders). Phone: the header has no search, so the
 POS box stays the menu search. Someone with Orders but no POS keeps the old header order search. `src/lib/menu-search.ts`, `header.tsx`, `pos-screen.tsx`,
 `walkthrough:pos` (new last step). Also `.claude/launch.json` `restaurant-os-3010`: another worktree's server held port 3000. Tests: typecheck, lint,
-`walkthrough:pos`, `walkthrough`, `:online` pass on port 3010. The IM1 work is in the other worktree `restaurant-software-deploy-1b7e21`, also not committed.
+`walkthrough:pos`, `walkthrough`, `:online` pass on port 3010. 
 
-**IM1 (Stabilise) built 2026-11-10 (DEMO), approved after the full regression run ("Approve, main par lao") and committed; not pushed.** Owner: "Approve, IM1 karo". What changed, bug by bug: `docs/INVENTORY_AUDIT_2026-11-10.md` §8
+**IM1 (Stabilise) built 2026-11-10 (DEMO), approved after the full regression run ("Approve, main par lao"), committed (`98255ac`) and pushed to GitHub `main` on 2026-11-11 (owner: "push").** Owner: "Approve, IM1 karo". What changed, bug by bug: `docs/INVENTORY_AUDIT_2026-11-10.md` §8
 (B1 Cook refused until the dish is linked with Sell on POS, B2 stock bought after a passed expiry date is usable, B3 one business day, B4 / B5 texts and one
 `postPurchase`, B6 plan row by quantity, B9 toasts, B10 `StockMovement.cost`). B7 waits for IM4, B8 for IM2, lots for IM7. New: `planLeft`, `takesRawTwice`,
 `usableMilli` third argument (`cooking.ts`), `lineCosts` (`suppliers.ts`), `PreparedRow.rawTwice`, `CookingPlanView` rows `cookedMilli` / `leftMilli`,
