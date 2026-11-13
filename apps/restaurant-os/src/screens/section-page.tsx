@@ -34,6 +34,10 @@ export interface SectionOptions {
   cookingDate?: string;
   /** Stock → Available Food, opened from the closing review alert (/inventory?food=review) */
   foodReview?: boolean;
+  /** W4: Stock → Wastage & Expiry → Pending approval, opened from a waste report alert (/inventory?waste=pending) */
+  wastePending?: boolean;
+  /** Stage A: a stock count, opened from its approval alert (/inventory?count=…) */
+  countId?: string;
 }
 
 function renderSection(section: OsSection, options: SectionOptions) {
@@ -43,7 +47,7 @@ function renderSection(section: OsSection, options: SectionOptions) {
   if (section.key === 'pos') return <PosScreen tableId={options.tableId} />;
   if (section.key === 'staff') return <StaffScreen />;
   if (section.key === 'menu') return <MenuScreen />;
-  if (section.key === 'inventory') return <InventoryScreen key={`${options.recipeItemId ?? ''}:${options.cookingDate ?? ''}:${options.foodReview ? 'food' : ''}`} recipeItemId={options.recipeItemId} cookingDate={options.cookingDate} foodReview={options.foodReview} />;
+  if (section.key === 'inventory') return <InventoryScreen key={`${options.recipeItemId ?? ''}:${options.cookingDate ?? ''}:${options.foodReview ? 'food' : ''}:${options.wastePending ? 'waste' : ''}:${options.countId ?? ''}`} recipeItemId={options.recipeItemId} cookingDate={options.cookingDate} foodReview={options.foodReview} wastePending={options.wastePending} countId={options.countId} />;
   if (section.key === 'settings') return <SettingsScreen />;
   if (section.key === 'summary') return <SummaryScreen />;
   if (section.key === 'online-orders') return <OnlineOrdersScreen />;

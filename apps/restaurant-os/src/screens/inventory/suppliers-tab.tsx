@@ -139,13 +139,13 @@ export function SuppliersTab({
             <Total label={t('inventory.suppliers.todayBoughtAll')} value={formatPaisa(view.data.todayPurchases)} />
             <Total label={t('inventory.suppliers.dueAll')} value={formatPaisa(view.data.totalDue)} danger={view.data.totalDue > 0} />
             {!picking && (
-              <label className="flex min-h-11 min-w-56 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
+              <label className="flex min-h-10 min-w-48 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
                 <Search className="size-4 shrink-0 text-slate-400" aria-hidden />
                 <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('inventory.suppliers.search')} aria-label={t('inventory.suppliers.search')} className="w-full min-w-0 bg-transparent text-sm" />
               </label>
             )}
             {canManage && !picking && (
-              <Button variant="outline" onClick={() => setEditing('new')}>
+              <Button size="sm" variant="outline" onClick={() => setEditing('new')}>
                 <Plus className="size-4" aria-hidden />
                 {t('inventory.suppliers.add')}
               </Button>
@@ -160,7 +160,7 @@ export function SuppliersTab({
               </button>
             )}
           </div>
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {shown.map((row) => (
               <li key={row.supplier.id}>
                 <SupplierCard row={row} place={picking ? picking.indexOf(row.supplier.id) + 1 : null} onOpen={() => (picking ? tap(row.supplier.id) : (setBill(null), setChosen(row.supplier.id)))} />
@@ -187,9 +187,9 @@ export function SuppliersTab({
 
 function Total({ label, value, danger = false }: { label: string; value: string; danger?: boolean }) {
   return (
-    <div className={cn('rounded-xl px-3 py-2', danger ? 'bg-red-50' : 'bg-slate-100')}>
-      <p className={cn('text-xs font-semibold', danger ? 'text-red-800' : 'text-slate-600')}>{label}</p>
-      <p className={cn('text-base font-black tabular-nums', danger ? 'text-red-700' : 'text-slate-900')}>{value}</p>
+    <div className={cn('flex min-h-10 items-baseline gap-1.5 rounded-xl border px-3 py-2', danger ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white')}>
+      <p className={cn('text-xs font-semibold', danger ? 'text-red-800' : 'text-slate-500')}>{label}</p>
+      <p className={cn('text-sm font-black tabular-nums', danger ? 'text-red-700' : 'text-slate-900')}>{value}</p>
     </div>
   );
 }
@@ -216,7 +216,7 @@ function SupplierCard({ row, place, onOpen }: { row: SupplierRow; place: number 
       onClick={onOpen}
       aria-pressed={place === null ? undefined : place > 0}
       data-supplier-card={supplier.name}
-      className={cn('press flex w-full items-center gap-3 rounded-2xl border bg-white p-3 text-left transition', (place ?? 0) > 0 ? 'border-brand bg-brand-soft/60 shadow-[inset_4px_0_0_var(--color-brand)]' : 'border-slate-200 hover:border-brand/40')}
+      className={cn('press flex w-full items-center gap-3 rounded-xl border bg-white px-3 py-2 text-left transition', (place ?? 0) > 0 ? 'border-brand bg-brand-soft/60 shadow-[inset_4px_0_0_var(--color-brand)]' : 'border-slate-200 hover:border-brand/40')}
     >
       <SupplierAvatar supplier={supplier} />
       <span className="min-w-0 flex-1">

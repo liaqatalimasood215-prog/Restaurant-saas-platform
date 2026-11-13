@@ -216,6 +216,37 @@ vibration; Call Waiter also speaks. DEMO sync: between tabs of one browser only 
 backend and Socket.IO (Phases 4–5). Code: `src/components/shell/notifications.tsx`, `src/lib/sound.ts`.
 
 ## 7. Test status (last run, all green)
+- **2026-11-12 (Stage A Stock Count, committed on this branch):** `pnpm test` 214 (5 new), `pnpm typecheck`, `pnpm lint` pass. Walkthroughs pass: new `:counts` (8 steps:
+  category count, 1 carton + 3 bottles = 27, a 0 count, blank rows; 2 bottles wasted during counting not taken twice (27 − 2 = 25); a Manager cannot approve
+  his own count; the Owner approves from the bell, one COUNT per difference, history; storage-place count cancelled with a reason; sent back; phone),
+  `:wastage` (20), `:staff`, `:kds`, `:inventory`, `:im1`, `:suppliers`, `:supplier-order`, `:units`, `:recipes`, `:cooked`, `:auto-scale`, `:integration`.
+  Changed tests: data version 24 → 25 (5 walkthroughs). Not run: `:cooking` and `:sales-stock` (between midnight and 06:00), the others, customer, rider,
+  `pnpm build`, a real phone.
+- **2026-11-12 (W4 staff waste reports, committed on this branch):** `pnpm test` 209 (2 new), `pnpm typecheck`, `pnpm lint` pass. Walkthroughs pass: `:wastage` (20 steps; W4 =
+  17 chef reports 1 L milk, held, no prices, no loss; 18 bell + Approve = one waste entry from the held food; 19 Reject + Release needs the safe tick,
+  Reject + Keep on hold; 20 phone), `:staff`, `:kds`, `:inventory`, `:im1`, `:suppliers`, `:supplier-order`, `:units`, `:recipes`, `:cooked`,
+  `:auto-scale`, `:integration`. Changed tests: data version 23 → 24 (5 walkthroughs). Not run: `:cooking` and `:sales-stock` (still between midnight
+  and 06:00, see the W3 line), the other walkthroughs, customer, rider, `pnpm build`, a real phone.
+- **2026-11-12 (W3 lots and expiry, committed on this branch):** `pnpm test` 207 (9 new), `pnpm typecheck`, `pnpm lint` pass. Walkthroughs pass: `:wastage` (16 steps; W3 =
+  13 expired blocked, 14 bill line date = own lot, 15 Set date confirms, 16 held → Release only with the safe tick), `:inventory`, `:im1`, `:suppliers`,
+  `:supplier-order`, `:units`, `:recipes`, `:cooked`, `:auto-scale`, `:integration`, `:kds`. Changed tests: data version 22 → 23 (5 walkthroughs);
+  `:inventory` Out of stock 1 → 2 (the expired item has no usable stock); `:im1` step 6 now sets the date on the old-stock lot and expects the W3 result
+  (cooking after the date passed used the fresh 5 kg, the expired 8 kg stay blocked → 6 kg short). `:cooking` and `:sales-stock` fail at 00:19–00:50
+  (Asia/Karachi), between midnight and the 06:00 business-day start, at the same step on the last commit without W3 too (checked in a temporary copy):
+  a test timing issue, to be run again after 06:00. Not run: the other walkthroughs, customer, rider, `pnpm build`, a real phone.
+- **2026-11-11 (Inventory compact UI, committed with W2 on this branch):** `pnpm typecheck`, `pnpm lint` pass; walkthroughs `:inventory`, `:wastage`, `:suppliers`,
+  `:cooking`, `:sales-stock`, `:recipes`, `:im1`, `:cooked` pass. Not run: the other walkthroughs, customer, rider, `pnpm build`, a real phone.
+- **2026-11-11 (W2 Wastage, committed on this branch):** `pnpm test` 201 (3 new), `pnpm typecheck`, `pnpm lint` pass. `walkthrough:wastage` passes (12 steps; W2 =
+  9 cooked daal 1 kg wasted from cooked stock only, 10 staff meal + donation apart, 11 reverse once, 12 correct linked), `:inventory` and `:sales-stock`
+  (new order-food Waste Log checks) pass. Not run this time: the other walkthroughs, customer, rider, `pnpm build`, a real phone.
+- **2026-11-11 (W1 restored in worktree `lala-restaurant-os-continue-9e41aa`, then committed there with the owner's approval):** files equal to `6e16416`; `pnpm test` 198 and
+  `pnpm typecheck` pass. With this folder's servers on 3000 / 3001 / 3002, the four that had failed (port 3000 was another folder's) now pass:
+  `:online-app`, `:riders` (first run: a screenshot timed out waiting for fonts after all its checks; passed when run again), `:connected`, `:previews`.
+- **2026-11-11 (W1 Stock Wastage):** `pnpm test` 198 (5 new), `pnpm typecheck`, `pnpm lint` pass. New `walkthrough:wastage` passes (twice). On port 3010:
+  `:inventory`, `:im1`, `:sales-stock`, `:suppliers`, `:supplier-order`, `:units`, `:recipes`, `:cooked`, `:integration`, `:pos`, `:kds` pass. `:cooking` (step 7) and
+  `walkthrough` (step 4, a click waiting for a page change) stopped on 30-second timeouts in the long run; `:cooking` passed alone at once, `walkthrough`
+  stopped again at another place (a page load) and passed on the third run. No server errors were logged; the cause is not found (three dev servers and
+  many browser tabs at once). Not run: the other 11 walkthroughs, customer, rider, `pnpm build`, a real phone.
 - **2026-11-10 (IM1 Stabilise):** `pnpm test` 193, `pnpm typecheck`, `pnpm lint` pass. All 25 older Restaurant OS walkthroughs pass, the new `walkthrough:im1`, customer (182 checks) and rider (275 checks) too. In the first run of the 25, `:inventory` and `:recipes` each stopped on a 30-second timeout (a click on the All filter; the page load); both passed when run again alone, the cause was not found. `pnpm build` not run (the dev servers were running).
 - **2026-11-09 (bug run + phone fixes on this newest version, commit `d026d93`, pushed 2026-11-10):** `pnpm test` 189, `pnpm typecheck`, `pnpm lint` and `pnpm build`
   pass. ALL walkthroughs pass: the 25 Restaurant OS ones, customer, rider, the new rider `walkthrough:phone` (Wi-Fi address, storage blocked), and on
@@ -308,9 +339,56 @@ changes (state that must survive, such as `payNow`, lives in the draft, `screens
 
 ## 9. Pending tasks and next steps (in this order)
 
+**Stage A Stock Count built 2026-11-12 (DEMO), approved ("Approve, commit karo") and committed on this branch — not pushed, not on main** (plan `docs/INVENTORY_NEXT_STAGES_2026-11-12.md`,
+approved with its 5 decisions and the order A → F). Stock → Stock Counts; `counts.ts`; COUNT movements; permissions `inventory.count` /
+`inventory.count.approve` (data version 25); bell alert. Next, each after his approval: Stage B (Stock Movement History:
+dates, lot and source on each row, Load more, CSV); run `:cooking` and `:sales-stock` after 06:00.
+
+**W4 staff waste reports built 2026-11-12 (DEMO), approved and committed on this branch — not pushed, not on main** (owner: "Approved. Start W4 with all four
+recommended settings"). Details: `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` §10e. Kitchen / KDS → Report waste (no prices; the food is held at once, no
+loss); Owner / Manager → Pending approval (bell alert): Approve = one waste entry from the held food; Reject = Release (safe tick, never expired) or Keep
+on hold. Permissions `inventory.waste.submit` / `inventory.waste.approve` (Role Permissions row "Waste Reports"; data version 24). Next, each after his
+approval: run `:cooking` and `:sales-stock` after 06:00; W5 (full check of Prompt 1 §7); merge into `main` / push.
+
+**W3 lots and expiry built 2026-11-12 (DEMO), approved ("Approve, commit karo") and committed on this branch — not pushed, not on main** (owner: "Approved to start W3 with all three
+recommended decisions"; his rules: unknown / unconfirmed dates stay Needs review, never safe; expired or unsafe returned food is never released). Details:
+`docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` §10d. Every bill line, cooking batch, new item's opening stock and reversed waste line is its own lot (`lots.ts`);
+data version 23 makes the stock on hand one old-stock lot per item (date not confirmed). Usable = on hand − expired − held (Cooking Plan, Cook, low / out,
+staff meals, donations); FEFO, each past use judged as the lots were then; held reversals released only with the safe tick, never after the date; bill
+line "Use by" date; lists Expiring soon / Expired / Needs review / On hold with Set date, Release, Record waste. Next: run `:cooking` and `:sales-stock` again after 06:00; each
+after his approval: merge into `main` / push, then W4 (staff requests and approval), W5 (full check).
+
+**Inventory compact UI built 2026-11-11 (styling only), approved and committed with W2 on this branch, not pushed** (owner: "Approve, commit karo") (his brief: clean the 8 screens Suppliers, Stock,
+Recipes overview, Stock Movements, Cooking Plan, Available Food, Wastage, Expiry). Slim title row and smaller header buttons; section tabs lower; Stock
+sub-tabs in one grey row that scrolls sideways; light-red chips instead of red gradients; compact tables and phone cards (an ingredient card ~115 px, was
+~250 px); Cooking Plan without the red banner, "Nothing planned" once; Available Food and Wastage headers on one row; Expiry rows with a small Record waste
+link; Recipes overview with small figures and three wide rows to tap. No label, workflow, calculation or data changed; Recipe Builder, Prepared Items and
+the supplier screen (his pictures) untouched. New: `Button size="sm"`, `scripts/screenshots-inventory.mjs`; pictures in `screenshots/inventory-ui-before`
+and `-after`. This is part of IM2 of the audit; its button moves and renames were NOT done (they change labels the walkthroughs and he know).
+
+**W2 Wastage built 2026-11-11 (DEMO), approved and committed on branch `claude/lala-restaurant-os-continue-9e41aa`, not pushed, not on main** (owner: "Approve, commit karo") (owner: "Approved — Start W2 with both recommended
+decisions"; W3–W5 each need his separate approval). Details: `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` §10c. Cooked stock in Record Waste (one movement on the
+cooked dish, raw never again, batch cost); cancelled-order / Available Food waste in the same Waste Log with no second movement; Staff meal and Donation
+counted apart (Owner / Manager only); Reverse and Correct with a reason, linked, nothing deleted. Open for W3: reversed stock is usable again at once
+("held until released" needs usable stock and lots); a discard time per cooked lot. Next, each only after his approval: merge into `main`, push, W3.
+
+**W1 Stock Wastage built 2026-11-11 (DEMO), approved for a local commit on branch `claude/sleepy-shamir-5e83b0` only — not merged into `main`, not pushed** (owner: "Approved. Start W1 … Do not commit or push").
+On 2026-11-11 the owner asked to restore it in worktree `lala-restaurant-os-continue-9e41aa` (branch `claude/lala-restaurant-os-continue-9e41aa`): applied there
+identical to `6e16416`, then committed on that branch with his approval ("Approve, commit karo"). Merge into `main`, push and W2 each wait for his approval.
+Stock → Wastage & Expiry is no longer a placeholder: **Record Waste** (one entry, several items; raw ingredients and packaging; quantity in any of the
+item's units with "another unit" — 1 carton + 2 bottles = 26 bottles; reason; Other needs a note; where: Storage / Preparation / Cooking; when, not in the
+future, at most 7 days back; preview "In stock 10 litres → 8 litres" and the loss), **Post waste** = one `WasteEvent` + one `WASTE` stock movement per item,
+once per key, all or none; loss at the last purchase price (estimate), no price = "Unknown — needs a price", never Rs. 0. Waste Log (table / phone cards),
+cards Waste today · Last 7 days · Expiring soon · Pending approval (W4), Expiring soon / Expired lists (one date per ingredient until W3), Stock Movements
+"Wasted: <reason>", Overview card "Today's wastage". Supplier khata never changes. Rules `packages/shared/src/wastage.ts` (5 unit tests); `postStockWaste`,
+`getWasteView`; `DemoInventory.wasteEvents` (optional, no data version change); screen `screens/inventory/wastage-tab.tsx`; `walkthrough:wastage`.
+Not in W1: prepared / cancelled-order food, staff meal, donation, reversal (W2), lots and dates per delivery (W3), staff requests and approval (W4), photo
+(Phase 7). Cancelled-order food waste stays in its own list on Available Food until W2. **Next only after his approval: W2.**
+
+
 **All work of 2026-11-10 is on local `main` (owner: "Approve, main par lao").** IM1 (`98255ac`) and its docs note (`9bb7483`) were already pushed to GitHub
 `main` on 2026-11-11 by another chat (owner: "push"). The search / Find customer / Wastage-plan branch (`claude/sleepy-shamir-5e83b0`) was merged on top,
-README, PROGRESS and PROJECT_RULES joined by hand. These newer commits were **pushed to GitHub `main` on 2026-11-11** (owner: "ok push gitap"), fast-forward, no force. Every later push needs his approval again. **Next only after his approval: W1** of `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` (Record Waste for raw ingredients and packaging). His order of the
+README, PROGRESS and PROJECT_RULES joined by hand. These newer commits were **pushed to GitHub `main` on 2026-11-11** (owner: "ok push gitap"), fast-forward, no force. Every later push needs his approval again. W1 of `docs/WASTAGE_EXPIRY_PLAN_2026-11-10.md` was then built (see above). His order of the
 inventory work is now Prompt 1 Wastage & Expiry (W1–W5), Prompt 2 Stock Counts, Prompt 3 Reports; IM2–IM5 of the audit wait.
 
 **Wastage & Expiry audit and plan shown 2026-11-10 (owner's Prompt 1 of `LALA_Inventory_Three_Detailed_Prompts-1.md`), waiting for his approval.

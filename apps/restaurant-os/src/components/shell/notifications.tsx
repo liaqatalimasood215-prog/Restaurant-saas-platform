@@ -39,6 +39,10 @@ export function notificationTitle(n: StaffNotification): string {
       return t('alerts.cookedNegative', { n: n.count });
     case 'FOOD_REVIEW':
       return t('alerts.foodReview', { n: n.count });
+    case 'WASTE_REQUEST':
+      return t('alerts.wasteRequest', { name: n.byName });
+    case 'COUNT_SUBMITTED':
+      return t('alerts.countSubmitted', { n: n.number });
   }
 }
 
@@ -62,6 +66,10 @@ export function notificationBody(n: StaffNotification): string {
       return t('alerts.cookedNegativeBody', { names: n.names.join(', ') + (n.count > n.names.length ? ' …' : '') });
     case 'FOOD_REVIEW':
       return t('alerts.foodReviewBody', { names: n.names.join(', ') + (n.count > n.names.length ? ' …' : '') });
+    case 'WASTE_REQUEST':
+      return t('alerts.wasteRequestBody', { names: n.names.join(', ') + (n.count > n.names.length ? ' …' : '') });
+    case 'COUNT_SUBMITTED':
+      return t('alerts.countSubmittedBody', { n: n.differences, name: n.byName });
   }
 }
 
@@ -75,12 +83,14 @@ const ALERT_TONES: Record<StaffNotification['kind'], AlertTone> = {
   COOKING_SHORTAGE: 'BILL',
   COOKED_NEGATIVE: 'BILL',
   FOOD_REVIEW: 'BILL',
+  WASTE_REQUEST: 'BILL',
+  COUNT_SUBMITTED: 'BILL',
 };
-const ALERT_ORDER: StaffNotification['kind'][] = ['ONLINE_ORDER', 'WAITER_CALLED', 'BILL_REQUESTED', 'FOOD_READY', 'COUNTER_READY', 'BILL_ACCEPTED', 'COOKING_SHORTAGE', 'COOKED_NEGATIVE', 'FOOD_REVIEW'];
+const ALERT_ORDER: StaffNotification['kind'][] = ['ONLINE_ORDER', 'WAITER_CALLED', 'BILL_REQUESTED', 'FOOD_READY', 'COUNTER_READY', 'BILL_ACCEPTED', 'COOKING_SHORTAGE', 'COOKED_NEGATIVE', 'FOOD_REVIEW', 'WASTE_REQUEST', 'COUNT_SUBMITTED'];
 
 /** What the device says aloud: Roman Urdu, and Urdu or Hindi for devices with that voice (lib/sound.ts). */
 function notificationSpeech(n: StaffNotification): { roman: string; urdu: string; hindi: string } {
-  const say = (key: 'onlineOrder' | 'waiterCalled' | 'bill' | 'billAccepted' | 'foodReady' | 'foodWaiting' | 'counterReady' | 'cookingShort' | 'cookedNegative' | 'foodReview', vars?: Record<string, string | number>) => ({
+  const say = (key: 'onlineOrder' | 'waiterCalled' | 'bill' | 'billAccepted' | 'foodReady' | 'foodWaiting' | 'counterReady' | 'cookingShort' | 'cookedNegative' | 'foodReview' | 'wasteRequest' | 'countSubmitted', vars?: Record<string, string | number>) => ({
     roman: t(`alerts.speech.${key}.roman`, vars),
     urdu: t(`alerts.speech.${key}.urdu`, vars),
     hindi: t(`alerts.speech.${key}.hindi`, vars),
@@ -104,6 +114,10 @@ function notificationSpeech(n: StaffNotification): { roman: string; urdu: string
       return say('cookedNegative');
     case 'FOOD_REVIEW':
       return say('foodReview', { n: n.count });
+    case 'WASTE_REQUEST':
+      return say('wasteRequest');
+    case 'COUNT_SUBMITTED':
+      return say('countSubmitted');
   }
 }
 
@@ -122,6 +136,10 @@ export function notificationLink(n: StaffNotification): string {
       return '/inventory?cooking=today';
     case 'FOOD_REVIEW':
       return '/inventory?food=review';
+    case 'WASTE_REQUEST':
+      return '/inventory?waste=pending';
+    case 'COUNT_SUBMITTED':
+      return `/inventory?count=${n.countId}`;
     default:
       return `/waiter?table=${n.tableId}`;
   }

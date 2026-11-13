@@ -100,7 +100,7 @@ function PlanView({
       type="button"
       aria-pressed={view.date === value}
       onClick={() => onDate(value)}
-      className={cn('press min-h-10 rounded-xl px-3.5 text-sm font-bold', view.date === value ? 'bg-brand-gradient text-white shadow-brand' : 'border border-slate-200 bg-white text-slate-700 shadow-sm')}
+      className={cn('press min-h-10 rounded-full border px-3.5 text-sm font-bold', view.date === value ? 'border-brand bg-brand-soft text-brand' : 'border-slate-200 bg-white text-slate-700 hover:border-brand/40')}
     >
       {label}
     </button>
@@ -109,32 +109,35 @@ function PlanView({
   const checks = view.checks.map((c) => t(c.forDay === 'TOMORROW' ? 'inventory.cooking.plan.checkTomorrow' : 'inventory.cooking.plan.checkToday', { time: c.time })).join(', ');
 
   return (
-    <div className="space-y-3" data-cooking-plan={view.date}>
-      <div className="bg-brand-gradient flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3 text-white shadow-brand">
-        <CalendarDays className="size-7 shrink-0" aria-hidden />
+    <div className="space-y-2.5" data-cooking-plan={view.date}>
+      {/* One slim row: the title, then the day (no red banner; owner's compact UI brief) */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="mr-auto min-w-0">
-          <h2 className="text-lg font-extrabold">{t('inventory.cooking.plan.title')}</h2>
-          <p className="text-sm text-white/85">{t('inventory.cooking.plan.subtitle')}</p>
+          <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-900">
+            <CalendarDays className="size-5 shrink-0 text-brand" aria-hidden />
+            {t('inventory.cooking.plan.title')}
+          </h2>
+          <p className="text-xs text-slate-500">{t('inventory.cooking.plan.subtitle')}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {chip(view.today, t('inventory.cooking.plan.today'))}
+          {chip(tomorrow, t('inventory.cooking.plan.tomorrow'))}
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            {t('inventory.cooking.plan.date')}
+            <input type="date" value={view.date} onChange={(e) => e.target.value && onDate(e.target.value)} aria-label={t('inventory.cooking.plan.date')} className="min-h-10 rounded-xl border border-slate-200 bg-white px-2 text-sm" />
+          </label>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {chip(view.today, t('inventory.cooking.plan.today'))}
-        {chip(tomorrow, t('inventory.cooking.plan.tomorrow'))}
-        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          {t('inventory.cooking.plan.date')}
-          <input type="date" value={view.date} onChange={(e) => e.target.value && onDate(e.target.value)} aria-label={t('inventory.cooking.plan.date')} className="min-h-10 rounded-lg border border-slate-300 bg-white px-2 text-sm" />
-        </label>
-        <span className="text-xs text-slate-500">{view.ownPlan ? t('inventory.cooking.plan.ownPlan') : t('inventory.cooking.plan.dailyPlan')}</span>
-      </div>
+      <p className="px-1 text-xs text-slate-500">{view.ownPlan ? t('inventory.cooking.plan.ownPlan') : t('inventory.cooking.plan.dailyPlan')}</p>
 
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden rounded-xl">
         {rows.length === 0 ? (
-          <p className="p-4 text-sm text-slate-500">{t('inventory.cooking.plan.empty')}</p>
+          <p className="px-3 py-2.5 text-sm text-slate-500">{t('inventory.cooking.plan.empty')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[36rem] text-sm" data-plan-rows>
               <thead>
-                <tr className="bg-slate-50 text-left text-xs font-bold text-slate-600">
+                <tr className="bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="px-3 py-2">{t('inventory.cooking.plan.dish')}</th>
                   <th className="px-3 py-2">{t('inventory.cooking.plan.amount')}</th>
                   <th className="px-3 py-2">{t('inventory.cooking.plan.expected')}</th>
@@ -198,7 +201,7 @@ function PlanView({
           </div>
         )}
         {canManage && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 p-3">
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-3 py-2">
             <select
               value={adding}
               onChange={(e) => {
@@ -219,10 +222,10 @@ function PlanView({
                 ))}
             </select>
             <span className="ml-auto flex flex-wrap gap-2">
-              <Button variant="secondary" disabled={busy} onClick={() => void save(true)}>
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => void save(true)}>
                 {t('inventory.cooking.plan.saveDaily')}
               </Button>
-              <Button disabled={busy} onClick={() => void save(false)}>
+              <Button size="sm" disabled={busy} onClick={() => void save(false)}>
                 {t('inventory.cooking.plan.saveDay', { date: view.date })}
               </Button>
             </span>
@@ -231,19 +234,20 @@ function PlanView({
         )}
       </Card>
 
-      <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3">
-          <h3 className="mr-auto text-base font-extrabold text-slate-900">{t('inventory.cooking.plan.needsTitle')}</h3>
+      <Card className="overflow-hidden rounded-xl">
+        <div className="flex flex-wrap items-center gap-x-2 border-b border-slate-100 px-3 py-2">
+          <h3 className="text-sm font-extrabold text-slate-900">{t('inventory.cooking.plan.needsTitle')}</h3>
+          <p className="mr-auto text-xs text-slate-500">{t('inventory.cooking.plan.needsHint')}</p>
           {short.length > 0 && <Badge tone="red">{t('inventory.cooking.plan.shortCount', { n: short.length })}</Badge>}
         </div>
-        <p className="px-4 pt-2 text-xs text-slate-500">{t('inventory.cooking.plan.needsHint')}</p>
         {view.needs.length === 0 ? (
-          <p className="p-4 text-sm text-slate-500">{t('inventory.cooking.plan.empty')}</p>
+          // Nothing planned is said once, above; here only when dishes are planned and need nothing
+          rows.length > 0 && <p className="px-3 py-2.5 text-sm text-slate-500">{t('inventory.cooking.plan.empty')}</p>
         ) : (
-          <div className="overflow-x-auto p-2">
+          <div className="overflow-x-auto px-1 py-1">
             <table className="w-full min-w-[34rem] text-sm" data-plan-needs>
               <thead>
-                <tr className="text-left text-xs font-bold text-slate-600">
+                <tr className="text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="px-2 py-1.5">{t('inventory.cooking.ingredient')}</th>
                   <th className="px-2 py-1.5 text-right">{t('inventory.cooking.have')}</th>
                   <th className="px-2 py-1.5 text-right">{t('inventory.cooking.need')}</th>
@@ -276,12 +280,13 @@ function PlanView({
             </table>
           </div>
         )}
-        <div className="space-y-2 border-t border-slate-100 p-3">
+        {/* With nothing planned there is nothing to be "in stock": the line shows only for a plan with needs */}
+        <div className={cn('space-y-2 border-t border-slate-100 px-3 py-2', view.needs.length === 0 && !bills && 'hidden')}>
           {short.length === 0 ? (
             <p className="text-sm font-semibold text-green-700">{t('inventory.cooking.plan.allThere')}</p>
           ) : (
             canManage && (
-              <Button disabled={busy} onClick={() => void makeBills()}>
+              <Button size="sm" disabled={busy} onClick={() => void makeBills()}>
                 <ShoppingCart className="size-4" aria-hidden />
                 {t('inventory.cooking.plan.makeBills')}
               </Button>
@@ -303,10 +308,9 @@ function PlanView({
         </div>
       </Card>
 
-      <p className="text-xs text-slate-600">
-        {t('inventory.cooking.plan.checks', { list: checks })} {t('inventory.cooking.plan.changeChecks')}
+      <p className="px-1 text-xs text-slate-500">
+        {t('inventory.cooking.plan.checks', { list: checks })} {t('inventory.cooking.plan.changeChecks')} <span className="font-semibold text-amber-800">{t('inventory.cooking.plan.demoNote')}</span>
       </p>
-      <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{t('inventory.cooking.plan.demoNote')}</p>
       {error && (
         <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
           {error}

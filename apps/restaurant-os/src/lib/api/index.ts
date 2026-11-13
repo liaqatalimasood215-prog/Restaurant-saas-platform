@@ -30,6 +30,10 @@ export type {
   StaffLink,
   StationInput,
   TableInput,
+  CountLineInput,
+  WasteDecisionInput,
+  WasteReportView,
+  WasteRequestInput,
 } from './client';
 
 let adapter: DemoAdapter | null = null;

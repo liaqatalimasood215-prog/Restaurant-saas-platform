@@ -3,6 +3,7 @@ import {
   MILLI,
   businessDate,
   displayFactorMilli,
+  onHandOf,
   rupeesToPaisa,
   type AvailableFood,
   type CookingBatch,
@@ -17,10 +18,14 @@ import {
   type IngredientCategory,
   type PurchaseUnit,
   type StockLocation,
+  type StockLot,
   type StockMovement,
   type StockUnit,
   type Supplier,
   type SupplierCategory,
+  type WasteEvent,
+  type WasteRequest,
+  type StockCount,
 } from '@restaurant-saas/shared';
 import type { PurchaseDraft } from '../client';
 import { createRecipeSeed } from './recipe-seed';
@@ -55,9 +60,54 @@ export interface DemoInventory {
   /** I4: food made and then cancelled, kept for another order of the same dish; cooked food wasted or eaten by staff */
   availableFood?: AvailableFood[];
   foodWaste?: FoodWaste[];
+  /** W1 (2026-11-11): stock waste incidents of raw ingredients and packaging, never edited or deleted; missing before */
+  wasteEvents?: WasteEvent[];
   /** I4: when the closing review of the ready food that is left is due; missing = 23:00 */
   closingTime?: string;
+  /** W3 (2026-11-11): every delivery and cooking batch as its own lot with its own date, never deleted; missing before */
+  lots?: StockLot[];
+  /** W3: when lots started; every movement before it belongs to its item's old-stock lot */
+  lotsSince?: string;
+  /** W4 (2026-11-12): staff waste reports, never edited or deleted; missing before */
+  wasteRequests?: WasteRequest[];
+  /** Stage A (2026-11-12): stock counts with their history, never deleted; missing before */
+  stockCounts?: StockCount[];
   expiringSoonDays: number;
+}
+
+/**
+ * W3 (data version 23): lots start now. The stock each item has is one "old stock" lot, with the one date the item had (or none),
+ * marked unconfirmed: Needs review until someone checks it. Nothing on hand changes; an item with no stock gets no lot.
+ */
+export function addStockLots(inventory: DemoInventory, createdBy: string, now: Date = new Date()): DemoInventory {
+  if (inventory.lotsSince) return inventory;
+  const since = new Date(now.getTime() + 1).toISOString();
+  const lots = inventory.ingredients.flatMap((ingredient): StockLot[] => {
+    const onHand = onHandOf(ingredient.id, inventory.movements);
+    if (onHand <= 0) return [];
+    const date = ingredient.expiryDate ?? null;
+    return [
+      {
+        id: `${ingredient.id}-old`,
+        restaurantId: ingredient.restaurantId,
+        branchId: ingredient.branchId,
+        ingredientId: ingredient.id,
+        source: 'OLD_STOCK',
+        sourceId: null,
+        receivedAt: since,
+        firstMilli: onHand,
+        cost: null,
+        date,
+        dateKind: date ? 'USE_BY' : 'UNKNOWN',
+        dateFrom: date ? 'OLD_STOCK' : 'NONE',
+        unverified: true,
+        held: false,
+        createdBy,
+        createdAt: since,
+      },
+    ];
+  });
+  return { ...inventory, lots: [...(inventory.lots ?? []), ...lots], lotsSince: since };
 }
 
 /** A supplier before Suppliers S1 (version 18 and older): no category, address, notes or products yet. */

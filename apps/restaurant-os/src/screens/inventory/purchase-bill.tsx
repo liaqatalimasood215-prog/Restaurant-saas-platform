@@ -66,6 +66,10 @@ interface BillLine {
   unitKey: string;
   quantity: string;
   rate: string;
+  /** W3: the date on the label (YYYY-MM-DD), optional; empty = Unknown (Needs review) */
+  expiry?: string;
+  /** W3: the label says best-before (else use-by) */
+  bestBefore?: boolean;
 }
 
 const newKey = () => newId();
@@ -202,7 +206,7 @@ function BillScreens({
     setLines((all) => all.filter((l) => l.row !== row));
   };
 
-  const draftOf = (): Omit<PurchaseDraft, 'savedAt'> => ({ supplierId: supplier.id, billNo, date, lines: lines.map(({ ingredientId, unitKey, quantity, rate }) => ({ ingredientId, unitKey, quantity, rate })), discount, discountMode, paid, method, note });
+  const draftOf = (): Omit<PurchaseDraft, 'savedAt'> => ({ supplierId: supplier.id, billNo, date, lines: lines.map(({ ingredientId, unitKey, quantity, rate, expiry, bestBefore }) => ({ ingredientId, unitKey, quantity, rate, ...(expiry ? { expiry, bestBefore: Boolean(bestBefore) } : {}) })), discount, discountMode, paid, method, note });
   const saveDraft = async (quiet = false) => {
     try {
       await getApi().savePurchaseDraft(draftOf());
@@ -240,7 +244,10 @@ function BillScreens({
         supplierId: supplier.id,
         billNo,
         date,
-        lines: parsed.map((l) => ({ ingredientId: l.ingredientId, unitKey: l.unitKey, quantityMilli: l.quantityMilli!, ratePaisa: l.ratePaisa! })),
+        lines: parsed.map((l, index) => {
+          const { expiry, bestBefore } = lines[index]!;
+          return { ingredientId: l.ingredientId, unitKey: l.unitKey, quantityMilli: l.quantityMilli!, ratePaisa: l.ratePaisa!, expiryDate: expiry || null, dateKind: expiry ? (bestBefore ? 'BEST_BEFORE' : 'USE_BY') : 'UNKNOWN' };
+        }),
         discount: discountPaisa!,
         paid: paidPaisa!,
         method: paidPaisa! > 0 ? method : null,
@@ -582,6 +589,27 @@ function BillRow({
           <button type="button" onClick={onOtherUnit} className="press rounded-md px-1.5 py-0.5 font-bold text-brand hover:bg-brand-soft">
             {t('inventory.bill.otherUnit')}
           </button>
+        )}
+      </div>
+      {/* W3: the date on this delivery's label, optional: none = Unknown, shown as Needs review (never as safe) */}
+      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]" data-line-expiry>
+        <label className="flex items-center gap-1 font-semibold text-slate-600">
+          {line.bestBefore ? t('inventory.lots.kinds.BEST_BEFORE') : t('inventory.lots.kinds.USE_BY')}
+          <input
+            type="date"
+            value={line.expiry ?? ''}
+            onChange={(e) => onChange({ expiry: e.target.value })}
+            aria-label={t('inventory.lots.dateOf', { name: ingredient.name })}
+            className="min-h-8 rounded-md border border-slate-300 bg-white px-1.5 text-xs"
+          />
+        </label>
+        {line.expiry ? (
+          <label className="flex items-center gap-1 text-slate-600">
+            <input type="checkbox" checked={Boolean(line.bestBefore)} onChange={(e) => onChange({ bestBefore: e.target.checked })} className="size-4 accent-brand" />
+            {t('inventory.lots.bestBeforeTick')}
+          </label>
+        ) : (
+          <span className="text-amber-700">{t('inventory.lots.noDateHint')}</span>
         )}
       </div>
     </li>

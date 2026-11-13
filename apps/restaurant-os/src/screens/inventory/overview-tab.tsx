@@ -46,6 +46,7 @@ export function OverviewTab({
   onOpenSuppliers,
   onOpenCooking,
   onOpenFood,
+  onOpenWastage,
 }: {
   view: InventoryView;
   onOpen: (filter: IngredientFilter) => void;
@@ -56,6 +57,8 @@ export function OverviewTab({
   onOpenCooking?: () => void;
   /** I4: Available Food (made, cancelled, waiting for another order) */
   onOpenFood?: () => void;
+  /** W1: Stock → Wastage & Expiry */
+  onOpenWastage?: () => void;
 }) {
   const { summary } = view;
   // Suppliers S1 fills today's purchases and what we owe the suppliers.
@@ -113,7 +116,18 @@ export function OverviewTab({
         {onOpenFood && (
           <StatCard icon={PackageCheck} tone={view.availableFood ? 'green' : 'slate'} label={t('inventory.cards.availableFood')} value={String(view.availableFood ?? 0)} hint={t('inventory.cardHints.availableFood')} onClick={onOpenFood} />
         )}
-        <SoonCard icon={Trash2} label={t('inventory.cards.wastage')} step="4" />
+        {onOpenWastage && view.wasteToday ? (
+          <StatCard
+            icon={Trash2}
+            tone={view.wasteToday.lines > 0 ? 'red' : 'slate'}
+            label={t('inventory.cards.wastage')}
+            value={formatPaisa(view.wasteToday.cost)}
+            hint={view.wasteToday.lines > 0 ? t('inventory.cardHints.wastage', { n: view.wasteToday.lines }) + (view.wasteToday.unknown ? ` · ${t('inventory.waste.unknownCount', { n: view.wasteToday.unknown })}` : '') : t('inventory.cardHints.wastageNone')}
+            onClick={onOpenWastage}
+          />
+        ) : (
+          <SoonCard icon={Trash2} label={t('inventory.cards.wastage')} step="4" />
+        )}
         {suppliers ? (
           <StatCard icon={HandCoins} tone={suppliers.totalDue > 0 ? 'red' : 'slate'} label={t('inventory.cards.supplierDue')} value={formatPaisa(suppliers.totalDue)} hint={t('inventory.cardHints.supplierDue')} onClick={onOpenSuppliers} />
         ) : (
@@ -150,7 +164,7 @@ export function OverviewTab({
             <Empty>{t('inventory.expiringEmpty', { days: view.expiringSoonDays })}</Empty>
           ) : (
             expiring.slice(0, 6).map((r) => {
-              const label = expiryLabel(r.expiry, r.ingredient.expiryDate);
+              const label = expiryLabel(r.expiry, r.expiryDate !== undefined ? r.expiryDate : r.ingredient.expiryDate);
               return (
                 <Line
                   key={r.ingredient.id}

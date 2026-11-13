@@ -67,6 +67,19 @@ import type {
   KhataEntry,
   StockLedgerQuery,
   StockLedgerView,
+  DateKind,
+  StockLot,
+  WasteRequest,
+  WasteRequestRow,
+  CountListRow,
+  CountScope,
+  CountView,
+  StockCount,
+  WasteKind,
+  WasteLineInput,
+  WasteStage,
+  WasteView,
+  WasteEvent,
   IngredientCategory,
   InventoryView,
   PurchaseUnit,
@@ -506,7 +519,15 @@ export interface PurchaseBillInput {
   /** Business date of the bill (YYYY-MM-DD), not in the future */
   date: string;
   /** Quantity in the way it is bought (unitKey: 'main', 'loose:kg', 'pack:<id>'; thousandths) and its rate (paisa) */
-  lines: { ingredientId: Uuid; unitKey: string; quantityMilli: number; ratePaisa: number }[];
+  lines: {
+    ingredientId: Uuid;
+    unitKey: string;
+    quantityMilli: number;
+    ratePaisa: number;
+    /** W3: the date on the label (optional; none = Unknown, Needs review) and whether it is a use-by or best-before date */
+    expiryDate?: string | null;
+    dateKind?: DateKind;
+  }[];
   /** Paisa off the subtotal */
   discount: number;
   /** Paid at once (paisa), up to this bill's total; 0 = nothing yet */
@@ -539,7 +560,7 @@ export interface PurchaseDraft {
   billNo: string;
   date: string;
   /** unitKey missing = 'main' (drafts from before 2026-11-07) */
-  lines: { ingredientId: Uuid; unitKey?: string; quantity: string; rate: string }[];
+  lines: { ingredientId: Uuid; unitKey?: string; quantity: string; rate: string; expiry?: string; bestBefore?: boolean }[];
   discount: string;
   discountMode: 'RS' | 'PERCENT';
   paid: string;
@@ -570,6 +591,62 @@ export interface StockAdjustInput {
   note: string;
   /** A double tap or retry with the same key changes nothing */
   idempotencyKey: string;
+}
+
+/** W1: one waste incident of raw ingredients and packaging (Owner / Manager post it at once); W2: also cooked stock, staff meals and donations. */
+export interface StockWasteInput {
+  /** When it happened (ISO); not in the future, at most 7 days back */
+  at: string;
+  /** W2: missing = WASTE; Staff meal and Donation are Owner / Manager only */
+  kind?: WasteKind;
+  stage: WasteStage;
+  lines: WasteLineInput[];
+  note: string;
+  /** One per form: a double tap, refresh or retry posts once */
+  idempotencyKey: string;
+}
+
+/** Stage A: one counted item: its units as typed (null = not counted, a blank row) and a note */
+export interface CountLineInput {
+  countId: Uuid;
+  ingredientId: Uuid;
+  parts: { unitKey: string; quantityMilli: number | null }[] | null;
+  note: string;
+}
+
+/** W4: a staff waste report: what, how much, why; the food is held at once, nothing is a loss until approved */
+export interface WasteRequestInput {
+  at: string;
+  stage: WasteStage;
+  lines: WasteLineInput[];
+  note: string;
+  /** The person says it is already thrown away */
+  thrownAway: boolean;
+  idempotencyKey: string;
+}
+
+/** W4: what the Kitchen's Report waste needs: the items in use (no prices) and the person's own reports of the last days */
+export interface WasteReportView {
+  items: Ingredient[];
+  mine: WasteRequestRow[];
+}
+
+/** W4: the Owner's or a Manager's decision; a rejected report's food is released (only when confirmed safe) or stays held */
+export interface WasteDecisionInput {
+  requestId: Uuid;
+  approve: boolean;
+  reason: string;
+  release: boolean;
+  safe: boolean;
+}
+
+/** W3: a lot's date from the label, or (cooked food) hours after it was made, optionally for every new batch of the dish */
+export interface LotDateInput {
+  lotId: Uuid;
+  date: string | null;
+  dateKind: DateKind;
+  discardHours?: number | null;
+  forDish?: boolean;
 }
 
 export interface StationInput {
@@ -769,6 +846,38 @@ export interface ApiClient {
   adjustStock(input: StockAdjustInput): Promise<void>;
   /** Stock Movements: every stock change with its reason, who and when, and the stock it left (newest first). */
   getStockLedger(query: StockLedgerQuery): Promise<StockLedgerView>;
+  /** W1: Stock → Wastage & Expiry: posted stock waste, today and the last 7 days */
+  getWasteView(): Promise<WasteView>;
+  /** W1: post one waste incident: one WASTE movement per line, all or none, once per key (Owner / Manager) */
+  postStockWaste(input: StockWasteInput): Promise<WasteEvent>;
+  /** W2: reverse a posted event with a reason: its stock comes back by linked movements, the event stays as REVERSED (Owner / Manager) */
+  reverseStockWaste(eventId: Uuid, reason: string): Promise<WasteEvent>;
+  /** W2: correct = reverse the old event and post the new one in one change, both linked (Owner / Manager) */
+  correctStockWaste(eventId: Uuid, reason: string, input: StockWasteInput): Promise<WasteEvent>;
+  /** W3: the date of one delivery (or a cooked batch's discard hours), confirmed by a person (Owner / Manager) */
+  setLotDate(input: LotDateInput): Promise<StockLot>;
+  /** W3: held (returned) food back to use, only when confirmed safe and never after its date (Owner / Manager) */
+  releaseLot(lotId: Uuid, safe: boolean, note: string): Promise<StockLot>;
+  /** W4: the Report waste box of the Kitchen (and other staff the Owner allows): items without prices and the person's own reports */
+  getWasteReport(): Promise<WasteReportView>;
+  /** W4: send a waste report; the food is held at once, once per key */
+  submitWasteRequest(input: WasteRequestInput): Promise<WasteRequest>;
+  /** W4: approve (one waste entry from the held food) or reject a report (Owner / Manager), once */
+  decideWasteRequest(input: WasteDecisionInput): Promise<WasteRequest>;
+  /** Stage A: the stock counts (open ones first, then the last 30 days) */
+  getStockCounts(): Promise<CountListRow[]>;
+  /** Stage A: one count with its rows: expected, counted, difference and its value */
+  getStockCount(countId: Uuid): Promise<CountView>;
+  /** Stage A: start a count of all stock, a category or a storage place (snapshot of what is expected), once per key */
+  startStockCount(scope: CountScope, note: string, idempotencyKey: string): Promise<StockCount>;
+  /** Stage A: save what was counted of one item (null parts = not counted); the moment it is saved is its counting time */
+  saveCountLine(input: CountLineInput): Promise<StockCount>;
+  submitStockCount(countId: Uuid): Promise<StockCount>;
+  /** Stage A: the Owner or a Manager (never a Manager's own count) posts the differences, once */
+  approveStockCount(countId: Uuid): Promise<StockCount>;
+  /** Stage A: back to counting (a reason), or cancel (a reason); never after approval */
+  returnStockCount(countId: Uuid, reason: string): Promise<StockCount>;
+  cancelStockCount(countId: Uuid, reason: string): Promise<StockCount>;
   /** Recipes & Food Cost (Step B): every menu size, add-on and prepared item with its current recipe and food cost. */
   getRecipes(): Promise<RecipesView>;
   /**

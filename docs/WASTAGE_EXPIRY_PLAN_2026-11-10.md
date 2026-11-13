@@ -151,6 +151,83 @@ built; lots keep their original deadline so a later promotion can use it.
 | **W4** | Staff requests: Pending approval, holds, Approve / Reject, optional threshold, a Record Waste entry for the Kitchen | pending and rejected request behaviour |
 | **W5** | New `walkthrough:wastage` with all ten checks of Prompt 1 §7, documents, screenshots | full run |
 
+## 10b. W1 — built 2026-11-11 (DEMO), waiting for the owner's review
+
+Record Waste for raw ingredients and packaging as in §5–§6: several items, units with "another unit", reason, where, when, preview, Post waste = one
+`WasteEvent` and one `WASTE` movement per item, once per key, all or none; loss at the last purchase price (estimate; lot cost in W3), Unknown without a
+price. Waste Log, four cards (Pending approval says W4), Expiring soon / Expired lists by the one date per ingredient, Stock Movements "Wasted: <reason>",
+Overview "Today's wastage". Files: `packages/shared/src/wastage.ts`, `screens/inventory/wastage-tab.tsx`, `postStockWaste` / `getWasteView` in the demo
+server. Test: `walkthrough:wastage`. Prompt 1 §7 checks covered so far: 10 L − 2 L = 8 L with one loss; carton + pieces; repeated submission; insufficient
+quantity; supplier debt unchanged. The other five come with W2–W4.
+
+## 10c. W2 — built 2026-11-11 (DEMO), waiting for the owner's review
+
+Owner: "Approved — Start W2 with both recommended decisions": (1) only the Owner and a Manager record Staff meals, Donations and
+Reverse / Correct (checked on the role in the demo server, besides `inventory.manage`); (2) no default discard time — the
+per-dish safe hours of Available Food (approved default 3 hours, 2026-11-09) stay as they are; a discard time per cooked lot
+comes with W3.
+
+- **Cooked stock** in Record Waste ("Cooked food" group, reasons incl. "Unsold cooked food discarded at closing", stage
+  Holding / closing): one WASTE movement on the cooked dish only — its raw ingredients left at the batch and are never taken
+  again. Loss = the newest batch's cost ÷ what it actually made ("batch cost (estimate)"), else the recipe estimate, else Unknown.
+- **Order food** (a cancelled / voided line wasted, Available Food wasted or eaten at closing) now also writes a waste event in
+  the same Waste Log: one ORDER_FOOD line, cost kept on the order, **no stock movement** (it left once at the kitchen's Ready).
+  The callers already write it once (an outcome is chosen once; Available Food closes to 0), so it can never be reused and
+  wasted, or wasted twice. The `foodWaste` list on Available Food stays.
+- **Staff meal / Donation**: own kinds with their own movement types and totals ("Today apart from waste"); never in waste cost.
+- **Reverse**: a reason; one WASTE_REVERSAL movement per line linked to the event; the event stays as REVERSED (never edited or
+  deleted); a second reversal is refused. Order-food entries are not reversible (the food left the kitchen). **Correct** =
+  reverse + new event in one change, linked both ways (`reversal.correctedById`, `correctsId`); nothing is written if either part
+  fails; one key per form. Reversed stock is usable again at once — "held until released" needs usable stock and lots (W3).
+- Files: `packages/shared/src/wastage.ts` (kinds, `checkReverse`, `cookedWasteCost`, reasons per item), `inventory.ts` (movement
+  types), demo server (`writeStockWaste`, `reverseStockWaste`, `correctStockWaste`, `recordWaste`), `wastage-tab.tsx`. Tests:
+  3 new unit tests; `walkthrough:wastage` steps 9–12; `walkthrough:sales-stock` checks the order-food entries.
+
+## 10d. W3 — built 2026-11-12 (DEMO), approved and committed on the feature branch ("Approve, commit karo")
+
+Owner: "Approved to start W3 with all three recommended decisions" — (1) the expiry date is typed on each purchase-bill line AND with
+"Set date" on a lot; (2) held stock is released by the Owner or a Manager only; (3) the old stock becomes one lot per item with its
+current date, marked not confirmed. His two rules: unknown or unconfirmed dates stay **Needs review** and are never shown as safe;
+expired or unsafe returned food is **never released**.
+
+- **Lots** (`packages/shared/src/lots.ts`): every bill line, every cooking batch, the opening stock of a new item and every reversed
+  waste line is its own lot; data version 22 → 23 turns the stock on hand into one OLD_STOCK lot per item (its old date, not
+  confirmed). Nothing on hand changes; a lot is never deleted.
+- **States:** Use-by passed → EXPIRED (blocked); Best-before passed → PAST_BEST (usable, look at it); no date or a date nobody
+  confirmed → NEEDS_REVIEW (usable, never "safe"); held → HELD; within the warning days → SOON (shown even on an unconfirmed date,
+  which also stays in Needs review). Date-only rule: usable through the end of the day (Asia/Karachi).
+- **Usable = on hand − expired − held.** Low / out, Cooking Plan, Cook, staff meals and donations use it. Sales are never blocked
+  (2026-11-04 decision): beyond the usable lots the item is flagged "check the expired or held stock".
+- **FEFO:** sales and cooking take from the usable lots, earliest date first; an Undo, a reversed batch or a corrected waste goes
+  back to the lots it came from. Waste may name its lot; without one it takes the expired stock first.
+- **Hold:** a plain Reverse brings the food back HELD on its own lot (date of the lot it left); Release needs the "safe" tick and is
+  refused once the date has passed. A Correct puts the stock straight back into its lots (a typing fix, not held).
+- **Cooked food:** a batch is its own lot; with the dish's own discard hours (set on a cooked lot, optionally "for every new batch")
+  it expires that many hours after cooking; without hours it is Needs review. No default (owner's W2 decision). Available Food's 3
+  safe hours are unchanged.
+- **Screens:** bill line "Use by" date + "Best before" tick; Stock → Wastage & Expiry lists per delivery: Expiring soon, Expired,
+  Needs review, On hold, with Set date, Release and Record waste (pre-filled with that delivery); a waste line may pick its
+  delivery; the stock list shows "x expired / on hold" and the earliest date.
+- Not in W3: staff requests and approval (W4), the full check (W5); warning windows stay the one "expiring soon" days setting.
+
+## 10e. W4 — built 2026-11-12 (DEMO), approved and committed on the feature branch
+
+Owner: "Approved. Start W4 with all four recommended settings" — (1) the Kitchen reports waste by default, Cashier / Waiter / Service
+Waiter only when the Owner switches it on in Role Permissions; (2) a **Report waste** button on the Kitchen / KDS title bar; (3) no Rs.
+limit: every staff report waits for approval (no threshold field built); (4) no prices for the Kitchen.
+
+- Permissions `inventory.waste.submit` (Owner, Manager, Kitchen; may be granted to Cashier, Waiter, Service Waiter) and
+  `inventory.waste.approve` (Owner, Manager only); new row "Waste Reports" in Role Permissions. Data version 24 adds them to saved
+  Kitchen / Manager roles and people.
+- **Report:** one item, quantity + unit, reason (a note for Other), "Already thrown away" tick; checked like Record Waste (never more
+  than on hand); once per key. The food is **held at once**: one WASTE_HOLD movement out of its lots (expired stock first) and one into
+  a held REQUEST lot with the date of the lot it left. On hand unchanged, no loss, khata unchanged. The chef sees "My reports" with
+  Waiting / Approved / Rejected.
+- **Pending approval** (card, tab, bell alert with sound and voice, link `/inventory?waste=pending`): Approve = one waste entry from
+  the held lot (reported by the chef, approved by the Owner / Manager), once; Reject = a reason, then **Release** (only with the safe
+  tick, never when expired — the W3 rule) or **Keep on hold** (On hold list). Decided reports stay listed for 7 days; nothing is deleted.
+- Not in W4: a photo (Phase 7); a message back to the chef's phone (the status shows in My reports); the full check (W5).
+
 ## 11. Limits of the DEMO
 
 One browser's storage; tabs sync by sending all data, the last writer wins. Nothing runs while no tab is open: a lot becomes

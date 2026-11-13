@@ -137,7 +137,6 @@ import {
   checkAdjustment,
   checkIngredient,
   cleanIngredientName,
-  expiryState,
   onHandOf,
   purchaseRecipeCost,
   recipeForAmount,
@@ -199,6 +198,57 @@ import {
   balancesAfter,
   type StockLedgerQuery,
   type StockLedgerView,
+  MILLI,
+  MAX_REVERSE_REASON,
+  daysBetween,
+  fefoOrder,
+  checkDiscardHours,
+  checkLotDate,
+  checkRelease,
+  discardAtOf,
+  isUsableState,
+  lotDateState,
+  lotLedger,
+  lotState,
+  needsReview,
+  usableOfLots,
+  type ExpiryState,
+  type LotClock,
+  type LotDateProblem,
+  type LotRow,
+  type ReleaseProblem,
+  type StockLot,
+  checkDecision,
+  checkApprove,
+  checkReturnOrCancel,
+  checkSubmit,
+  countDiff,
+  countStockMilli,
+  inScope,
+  summarizeCount,
+  MAX_COUNT_NOTE,
+  type CountListRow,
+  type CountProblem,
+  type CountRow,
+  type CountScope,
+  type CountView,
+  type StockCount,
+  checkReverse,
+  checkWaste,
+  cookedWasteCost,
+  summarizeWaste,
+  wasteBusinessDate,
+  wasteCost,
+  wasteStockMilli,
+  type CookedPrice,
+  type ReverseProblem,
+  type DecisionProblem,
+  type WasteEvent,
+  type WasteLine,
+  type WasteRequest,
+  type WasteRequestRow,
+  type WasteProblem,
+  type WasteView,
   checkPortion,
   portionLines,
   sameDish,
@@ -227,7 +277,6 @@ import {
   planUses,
   stockNeeds,
   takesRawTwice,
-  usableMilli,
   type BatchProblem,
   type CookingBatch,
   type CookingCheckTime,
@@ -295,6 +344,12 @@ import {
   type ReceiveStockInput,
   type SupplierPaymentInput,
   type SupplierProfileInput,
+  StockWasteInput,
+  LotDateInput,
+  WasteDecisionInput,
+  CountLineInput,
+  WasteReportView,
+  WasteRequestInput,
 } from '../client';
 import type { DemoData, DemoInvite } from './seed';
 import { DemoStore } from './store';
@@ -460,6 +515,68 @@ const SCALE_MESSAGES: Record<ScaleProblem, string> = {
   NO_SIZES: 'Tick at least one size.',
   SIZE_QUANTITY_INVALID: 'Every size needs a quantity (at most 100 × the base).',
   SIZE_DUPLICATE: 'A size is in the list twice.',
+};
+
+/** W1: why a waste incident cannot be posted */
+const WASTE_MESSAGES: Record<WasteProblem, string> = {
+  NO_LINES: 'Add at least one item.',
+  TOO_MANY_LINES: 'At most 20 items in one entry.',
+  STAGE_INVALID: 'Choose where it happened.',
+  TIME_INVALID: 'The time cannot be in the future or more than 7 days back.',
+  NOTE_TOO_LONG: 'The note is too long (140 letters at most).',
+  ITEM_REQUIRED: 'Choose a raw ingredient, packaging or cooked food in use.',
+  DUPLICATE_ITEM: 'This item is in the entry twice. Use “+ another unit” on one line.',
+  TOO_MANY_PARTS: 'At most 3 units on one line.',
+  DUPLICATE_UNIT: 'The same unit twice on one line.',
+  QUANTITY_INVALID: 'Type a quantity above 0.',
+  REASON_REQUIRED: 'Choose why it was thrown away.',
+  NOTE_REQUIRED: 'Write what happened (reason Other).',
+  MORE_THAN_ON_HAND: 'More than is in stock. Correct the stock first if the stock is wrong.',
+  KIND_INVALID: 'Choose Waste, Staff meal or Donation.',
+  LOT_INVALID: 'Choose a delivery of this item.',
+  MORE_THAN_IN_LOT: 'More than is left in this delivery.',
+  NOT_USABLE: 'Only stock that may be used: expired or held food is never eaten or given away.',
+};
+
+/** Stage A: why a stock count cannot go on */
+const COUNT_MESSAGES: Record<CountProblem | 'QUANTITY_INVALID', string> = {
+  NOT_COUNTING: 'This count is not open for counting any more.',
+  NOT_SUBMITTED: 'This count is not waiting for approval.',
+  NOTHING_COUNTED: 'Count at least one item first. A blank row is not counted.',
+  OWN_COUNT: 'A Manager does not approve his own count. Ask the Owner or another Manager.',
+  REASON_REQUIRED: 'Write the reason.',
+  NOTE_TOO_LONG: 'The note is too long (140 letters at most).',
+  ALREADY_OPEN: 'Some of these items are already in an open count. Finish or cancel it first.',
+  NO_ITEMS: 'No items in use here.',
+  QUANTITY_INVALID: 'Type 0 or more in each unit, each unit once.',
+};
+
+/** W4: why a waste report cannot be decided */
+const DECISION_MESSAGES: Record<DecisionProblem, string> = {
+  NOT_PENDING: 'This report was already decided.',
+  REASON_REQUIRED: 'Write why the report is rejected.',
+  NOTE_TOO_LONG: 'The reason is too long (140 letters at most).',
+};
+
+/** W3: why a date or a discard time cannot be saved, and why held food cannot be released */
+const LOT_DATE_MESSAGES: Record<LotDateProblem, string> = {
+  DATE_INVALID: 'Type the date from the label.',
+  KIND_INVALID: 'Choose Use-by or Best-before.',
+  HOURS_INVALID: 'Discard time: whole hours, 1 to 72.',
+};
+const RELEASE_MESSAGES: Record<ReleaseProblem, string> = {
+  NOT_HELD: 'This stock is not on hold.',
+  NOTHING_LEFT: 'Nothing is left of this stock.',
+  EXPIRED: 'Its date has passed: expired food is never released. Record it as waste.',
+  NOT_SAFE: 'Confirm that it is safe to use, else record it as waste.',
+};
+
+/** W2: why an entry cannot be reversed */
+const REVERSE_MESSAGES: Record<ReverseProblem, string> = {
+  NOT_POSTED: 'This entry was already reversed.',
+  ORDER_FOOD: 'Order food that was wasted or eaten cannot be reversed: it has left the kitchen.',
+  REASON_REQUIRED: 'Write why it is reversed.',
+  NOTE_TOO_LONG: 'The reason is too long (140 letters at most).',
 };
 
 function menuMessage(check: NonNullable<MenuCheck>, name: string, where: string): string {
@@ -2685,13 +2802,30 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const inv = data.inventory;
       // An expiry date is a calendar date; everything else on this screen follows the business day
       const today = this.calendarToday(data);
+      // W3: status and expiry from the lots: low / out count the usable stock; the expiry is the worst lot with stock left
+      const book = this.lotBook(data);
+      const lotsOf = new Map<string, StockLot[]>();
+      for (const lot of book.lots) if (book.remaining(lot.id) > 0) lotsOf.set(lot.ingredientId, [...(lotsOf.get(lot.ingredientId) ?? []), lot]);
       const rowOf = (ingredient: Ingredient) => {
         const onHandMilli = onHandOf(ingredient.id, inv.movements);
+        const lots = lotsOf.get(ingredient.id) ?? [];
+        const states = lots.map((lot) => ({ lot, state: book.state(lot), milli: book.remaining(lot.id) }));
+        const sum = (keep: (s: (typeof states)[number]) => boolean) => states.filter(keep).reduce((total, s) => total + s.milli, 0);
+        const usableMilli = book.usable(ingredient.id);
+        const dated = lots
+          .map((l) => (l.discardAt ? localClock(new Date(l.discardAt), data.branch.timezone).date : l.dateKind !== 'UNKNOWN' ? l.date : null))
+          .filter((d): d is string => Boolean(d))
+          .sort();
+        const expiry: ExpiryState = states.some((s) => s.state === 'EXPIRED') ? 'EXPIRED' : states.some((s) => s.state === 'SOON') ? 'SOON' : dated.length ? 'OK' : 'NONE';
         return {
           ingredient,
           onHandMilli,
-          status: stockStatus({ onHandMilli, minStockMilli: ingredient.minStockMilli, isActive: ingredient.isActive }),
-          expiry: expiryState(ingredient.expiryDate, today, onHandMilli, inv.expiringSoonDays),
+          usableMilli,
+          blockedMilli: sum((s) => s.state === 'EXPIRED' || s.state === 'HELD'),
+          reviewMilli: sum((s) => needsReview(s.lot, s.state)) + Math.max(0, book.ledger.none.get(ingredient.id) ?? 0),
+          expiryDate: dated[0] ?? null,
+          status: stockStatus({ onHandMilli: Math.min(onHandMilli, usableMilli), minStockMilli: ingredient.minStockMilli, isActive: ingredient.isActive }),
+          expiry,
           value: stockValueOf(ingredient, onHandMilli),
           supplierName: inv.suppliers.find((s) => s.id === ingredient.preferredSupplierId)?.name ?? null,
           locationName: inv.locations.find((l) => l.id === ingredient.locationId)?.name ?? null,
@@ -2725,6 +2859,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         cookingShort: { today: shortOf(cookingDay), tomorrow: shortOf(nextDate(cookingDay)) },
         availableFood: (inv.availableFood ?? []).filter((f) => availableState(f, Date.now()) === 'AVAILABLE').length,
         notTrackedToday: this.notTrackedOn(data, cookingDay),
+        wasteToday: ((s) => ({ cost: s.todayCost, lines: s.todayLines, unknown: s.todayUnknown }))(summarizeWaste(inv.wasteEvents ?? [], this.branchToday(data))),
       };
     });
   }
@@ -2769,13 +2904,22 @@ export class DemoAdapter implements ApiClient, DemoControls {
       if (existing.stockUnit !== input.stockUnit && inv.movements.some((m) => m.ingredientId === existing.id)) {
         throw new ApiError('CONFLICT', 'The stock unit cannot change after stock was recorded.');
       }
+      // W3: a date changed here is the old-stock lot's date, typed by a person (it no longer needs review)
+      const oldLot = (inv.lots ?? []).find((l) => l.ingredientId === existing.id && l.source === 'OLD_STOCK');
+      if (oldLot && input.expiryDate !== existing.expiryDate) {
+        Object.assign(oldLot, { date: input.expiryDate, dateKind: input.expiryDate ? 'USE_BY' : 'UNKNOWN', dateFrom: input.expiryDate ? 'TYPED' : 'NONE', unverified: false, dateSetBy: user.id, dateSetAt: now });
+      }
       Object.assign(existing, fields);
       return existing;
     }
     const ingredient: Ingredient = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, kind: input.kind ?? 'BOUGHT', ...fields, isActive: true, createdAt: now };
     inv.ingredients.push(ingredient);
     if (input.openingMilli > 0) {
+      // W3: the opening stock of a new item is its first lot, with the date typed in the form (none = Unknown)
+      const date = input.expiryDate || null;
+      const lot = this.newLot(data, { ingredientId: ingredient.id, source: 'OLD_STOCK', sourceId: null, firstMilli: input.openingMilli, cost: null, date, dateKind: date ? 'USE_BY' : 'UNKNOWN', dateFrom: date ? 'TYPED' : 'NONE' }, user.id, now);
       inv.movements.push({
+        lotId: lot.id,
         id: newId(),
         restaurantId: data.restaurant.id,
         branchId: data.branch.id,
@@ -2835,6 +2979,704 @@ export class DemoAdapter implements ApiClient, DemoControls {
           cost: ingredientCost(this.costBook(data), ingredient.id, input.quantityMilli),
         });
         data.idempotency[key] = movementId;
+      }),
+    );
+  }
+
+  getWasteView(): Promise<WasteView> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const inv = data.inventory;
+      const today = this.branchToday(data);
+      const events = [...(inv.wasteEvents ?? [])].sort((a, b) => b.at.localeCompare(a.at) || b.createdAt.localeCompare(a.createdAt));
+      const all = events.flatMap((event) =>
+        event.lines.map((line, index) => {
+          const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId);
+          const food = line.orderFood;
+          return {
+            event,
+            line,
+            ingredientName: food ? [food.name, food.variantName].filter(Boolean).join(' · ') : (ingredient?.name ?? '—'),
+            first: index === 0,
+            reversedByName: this.staffName(data, event.reversal?.by ?? null),
+            purchaseUnit: ingredient?.purchaseUnit ?? 'kg',
+            stockUnit: ingredient?.stockUnit ?? 'g',
+            byName: this.staffName(data, event.createdBy),
+          };
+        }),
+      );
+      const limit = 200;
+      const cookedPrices = Object.fromEntries(inv.ingredients.filter((i) => i.kind === 'PREPARED' && i.isActive).map((i) => [i.id, this.cookedPrice(data, i.id)]));
+      return {
+        today,
+        summary: summarizeWaste(events, today),
+        meals: summarizeWaste(events, today, 'STAFF_MEAL'),
+        donations: summarizeWaste(events, today, 'DONATION'),
+        cookedPrices,
+        lots: this.lotRows(data),
+        requests: this.requestRows(data, () => true, true),
+        rows: all.slice(0, limit),
+        total: all.length,
+        limit,
+      };
+    });
+  }
+
+  /** W3: every lot with stock left, with its state, earliest date first (Stock → Wastage & Expiry lists) */
+  private lotRows(data: DemoData): LotRow[] {
+    const inv = data.inventory;
+    const book = this.lotBook(data);
+    return book.lots
+      .filter((lot) => book.remaining(lot.id) > 0)
+      .sort(fefoOrder)
+      .flatMap((lot): LotRow[] => {
+        const ingredient = inv.ingredients.find((i) => i.id === lot.ingredientId);
+        if (!ingredient) return [];
+        const entry = lot.source === 'PURCHASE' ? inv.khata.find((k) => k.id === lot.sourceId) : undefined;
+        const day = lot.discardAt ? localClock(new Date(lot.discardAt), data.branch.timezone).date : lot.date;
+        return [
+          {
+            lot,
+            ingredientName: ingredient.name,
+            cooked: ingredient.kind === 'PREPARED',
+            purchaseUnit: ingredient.purchaseUnit,
+            stockUnit: ingredient.stockUnit,
+            remainingMilli: book.remaining(lot.id),
+            state: book.state(lot),
+            supplierName: nameOfSupplier(inv.suppliers, lot.supplierId ?? null),
+            billNo: entry?.billNo || null,
+            days: day ? daysBetween(book.now.date, day) : null,
+            setByName: this.staffName(data, lot.dateSetBy ?? null),
+            releasedByName: this.staffName(data, lot.release?.by ?? null),
+            dishHours: ingredient.kind === 'PREPARED' ? (ingredient.discardHours ?? null) : null,
+          },
+        ];
+      });
+  }
+
+  /**
+   * W3: the date on a lot, typed from the label (Use-by / Best-before) or Unknown; for cooked food the discard time in hours from
+   * when it was made, optionally kept for every new batch of the dish. The person confirms it: Needs review ends. Owner / Manager.
+   */
+  setLotDate(input: LotDateInput): Promise<StockLot> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        this.requireOwnerOrManager(user);
+        const lot = (data.inventory.lots ?? []).find((l) => l.id === input.lotId);
+        if (!lot) throw new ApiError('NOT_FOUND', 'This delivery was not found.');
+        const now = nowIso();
+        if (input.discardHours !== undefined && input.discardHours !== null) {
+          const problem = checkDiscardHours(input.discardHours);
+          if (problem) throw new ApiError('VALIDATION', LOT_DATE_MESSAGES[problem]);
+          Object.assign(lot, { date: null, dateKind: 'USE_BY', discardAt: discardAtOf(lot.receivedAt, input.discardHours), dateFrom: 'TYPED' });
+          if (input.forDish) {
+            const dish = data.inventory.ingredients.find((i) => i.id === lot.ingredientId && i.kind === 'PREPARED');
+            if (dish) Object.assign(dish, { discardHours: input.discardHours, updatedAt: now });
+          }
+        } else {
+          const problem = checkLotDate({ date: input.date, dateKind: input.dateKind });
+          if (problem) throw new ApiError('VALIDATION', LOT_DATE_MESSAGES[problem]);
+          Object.assign(lot, { date: input.date, dateKind: input.dateKind, discardAt: null, dateFrom: input.date ? 'TYPED' : 'NONE' });
+          if (lot.source === 'OLD_STOCK') {
+            // The item's one old date follows its old-stock lot
+            const item = data.inventory.ingredients.find((i) => i.id === lot.ingredientId);
+            if (item) Object.assign(item, { expiryDate: input.date, updatedAt: now });
+          }
+        }
+        Object.assign(lot, { unverified: false, dateSetBy: user.id, dateSetAt: now });
+        return lot;
+      }),
+    );
+  }
+
+  // ── Staff waste reports (W4, owner 2026-11-12) ──────────────────────────────────────────────
+
+  /** One report as a list row; the cost (last purchase price / batch cost) only for the Owner and a Manager */
+  private requestRow(data: DemoData, request: WasteRequest, withCost: boolean): WasteRequestRow {
+    const inv = data.inventory;
+    let cost: number | null = 0;
+    const lines = request.lines.map((line) => {
+      const item = inv.ingredients.find((i) => i.id === line.ingredientId);
+      const cooked = item?.kind === 'PREPARED';
+      const lineCost = !item ? null : cooked ? cookedWasteCost(this.cookedPrice(data, item.id), line.stockMilli) : (wasteCost(item, line.stockMilli)?.cost ?? null);
+      cost = cost === null || lineCost === null ? null : cost + lineCost;
+      return { name: item?.name ?? '—', purchaseUnit: item?.purchaseUnit ?? 'kg', stockUnit: item?.stockUnit ?? 'g', stockMilli: line.stockMilli, reason: line.reason, note: line.note, cooked };
+    });
+    return { request, lines, requestedByName: this.staffName(data, request.requestedBy), decidedByName: this.staffName(data, request.decidedBy ?? null), cost: withCost ? cost : null };
+  }
+
+  /** Pending reports first (oldest first), then those decided in the last 7 days (newest first) */
+  private requestRows(data: DemoData, keep: (r: WasteRequest) => boolean, withCost: boolean): WasteRequestRow[] {
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    const all = (data.inventory.wasteRequests ?? []).filter(keep);
+    const pending = all.filter((r) => r.status === 'PENDING').sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+    const decided = all.filter((r) => r.status !== 'PENDING' && (r.decidedAt ?? '') >= weekAgo).sort((a, b) => (b.decidedAt ?? '').localeCompare(a.decidedAt ?? ''));
+    return [...pending, ...decided].map((r) => this.requestRow(data, r, withCost));
+  }
+
+  getWasteReport(): Promise<WasteReportView> {
+    return this.request(() => {
+      const data = this.store.read();
+      const user = this.require(data, 'inventory.waste.submit');
+      // No prices for the Kitchen (owner's decision 4): the items are sent without them
+      const items = data.inventory.ingredients
+        .filter((i) => i.isActive)
+        .map((i) => ({ ...i, purchasePrice: 0, loosePrice: null, packings: (i.packings ?? []).map((p) => ({ ...p, pricePaisa: 0 })), rates: undefined }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return { items, mine: this.requestRows(data, (r) => r.requestedBy === user.id, false).slice(0, 10) };
+    });
+  }
+
+  /**
+   * W4: a staff waste report. Checked like Record Waste (a reason, never more than on hand); then each line's food is held at once:
+   * one WASTE_HOLD movement out of its lots (the expired stock first) and one into a new held lot with the date of the lot it left.
+   * On hand does not change; nothing is a loss; the khata never changes. Once per key.
+   */
+  submitWasteRequest(input: WasteRequestInput): Promise<WasteRequest> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.waste.submit');
+        const inv = data.inventory;
+        const key = 'waste-request:' + input.idempotencyKey;
+        const done = data.idempotency[key];
+        const first = done ? (inv.wasteRequests ?? []).find((r) => r.id === done) : undefined;
+        if (first) return first;
+        this.checkStockWaste(data, { at: input.at, kind: 'WASTE', stage: input.stage, lines: input.lines.map((l) => ({ ...l, lotId: null })), note: input.note, idempotencyKey: input.idempotencyKey });
+        const now = nowIso();
+        const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+        const requestId = newId();
+        const lines = input.lines.map((line) => {
+          const item = inv.ingredients.find((i) => i.id === line.ingredientId)!;
+          const stockMilli = wasteStockMilli(line.parts, item)!;
+          const outId = newId();
+          const note = `Waste report: ${line.note.trim() || line.reason!.toLowerCase().replace(/_/g, ' ')}`.slice(0, MAX_MOVEMENT_NOTE);
+          inv.movements.push({ id: outId, ...scope, ingredientId: item.id, type: 'WASTE_HOLD', quantityMilli: -stockMilli, reason: null, note, createdBy: user.id, createdAt: now });
+          // The held lot keeps the date of the delivery it came from (the first one)
+          const fromLot = (this.lotBook(data).ledger.taken.get(outId) ?? []).map((p) => (inv.lots ?? []).find((l) => l.id === p.lotId)).find(Boolean);
+          const lot = this.newLot(
+            data,
+            { ingredientId: item.id, source: 'REQUEST', sourceId: requestId, firstMilli: stockMilli, cost: null, date: fromLot?.date ?? null, dateKind: fromLot?.dateKind ?? 'UNKNOWN', discardAt: fromLot?.discardAt ?? null, dateFrom: fromLot?.dateFrom ?? 'NONE', unverified: fromLot?.unverified ?? false, held: true, holdReason: note },
+            user.id,
+            now,
+          );
+          inv.movements.push({ id: newId(), ...scope, ingredientId: item.id, type: 'WASTE_HOLD', quantityMilli: stockMilli, reason: null, note, createdBy: user.id, createdAt: now, lotId: lot.id });
+          return {
+            ingredientId: item.id,
+            parts: line.parts.map((p) => {
+              const option = findBuyOption(item, p.unitKey)!;
+              return { unitKey: option.key, unit: option.unit, unitSizeMilli: option.sizeMilli, quantityMilli: p.quantityMilli! };
+            }),
+            stockMilli,
+            reason: line.reason!,
+            note: line.note.trim(),
+            heldLotId: lot.id,
+          };
+        });
+        const request: WasteRequest = {
+          id: requestId,
+          ...scope,
+          status: 'PENDING',
+          at: new Date(input.at).toISOString(),
+          businessDate: wasteBusinessDate(input.at, data.branch.timezone, data.branch.businessDayStart),
+          stage: input.stage,
+          lines,
+          note: input.note.trim(),
+          thrownAway: input.thrownAway,
+          requestedBy: user.id,
+          requestedAt: now,
+        };
+        (inv.wasteRequests ??= []).push(request);
+        data.idempotency[key] = request.id;
+        return request;
+      }),
+    );
+  }
+
+  /**
+   * W4: approve = one waste entry from the held food (createdBy the reporter, approvedBy the approver), once; reject = a reason,
+   * then the food is released (only confirmed safe and not expired, like any held food) or stays held. Owner / Manager.
+   */
+  decideWasteRequest(input: WasteDecisionInput): Promise<WasteRequest> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.waste.approve');
+        this.requireOwnerOrManager(user);
+        const inv = data.inventory;
+        const request = (inv.wasteRequests ?? []).find((r) => r.id === input.requestId);
+        if (!request) throw new ApiError('NOT_FOUND', 'This waste report was not found.');
+        const problem = checkDecision(request, input.approve, input.reason);
+        if (problem) throw new ApiError(problem === 'NOT_PENDING' ? 'CONFLICT' : 'VALIDATION', DECISION_MESSAGES[problem]);
+        const book = this.lotBook(data);
+        const now = nowIso();
+        if (input.approve) {
+          for (const line of request.lines) {
+            if (book.remaining(line.heldLotId) < line.stockMilli) throw new ApiError('CONFLICT', 'Some of the held food was already used or recorded. Reject this report and record what is left.');
+          }
+          const event = this.writeStockWaste(
+            data,
+            { at: request.at, kind: 'WASTE', stage: request.stage, note: request.note, idempotencyKey: request.id, lines: request.lines.map((l) => ({ ingredientId: l.ingredientId, lotId: l.heldLotId, parts: l.parts.map((p) => ({ unitKey: p.unitKey, quantityMilli: p.quantityMilli })), reason: l.reason, note: l.note })) },
+            user,
+            { source: 'REQUEST', requestId: request.id, createdBy: request.requestedBy },
+          );
+          Object.assign(request, { status: 'APPROVED', decidedBy: user.id, decidedAt: now, wasteEventId: event.id });
+          return request;
+        }
+        const lots = request.lines.map((l) => (inv.lots ?? []).find((lot) => lot.id === l.heldLotId)!).filter(Boolean);
+        if (input.release) {
+          for (const lot of lots) {
+            const why = checkRelease(lot, book.remaining(lot.id), input.safe, book.now, inv.expiringSoonDays);
+            if (why && why !== 'NOTHING_LEFT') throw new ApiError(why === 'EXPIRED' ? 'CONFLICT' : 'VALIDATION', RELEASE_MESSAGES[why]);
+          }
+          for (const lot of lots) Object.assign(lot, { held: false, release: { by: user.id, at: now, note: `Report rejected: ${input.reason.trim()}`.slice(0, MAX_REVERSE_REASON) } });
+        } else {
+          for (const lot of lots) lot.holdReason = `Report rejected, kept on hold: ${input.reason.trim()}`.slice(0, MAX_MOVEMENT_NOTE);
+        }
+        Object.assign(request, { status: 'REJECTED', decidedBy: user.id, decidedAt: now, rejectReason: input.reason.trim(), released: input.release });
+        return request;
+      }),
+    );
+  }
+
+  // ── Stock counts (Stage A, owner 2026-11-12) ────────────────────────────────────────────────
+
+  /** Stock of an item at a moment: the movements up to it (what a count line expected when it was counted) */
+  private onHandAt(data: DemoData, ingredientId: string, at: string): number {
+    return data.inventory.movements.reduce((sum, m) => (m.ingredientId === ingredientId && m.createdAt <= at ? sum + m.quantityMilli : sum), 0);
+  }
+
+  /** The value of a difference at cost: raw at the last purchase price, cooked food at its batch cost; null without a price */
+  private countCost(data: DemoData, item: Ingredient, milli: number): number | null {
+    if (milli === 0) return 0;
+    return item.kind === 'PREPARED' ? cookedWasteCost(this.cookedPrice(data, item.id), Math.abs(milli)) : (wasteCost(item, Math.abs(milli))?.cost ?? null);
+  }
+
+  private findCount(data: DemoData, countId: string): StockCount {
+    const count = (data.inventory.stockCounts ?? []).find((c) => c.id === countId);
+    if (!count) throw new ApiError('NOT_FOUND', 'This stock count was not found.');
+    return count;
+  }
+
+  private countRows(data: DemoData, count: StockCount): CountRow[] {
+    const inv = data.inventory;
+    const book = this.lotBook(data);
+    return count.lines.flatMap((line): CountRow[] => {
+      const item = inv.ingredients.find((i) => i.id === line.ingredientId);
+      if (!item) return [];
+      // Approved: what was posted; counted: the stock at the moment it was counted; not counted: the stock now
+      const expectedMilli = line.expectedMilli ?? (line.countedAt ? this.onHandAt(data, item.id, line.countedAt) : onHandOf(item.id, inv.movements));
+      const diffMilli = line.countedMilli === null ? null : (line.diffMilli ?? countDiff(line.countedMilli, expectedMilli));
+      const blockedMilli = book.lots.filter((l) => l.ingredientId === item.id && ['EXPIRED', 'HELD'].includes(book.state(l))).reduce((sum, l) => sum + book.remaining(l.id), 0);
+      return [
+        {
+          line,
+          name: item.name,
+          cooked: item.kind === 'PREPARED',
+          purchaseUnit: item.purchaseUnit,
+          stockUnit: item.stockUnit,
+          expectedMilli,
+          diffMilli,
+          cost: line.cost !== undefined ? line.cost : diffMilli === null ? null : this.countCost(data, item, diffMilli),
+          blockedMilli,
+          countedByName: this.staffName(data, line.countedBy),
+        },
+      ];
+    });
+  }
+
+  private countScopeLabel(data: DemoData, scope: CountScope): string {
+    return scope.kind === 'LOCATION' ? (data.inventory.locations.find((l) => l.id === scope.locationId)?.name ?? '—') : '';
+  }
+
+  getStockCounts(): Promise<CountListRow[]> {
+    return this.request(() => {
+      const data = this.store.read();
+      this.require(data, 'inventory.view');
+      const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+      const open = (c: StockCount) => c.status === 'COUNTING' || c.status === 'SUBMITTED';
+      return (data.inventory.stockCounts ?? [])
+        .filter((c) => open(c) || c.startedAt >= monthAgo)
+        .sort((a, b) => Number(open(b)) - Number(open(a)) || b.startedAt.localeCompare(a.startedAt))
+        .map((count) => ({
+          count,
+          scopeLabel: this.countScopeLabel(data, count.scope),
+          startedByName: this.staffName(data, count.startedBy),
+          lastByName: this.staffName(data, count.history.at(-1)?.by ?? null),
+          summary: summarizeCount(this.countRows(data, count)),
+        }));
+    });
+  }
+
+  getStockCount(countId: string): Promise<CountView> {
+    return this.request(() => {
+      const data = this.store.read();
+      const user = this.require(data, 'inventory.view');
+      const count = this.findCount(data, countId);
+      const rows = this.countRows(data, count);
+      const canApprove = this.permissionsOf(data, user).includes('inventory.count.approve') && (user.role === 'OWNER' || user.role === 'MANAGER') && checkApprove(count, user) === null;
+      const historyNames = Object.fromEntries(count.history.map((h) => [h.by, this.staffName(data, h.by) ?? '—']));
+      return { count, scopeLabel: this.countScopeLabel(data, count.scope), rows, summary: summarizeCount(rows), historyNames, canApprove };
+    });
+  }
+
+  /** Stage A: a new count of the active items in scope, each with the stock expected now; an item already in an open count is refused. */
+  startStockCount(scope: CountScope, note: string, idempotencyKey: string): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count');
+        const inv = data.inventory;
+        const key = 'stock-count:' + idempotencyKey;
+        const done = data.idempotency[key];
+        const first = done ? (inv.stockCounts ?? []).find((c) => c.id === done) : undefined;
+        if (first) return first;
+        if (note.trim().length > MAX_COUNT_NOTE) throw new ApiError('VALIDATION', COUNT_MESSAGES.NOTE_TOO_LONG);
+        const items = inv.ingredients.filter((i) => inScope(i, scope)).sort((a, b) => a.name.localeCompare(b.name));
+        if (items.length === 0) throw new ApiError('VALIDATION', COUNT_MESSAGES.NO_ITEMS);
+        const busy = (inv.stockCounts ?? []).find((c) => (c.status === 'COUNTING' || c.status === 'SUBMITTED') && c.lines.some((l) => items.some((i) => i.id === l.ingredientId)));
+        if (busy) throw new ApiError('CONFLICT', `${COUNT_MESSAGES.ALREADY_OPEN} (Count #${busy.number})`);
+        const now = nowIso();
+        const count: StockCount = {
+          id: newId(),
+          restaurantId: data.restaurant.id,
+          branchId: data.branch.id,
+          number: (inv.stockCounts ?? []).length + 1,
+          scope,
+          status: 'COUNTING',
+          lines: items.map((i) => ({ ingredientId: i.id, snapshotMilli: onHandOf(i.id, inv.movements), parts: null, countedMilli: null, countedAt: null, countedBy: null, note: '' })),
+          note: note.trim(),
+          startedBy: user.id,
+          startedAt: now,
+          history: [{ action: 'STARTED', by: user.id, at: now, note: note.trim() }],
+        };
+        (inv.stockCounts ??= []).push(count);
+        data.idempotency[key] = count.id;
+        return count;
+      }),
+    );
+  }
+
+  /** Stage A: one item's count in any of its units (zero is a count; null parts = not counted), at this moment; while counting only */
+  saveCountLine(input: CountLineInput): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count');
+        const count = this.findCount(data, input.countId);
+        if (count.status !== 'COUNTING') throw new ApiError('CONFLICT', COUNT_MESSAGES.NOT_COUNTING);
+        const line = count.lines.find((l) => l.ingredientId === input.ingredientId);
+        const item = data.inventory.ingredients.find((i) => i.id === input.ingredientId);
+        if (!line || !item) throw new ApiError('NOT_FOUND', 'This item is not in the count.');
+        if (input.note.trim().length > MAX_COUNT_NOTE) throw new ApiError('VALIDATION', COUNT_MESSAGES.NOTE_TOO_LONG);
+        line.note = input.note.trim();
+        if (input.parts === null) {
+          Object.assign(line, { parts: null, countedMilli: null, countedAt: null, countedBy: null });
+          return count;
+        }
+        const milli = countStockMilli(input.parts, item);
+        if (milli === null) throw new ApiError('VALIDATION', `${item.name}: ${COUNT_MESSAGES.QUANTITY_INVALID}`);
+        Object.assign(line, {
+          parts: input.parts.map((p) => {
+            const option = findBuyOption(item, p.unitKey)!;
+            return { unitKey: option.key, unit: option.unit, unitSizeMilli: option.sizeMilli, quantityMilli: p.quantityMilli! };
+          }),
+          countedMilli: milli,
+          countedAt: nowIso(),
+          countedBy: user.id,
+        });
+        return count;
+      }),
+    );
+  }
+
+  submitStockCount(countId: string): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count');
+        const count = this.findCount(data, countId);
+        const problem = checkSubmit(count);
+        if (problem) throw new ApiError(problem === 'NOT_COUNTING' ? 'CONFLICT' : 'VALIDATION', COUNT_MESSAGES[problem]);
+        count.status = 'SUBMITTED';
+        count.history.push({ action: 'SUBMITTED', by: user.id, at: nowIso(), note: '' });
+        return count;
+      }),
+    );
+  }
+
+  /**
+   * Stage A: approval posts one COUNT movement per counted item that differs: counted − the stock at the moment it was counted, so
+   * sales, cooking and waste during the count are never taken twice. Less is taken from the lots (the expired stock first); more is
+   * stock without a delivery (Needs review). Once: an approved count cannot be approved again.
+   */
+  approveStockCount(countId: string): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count.approve');
+        this.requireOwnerOrManager(user);
+        const inv = data.inventory;
+        const count = this.findCount(data, countId);
+        const problem = checkApprove(count, user);
+        if (problem) throw new ApiError(problem === 'NOT_SUBMITTED' ? 'CONFLICT' : 'FORBIDDEN', COUNT_MESSAGES[problem]);
+        const now = nowIso();
+        for (const line of count.lines) {
+          if (line.countedMilli === null || !line.countedAt) continue;
+          const item = inv.ingredients.find((i) => i.id === line.ingredientId);
+          if (!item) continue;
+          const expectedMilli = this.onHandAt(data, item.id, line.countedAt);
+          const diffMilli = countDiff(line.countedMilli, expectedMilli);
+          const cost = this.countCost(data, item, diffMilli);
+          let movementId: string | null = null;
+          if (diffMilli !== 0) {
+            movementId = newId();
+            inv.movements.push({ id: movementId, restaurantId: count.restaurantId, branchId: count.branchId, ingredientId: item.id, type: 'COUNT', quantityMilli: diffMilli, reason: null, note: `Count #${count.number}${line.note ? ` — ${line.note}` : ''}`.slice(0, MAX_MOVEMENT_NOTE), createdBy: user.id, createdAt: now, countId: count.id, cost });
+          }
+          Object.assign(line, { expectedMilli, diffMilli, cost, movementId });
+        }
+        count.status = 'APPROVED';
+        count.history.push({ action: 'APPROVED', by: user.id, at: now, note: '' });
+        return count;
+      }),
+    );
+  }
+
+  returnStockCount(countId: string, reason: string): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count.approve');
+        this.requireOwnerOrManager(user);
+        const count = this.findCount(data, countId);
+        const problem = checkReturnOrCancel(count, reason, 'RETURN');
+        if (problem) throw new ApiError(problem === 'NOT_SUBMITTED' ? 'CONFLICT' : 'VALIDATION', COUNT_MESSAGES[problem]);
+        count.status = 'COUNTING';
+        count.history.push({ action: 'RETURNED', by: user.id, at: nowIso(), note: reason.trim() });
+        return count;
+      }),
+    );
+  }
+
+  cancelStockCount(countId: string, reason: string): Promise<StockCount> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.count');
+        const count = this.findCount(data, countId);
+        const problem = checkReturnOrCancel(count, reason, 'CANCEL');
+        if (problem) throw new ApiError(problem === 'NOT_COUNTING' ? 'CONFLICT' : 'VALIDATION', COUNT_MESSAGES[problem]);
+        count.status = 'CANCELLED';
+        count.history.push({ action: 'CANCELLED', by: user.id, at: nowIso(), note: reason.trim() });
+        return count;
+      }),
+    );
+  }
+
+  /** W3: held (returned) food back to use, only when a person confirms it is safe and never after its date. Owner / Manager. */
+  releaseLot(lotId: string, safe: boolean, note: string): Promise<StockLot> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        this.requireOwnerOrManager(user);
+        const lot = (data.inventory.lots ?? []).find((l) => l.id === lotId);
+        if (!lot) throw new ApiError('NOT_FOUND', 'This stock was not found.');
+        const book = this.lotBook(data);
+        const problem = checkRelease(lot, book.remaining(lot.id), safe, book.now, data.inventory.expiringSoonDays);
+        if (problem) throw new ApiError(problem === 'EXPIRED' ? 'CONFLICT' : 'VALIDATION', RELEASE_MESSAGES[problem]);
+        Object.assign(lot, { held: false, release: { by: user.id, at: nowIso(), note: note.trim().slice(0, MAX_REVERSE_REASON) } });
+        return lot;
+      }),
+    );
+  }
+
+  /**
+   * W2: what a cooked dish costs for a waste line: its newest batch that is not reversed (the batch cost shared by what it
+   * actually made), else the recipe estimate for 1,000 stock units. Null = Unknown. Its raw ingredients are never costed again.
+   */
+  private cookedPrice(data: DemoData, preparedId: string): CookedPrice | null {
+    const batch = [...(data.inventory.cookingBatches ?? [])]
+      .filter((b) => b.preparedId === preparedId && b.status === 'DONE' && b.cost !== null && b.actualMilli > 0)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (batch) return { basis: 'BATCH', paisa: batch.cost!, perMilli: batch.actualMilli };
+    const perMilli = 1000 * MILLI;
+    const recipe = ingredientCost(this.costBook(data), preparedId, perMilli);
+    return recipe === null ? null : { basis: 'RECIPE', paisa: recipe, perMilli };
+  }
+
+  /** W2: Staff meals, donations and Reverse / Correct are for the Owner and the Manager only (owner, 2026-11-11). */
+  private requireOwnerOrManager(user: StaffUser): void {
+    if (user.role !== 'OWNER' && user.role !== 'MANAGER') throw new ApiError('FORBIDDEN', 'Only the Owner or a Manager may do this.');
+  }
+
+  /**
+   * Writes one checked incident: one movement per line (WASTE, STAFF_MEAL or DONATION) on that item only — a cooked dish's
+   * raw ingredients left at its batch and are never taken again — with the cost kept on the line and the movement.
+   */
+  private writeStockWaste(data: DemoData, input: StockWasteInput, user: StaffUser, extra: Partial<WasteEvent> = {}): WasteEvent {
+    const inv = data.inventory;
+    const kind = input.kind ?? 'WASTE';
+    const now = nowIso();
+    const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+    const eventId = newId();
+    const lines = input.lines.map((line): WasteLine => {
+      const ingredient = inv.ingredients.find((i) => i.id === line.ingredientId)!;
+      const cooked = ingredient.kind === 'PREPARED';
+      const stockMilli = wasteStockMilli(line.parts, ingredient)!;
+      const valued = cooked ? null : wasteCost(ingredient, stockMilli);
+      const price = cooked ? this.cookedPrice(data, ingredient.id) : null;
+      const cost = cooked ? cookedWasteCost(price, stockMilli) : (valued?.cost ?? null);
+      const beforeMilli = onHandOf(ingredient.id, inv.movements);
+      const movementId = newId();
+      const note = line.note.trim();
+      const reason = kind === 'WASTE' ? line.reason : null;
+      inv.movements.push({ id: movementId, ...scope, ingredientId: ingredient.id, type: kind, quantityMilli: -stockMilli, reason: null, note, createdBy: user.id, createdAt: now, wasteId: eventId, ...(reason ? { wasteReason: reason } : {}), cost, ...(line.lotId ? { lotId: line.lotId } : {}) });
+      return {
+        ingredientId: ingredient.id,
+        lotId: line.lotId ?? null,
+        itemKind: cooked ? 'COOKED' : 'STOCK',
+        // Each way it was typed, with the size of that unit as it is now (a later packing edit changes nothing)
+        parts: line.parts.map((p) => {
+          const option = findBuyOption(ingredient, p.unitKey)!;
+          return { unitKey: option.key, unit: option.unit, unitSizeMilli: option.sizeMilli, quantityMilli: p.quantityMilli! };
+        }),
+        stockMilli,
+        reason,
+        note,
+        cost,
+        costBasis: cooked ? (price?.basis ?? 'RECIPE') : 'PURCHASE_PRICE',
+        pricePaisa: cooked ? (price?.paisa ?? null) : (valued?.pricePaisa ?? null),
+        priceUnitMilli: cooked ? (price?.perMilli ?? null) : (valued?.priceUnitMilli ?? null),
+        beforeMilli,
+        afterMilli: beforeMilli - stockMilli,
+        movementId,
+      };
+    });
+    const event: WasteEvent = {
+      id: eventId,
+      ...scope,
+      at: new Date(input.at).toISOString(),
+      businessDate: wasteBusinessDate(input.at, data.branch.timezone, data.branch.businessDayStart),
+      stage: input.stage,
+      kind,
+      source: 'RECORD',
+      lines,
+      note: input.note.trim(),
+      status: 'POSTED',
+      createdBy: user.id,
+      createdAt: now,
+      approvedBy: user.id,
+      ...extra,
+    };
+    (inv.wasteEvents ??= []).push(event);
+    return event;
+  }
+
+  /** Throws the first problem of an incident with the item's name (checked against the stock as it is now). */
+  private checkStockWaste(data: DemoData, input: StockWasteInput): void {
+    const inv = data.inventory;
+    const book = this.lotBook(data);
+    const lots = {
+      lot: (lotId: string) => {
+        const lot = book.lots.find((l) => l.id === lotId);
+        return lot ? { ingredientId: lot.ingredientId, remainingMilli: book.remaining(lot.id), usable: isUsableState(book.state(lot)) } : null;
+      },
+      usable: book.usable,
+    };
+    const problem = checkWaste(input, inv.ingredients, (id) => onHandOf(id, inv.movements), Date.now(), lots);
+    if (!problem) return;
+    const name = problem.line === null ? '' : (inv.ingredients.find((i) => i.id === input.lines[problem.line!]?.ingredientId)?.name ?? '');
+    throw new ApiError('VALIDATION', (name ? `${name}: ` : '') + WASTE_MESSAGES[problem.problem]);
+  }
+
+  /**
+   * Puts a posted event's stock back by one WASTE_REVERSAL movement per line and marks the event REVERSED (never edited otherwise).
+   * W3: a plain reversal brings the food back HELD, on its own lot with the date of the lot it left, until the Owner or a Manager
+   * releases it (never when expired). A correction puts it back exactly into the lots it came from: it was a typing fix.
+   */
+  private writeReversal(data: DemoData, event: WasteEvent, reason: string, user: StaffUser, correction = false): void {
+    const problem = checkReverse(event, reason);
+    if (problem) throw new ApiError(problem === 'NOT_POSTED' ? 'CONFLICT' : 'VALIDATION', REVERSE_MESSAGES[problem]);
+    const at = nowIso();
+    const ledger = correction ? null : this.lotBook(data).ledger;
+    const movementIds = event.lines.flatMap((line) => {
+      if (!line.ingredientId || line.stockMilli <= 0) return [];
+      const id = newId();
+      let link: { lotId?: string; restoresMovementId?: string } = {};
+      if (correction && line.movementId) link = { restoresMovementId: line.movementId };
+      else if (ledger) {
+        // The date of the lot it was taken from (the first one); a line from before lots has none: Unknown
+        const fromLot = (ledger.taken.get(line.movementId ?? '') ?? []).map((p) => (data.inventory.lots ?? []).find((l) => l.id === p.lotId)).find(Boolean);
+        const lot = this.newLot(
+          data,
+          { ingredientId: line.ingredientId, source: 'RETURNED', sourceId: event.id, firstMilli: line.stockMilli, cost: line.cost, date: fromLot?.date ?? null, dateKind: fromLot?.dateKind ?? 'UNKNOWN', discardAt: fromLot?.discardAt ?? null, dateFrom: fromLot?.dateFrom ?? 'NONE', unverified: fromLot?.unverified ?? false, held: true, holdReason: reason.trim() },
+          user.id,
+          at,
+        );
+        link = { lotId: lot.id };
+      }
+      data.inventory.movements.push({ id, restaurantId: event.restaurantId, branchId: event.branchId, ingredientId: line.ingredientId, type: 'WASTE_REVERSAL', quantityMilli: line.stockMilli, reason: null, note: reason.trim(), createdBy: user.id, createdAt: at, wasteId: event.id, cost: line.cost, ...link });
+      return [id];
+    });
+    event.status = 'REVERSED';
+    event.reversal = { by: user.id, at, reason: reason.trim(), movementIds, correctedById: null };
+  }
+
+  reverseStockWaste(eventId: string, reason: string): Promise<WasteEvent> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        this.requireOwnerOrManager(user);
+        const event = (data.inventory.wasteEvents ?? []).find((e) => e.id === eventId);
+        if (!event) throw new ApiError('NOT_FOUND', 'This entry was not found.');
+        this.writeReversal(data, event, reason, user);
+        return event;
+      }),
+    );
+  }
+
+  /**
+   * W2: a correction in one change: the old event is reversed (its stock back), then the new one is checked against that stock
+   * and posted with a link both ways. Nothing is written when either fails; a retry with the same key returns the new event.
+   */
+  correctStockWaste(eventId: string, reason: string, input: StockWasteInput): Promise<WasteEvent> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        this.requireOwnerOrManager(user);
+        const inv = data.inventory;
+        const key = 'stock-waste:' + input.idempotencyKey;
+        const done = data.idempotency[key];
+        const first = done ? (inv.wasteEvents ?? []).find((e) => e.id === done) : undefined;
+        if (first) return first;
+        const old = (inv.wasteEvents ?? []).find((e) => e.id === eventId);
+        if (!old) throw new ApiError('NOT_FOUND', 'This entry was not found.');
+        this.writeReversal(data, old, reason, user, true);
+        this.checkStockWaste(data, input);
+        const event = this.writeStockWaste(data, input, user, { correctsId: old.id });
+        old.reversal!.correctedById = event.id;
+        data.idempotency[key] = event.id;
+        return event;
+      }),
+    );
+  }
+
+  /**
+   * W1: one waste incident in one change: one movement per line with the event and the reason on it, the loss kept on the
+   * line and the movement (null = no price), and the event itself. A double tap or retry with the same key returns the first
+   * event. Every line is checked first: nothing is written while one line is wrong. W2: cooked stock, Staff meal and Donation
+   * (those two by the Owner or a Manager only).
+   */
+  postStockWaste(input: StockWasteInput): Promise<WasteEvent> {
+    return this.request(() =>
+      this.store.update((data) => {
+        const user = this.require(data, 'inventory.manage');
+        if ((input.kind ?? 'WASTE') !== 'WASTE') this.requireOwnerOrManager(user);
+        const inv = data.inventory;
+        const key = 'stock-waste:' + input.idempotencyKey;
+        const done = data.idempotency[key];
+        if (done) {
+          const first = (inv.wasteEvents ?? []).find((e) => e.id === done);
+          if (first) return first;
+        }
+        this.checkStockWaste(data, input);
+        const event = this.writeStockWaste(data, input, user);
+        data.idempotency[key] = event.id;
+        return event;
       }),
     );
   }
@@ -3297,23 +4139,55 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return localClock(new Date(), data.branch.timezone).date;
   }
 
-  /** Stock that may be cooked with: on hand, nothing when it has expired, never below zero. */
+  /**
+   * Stock that may be cooked with, sold, eaten by staff or given away (W3): the lots that are not expired or held, plus stock on
+   * no lot, never below zero. Stock without a confirmed date counts (it is Needs review, never shown as safe).
+   */
   private usableStock(data: DemoData): (ingredientId: string) => number {
+    const book = this.lotBook(data);
+    return (ingredientId) => book.usable(ingredientId);
+  }
+
+  // ── Lots and expiry (W3, owner 2026-11-11) ─────────────────────────────────────────────────
+
+  private lotClock(data: DemoData): LotClock {
+    return { date: this.calendarToday(data), at: Date.now() };
+  }
+
+  /** Every lot's state and remaining stock, worked out from the movements once per call. */
+  private lotBook(data: DemoData) {
     const inv = data.inventory;
-    const today = this.calendarToday(data);
+    const lots = inv.lots ?? [];
+    const now = this.lotClock(data);
+    const stateOf = (lot: StockLot) => lotDateState(lot, now, inv.expiringSoonDays);
+    // A past use is judged as the lots were then: expired by that day, held until it was released
     const tz = data.branch.timezone;
-    return (ingredientId) => {
-      const ingredient = inv.ingredients.find((i) => i.id === ingredientId);
-      const onHand = onHandOf(ingredientId, inv.movements);
-      const expiryDate = ingredient?.expiryDate ?? null;
-      if (!expiryDate || expiryState(expiryDate, today, onHand, inv.expiringSoonDays) !== 'EXPIRED') return usableMilli(onHand, false);
-      // One date for all the stock until lots (IM7): what was bought or cooked after that date is not the expired stock
-      const after = inv.movements.reduce(
-        (sum, m) => (m.ingredientId === ingredientId && (m.type === 'PURCHASE' || m.type === 'COOKED') && localClock(new Date(m.createdAt), tz).date > expiryDate ? sum + m.quantityMilli : sum),
-        0,
-      );
-      return usableMilli(onHand, true, after);
+    const blockedAt = (lot: StockLot, at: string) => {
+      const heldThen = lot.held || Boolean(lot.release && at < lot.release.at);
+      return heldThen || lotDateState({ ...lot, held: false }, { date: localClock(new Date(at), tz).date, at: Date.parse(at) }, inv.expiringSoonDays) === 'EXPIRED';
     };
+    const ledger = lotLedger(lots, inv.movements, inv.lotsSince ?? null, blockedAt);
+    const remaining = (lotId: string) => ledger.remaining.get(lotId) ?? 0;
+    const state = (lot: StockLot) => lotState(lot, remaining(lot.id), now, inv.expiringSoonDays);
+    const usable = (ingredientId: string) => usableOfLots(ingredientId, lots, ledger, (lot) => isUsableState(stateOf(lot)));
+    return { lots, ledger, now, remaining, state, usable };
+  }
+
+  private newLot(
+    data: DemoData,
+    fields: Pick<StockLot, 'ingredientId' | 'source' | 'sourceId' | 'firstMilli' | 'cost' | 'date' | 'dateKind' | 'dateFrom'> & Partial<Pick<StockLot, 'discardAt' | 'supplierId' | 'held' | 'holdReason' | 'unverified'>>,
+    userId: string,
+    at: string,
+  ): StockLot {
+    const lot: StockLot = { id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, receivedAt: at, unverified: false, held: false, createdBy: userId, createdAt: at, ...fields };
+    (data.inventory.lots ??= []).push(lot);
+    return lot;
+  }
+
+  /** The lot a cooking batch made ({} for a batch from before lots) */
+  private batchLotOf(data: DemoData, batchId: string): { lotId?: string } {
+    const lot = (data.inventory.lots ?? []).find((l) => l.source === 'BATCH' && l.sourceId === batchId);
+    return lot ? { lotId: lot.id } : {};
   }
 
   /** What a day's plan still has to cook (each row's amount minus its batches of that day) needs, against the usable stock. */
@@ -3379,8 +4253,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
         for (const use of plan.uses) {
           inv.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'COOK_USE', quantityMilli: -use.quantityMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: ingredientCost(book, use.ingredientId, use.quantityMilli) });
         }
+        // W3: the batch is its own lot, thrown away after the dish's own hours (no default: none = Needs review)
+        const hours = dish.discardHours ?? null;
+        const lot = this.newLot(data, { ingredientId: dish.id, source: 'BATCH', sourceId: batch.id, firstMilli: input.actualMilli, cost: batch.cost, date: null, dateKind: hours ? 'USE_BY' : 'UNKNOWN', discardAt: hours ? discardAtOf(now, hours) : null, dateFrom: hours ? 'DISH_HOURS' : 'NONE' }, user.id, now);
         // The raw cost moves into the cooked food: the same money, not a second expense
-        inv.movements.push({ id: newId(), ...scope, ingredientId: dish.id, type: 'COOKED', quantityMilli: input.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: batch.cost });
+        inv.movements.push({ id: newId(), ...scope, ingredientId: dish.id, type: 'COOKED', quantityMilli: input.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: batch.cost, lotId: lot.id });
         (inv.cookingBatches ??= []).push(batch);
         Object.assign(dish, { plateMilli: input.plateMilli, updatedAt: now });
         data.idempotency[key] = batch.id;
@@ -3411,7 +4288,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
         if (delta < 0 && onHandOf(batch.preparedId, inv.movements) < -delta) throw new ApiError('CONFLICT', 'Less of this dish is left than the correction takes away.');
         const now = nowIso();
         // A corrected weight changes the amount, not what the batch cost
-        inv.movements.push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: delta, reason: null, note: `Correction: ${why}`.slice(0, MAX_MOVEMENT_NOTE), createdBy: user.id, createdAt: now, batchId: batch.id, cost: 0 });
+        inv.movements.push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: delta, reason: null, note: `Correction: ${why}`.slice(0, MAX_MOVEMENT_NOTE), createdBy: user.id, createdAt: now, batchId: batch.id, cost: 0, ...this.batchLotOf(data, batch.id) });
         (batch.corrections ??= []).push({ fromMilli: batch.actualMilli, toMilli: actualMilli, reason: why, by: user.id, at: now });
         batch.actualMilli = actualMilli;
         return batch;
@@ -3437,7 +4314,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
           const taken = inv.movements.find((m) => m.batchId === batch.id && m.type === 'COOK_USE' && m.ingredientId === use.ingredientId && m.quantityMilli < 0);
           inv.movements.push({ id: newId(), ...scope, ingredientId: use.ingredientId, type: 'COOK_USE', quantityMilli: use.quantityMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, ...(taken?.cost !== undefined && { cost: taken.cost }) });
         }
-        inv.movements.push({ id: newId(), ...scope, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: -batch.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: batch.cost });
+        inv.movements.push({ id: newId(), ...scope, ingredientId: batch.preparedId, type: 'COOKED', quantityMilli: -batch.actualMilli, reason: null, note, createdBy: user.id, createdAt: now, batchId: batch.id, cost: batch.cost, ...this.batchLotOf(data, batch.id) });
         Object.assign(batch, { status: 'REVERSED', reversedBy: user.id, reversedAt: now, reverseReason: why });
         return batch;
       }),
@@ -3454,6 +4331,7 @@ export class DemoAdapter implements ApiClient, DemoControls {
       const day = date === 'today' ? today : date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : nextDate(today);
       const { rows, needs } = this.planCheck(data, day);
       const nameOf = (id: string | null | undefined) => (id ? (inv.ingredients.find((i) => i.id === id)?.name ?? null) : null);
+      const lotBook = this.lotBook(data);
       const dishes = inv.ingredients
         .filter((i) => i.kind === 'PREPARED' && i.isActive)
         .sort((a, b) => a.name.localeCompare(b.name))
@@ -3489,7 +4367,8 @@ export class DemoAdapter implements ApiClient, DemoControls {
               ...need,
               ingredient,
               low: status === 'LOW' || status === 'OUT',
-              expired: expiryState(ingredient.expiryDate, this.calendarToday(data), onHand, inv.expiringSoonDays) === 'EXPIRED',
+              // W3: some of its stock is on an expired lot (it does not count as usable)
+              expired: lotBook.lots.some((l) => l.ingredientId === ingredient.id && lotBook.state(l) === 'EXPIRED'),
               supplierName: nameOfSupplier(inv.suppliers, this.supplierFor(data, ingredient.id)),
             };
           })
@@ -3754,8 +4633,47 @@ export class DemoAdapter implements ApiClient, DemoControls {
     return food;
   }
 
+  /**
+   * Order food that left without a sale. Kept in the Available Food list and, from W2, as a waste event of the same Waste Log
+   * (wastage or staff meal) with one ORDER_FOOD line and NO stock movement: its stock left once, at the kitchen's Ready. The
+   * callers write it once (a cancelled line's outcome is chosen once; Available Food is closed once, remaining → 0).
+   */
   private recordWaste(data: DemoData, waste: Omit<FoodWaste, 'id' | 'restaurantId' | 'branchId' | 'createdBy' | 'createdAt'>, userId: string, at: string): void {
-    (data.inventory.foodWaste ??= []).push({ id: newId(), restaurantId: data.restaurant.id, branchId: data.branch.id, ...waste, createdBy: userId, createdAt: at });
+    const scope = { restaurantId: data.restaurant.id, branchId: data.branch.id };
+    (data.inventory.foodWaste ??= []).push({ id: newId(), ...scope, ...waste, createdBy: userId, createdAt: at });
+    const fromAvailable = waste.availableId !== null;
+    (data.inventory.wasteEvents ??= []).push({
+      id: newId(),
+      ...scope,
+      at,
+      businessDate: wasteBusinessDate(at, data.branch.timezone, data.branch.businessDayStart),
+      stage: fromAvailable ? 'HOLDING' : 'CANCELLED_ORDER',
+      kind: waste.kind,
+      source: fromAvailable ? 'AVAILABLE_FOOD' : 'ORDER_CANCEL',
+      lines: [
+        {
+          ingredientId: null,
+          itemKind: 'ORDER_FOOD',
+          orderFood: { menuItemId: waste.menuItemId, name: waste.name, variantName: waste.variantName, quantity: waste.quantity, unit: waste.unit, orderId: waste.orderId, dailyNumber: waste.dailyNumber, availableId: waste.availableId },
+          parts: [],
+          stockMilli: 0,
+          reason: waste.kind === 'WASTE' ? (fromAvailable ? 'CLOSING_DISCARD' : 'CANCELLED_DISCARD') : null,
+          note: waste.reason,
+          cost: waste.cost,
+          costBasis: 'ORDER',
+          pricePaisa: null,
+          priceUnitMilli: null,
+          beforeMilli: 0,
+          afterMilli: 0,
+          movementId: null,
+        },
+      ],
+      note: '',
+      status: 'POSTED',
+      createdBy: userId,
+      createdAt: at,
+      approvedBy: userId,
+    });
   }
 
   /** The date the closing review is due for (food still left), or null. */
@@ -4105,7 +5023,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
     // Each movement keeps what its line cost on this bill, so a later price never changes an old report.
     const costs = lineCosts(lines.map((l) => l.amount), bill.discount);
     for (const [index, line] of lines.entries()) {
-      inv.movements.push({ id: line.movementId, ...scope, ingredientId: line.ingredientId, type: 'PURCHASE', quantityMilli: line.stockMilli, reason: null, note: billNo ? `Bill ${billNo}` : note, createdBy: user.id, createdAt: now, supplierId: supplier.id, khataEntryId: entryId, cost: costs[index] ?? null });
+      // W3: every bill line is its own lot with the date typed from its label (none = Unknown: Needs review, never "safe")
+      const typed = bill.lines[index]!;
+      const date = typed.expiryDate || null;
+      const lot = this.newLot(data, { ingredientId: line.ingredientId, source: 'PURCHASE', sourceId: entryId, supplierId: supplier.id, firstMilli: line.stockMilli, cost: costs[index] ?? null, date, dateKind: date ? (typed.dateKind ?? 'USE_BY') : 'UNKNOWN', dateFrom: date ? 'TYPED' : 'NONE' }, user.id, now);
+      inv.movements.push({ id: line.movementId, ...scope, ingredientId: line.ingredientId, type: 'PURCHASE', quantityMilli: line.stockMilli, reason: null, note: billNo ? `Bill ${billNo}` : note, createdBy: user.id, createdAt: now, supplierId: supplier.id, khataEntryId: entryId, cost: costs[index] ?? null, lotId: lot.id });
     }
     // Recipes cost from this bill's average (owner's choice): all lines of a product, as the price of one main unit.
     for (const ingredientId of new Set(lines.map((l) => l.ingredientId))) {
@@ -4273,6 +5195,11 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const today = this.branchToday(data);
         const problem = checkPurchaseBill(input, inv.ingredients, today);
         if (problem) throw new ApiError('VALIDATION', PURCHASE_BILL_MESSAGES[problem.problem]);
+        // W3: a date on a line is a real label date with its kind; an empty one is Unknown
+        for (const line of input.lines) {
+          const dateProblem = line.expiryDate ? checkLotDate({ date: line.expiryDate, dateKind: line.dateKind ?? 'USE_BY' }) : null;
+          if (dateProblem) throw new ApiError('VALIDATION', `${inv.ingredients.find((i) => i.id === line.ingredientId)?.name ?? ''}: ${LOT_DATE_MESSAGES[dateProblem]}`);
+        }
         const { purchase, payment } = this.postPurchase(data, user, supplier, input);
         inv.purchaseDrafts = (inv.purchaseDrafts ?? []).filter((d) => d.supplierId !== supplier.id);
         data.idempotency[key] = purchase.id;
@@ -4390,6 +5317,20 @@ export class DemoAdapter implements ApiClient, DemoControls {
         const negative = data.inventory.ingredients.filter((i) => i.kind === 'PREPARED' && onHandOf(i.id, data.inventory.movements) < 0);
         if (negative.length) {
           list.push({ kind: 'COOKED_NEGATIVE', id: `cooked-negative:${negative.map((i) => i.id).sort().join(',')}`, count: negative.length, names: negative.slice(0, 3).map((i) => i.name), at: new Date().toISOString() });
+        }
+        // W4: a staff waste report waits for the Owner or a Manager (one alert per report)
+        if (this.permissionsOf(data, user).includes('inventory.waste.approve')) {
+          for (const r of (data.inventory.wasteRequests ?? []).filter((x) => x.status === 'PENDING')) {
+            const names = r.lines.map((l) => data.inventory.ingredients.find((i) => i.id === l.ingredientId)?.name ?? '');
+            list.push({ kind: 'WASTE_REQUEST', id: `waste-request:${r.id}`, count: r.lines.length, names: names.slice(0, 3), byName: this.staffName(data, r.requestedBy) ?? '', at: r.requestedAt });
+          }
+        }
+        // Stage A: a submitted stock count waits for someone who may approve it (never a Manager's own count)
+        if (this.permissionsOf(data, user).includes('inventory.count.approve')) {
+          for (const c of (data.inventory.stockCounts ?? []).filter((x) => x.status === 'SUBMITTED' && checkApprove(x, user) === null)) {
+            const submitted = [...c.history].reverse().find((h) => h.action === 'SUBMITTED');
+            list.push({ kind: 'COUNT_SUBMITTED', id: `count-submitted:${c.id}:${submitted?.at ?? ''}`, countId: c.id, number: c.number, differences: summarizeCount(this.countRows(data, c)).withDifference, byName: this.staffName(data, submitted?.by ?? c.startedBy) ?? '', at: submitted?.at ?? c.startedAt });
+          }
         }
         // I4: the closing review of the ready food that is left
         const reviewDate = this.foodReviewDue(data);

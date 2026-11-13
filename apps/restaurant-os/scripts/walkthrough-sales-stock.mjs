@@ -208,7 +208,12 @@ try {
   assert.equal(waste.reason, 'Served, returned by the customer');
   assert.ok(Object.keys(netOf(data, lineD.id)).length > 0, 'the stock stays taken');
   assert.equal(data.inventory.availableFood.filter((f) => f.fromItemId === lineD.id).length, 0, 'served food is never reused');
-  ok(`T3 #${d} served, then voided: only "Wastage" offered; recorded with its reason and cost; never reused; its stock stays taken`);
+  // W2: the same entry in the Waste Log, with no stock movement of its own (the stock left once, at Ready)
+  const orderWaste = (data.inventory.wasteEvents ?? []).filter((ev) => ev.lines.some((l) => l.orderFood?.dailyNumber === d));
+  assert.equal(orderWaste.length, 1, 'one Waste Log entry');
+  assert.deepEqual([orderWaste[0].kind, orderWaste[0].source, orderWaste[0].lines[0].itemKind, orderWaste[0].lines[0].movementId], ['WASTE', 'ORDER_CANCEL', 'ORDER_FOOD', null]);
+  assert.equal(data.inventory.movements.filter((m) => m.wasteId === orderWaste[0].id).length, 0, 'W2: no second stock movement');
+  ok(`T3 #${d} served, then voided: only "Wastage" offered; recorded with its reason and cost; never reused; its stock stays taken; one Waste Log entry without a stock movement`);
 
   console.log('\n5. Naan takes its dough from the prepared stock, never the atta again; below zero → an alert to record the batch');
   await pos.bringToFront();
@@ -260,6 +265,10 @@ try {
   data = await saved(review);
   assert.equal(data.inventory.availableFood.filter((f) => f.remaining > 0).length, 0);
   assert.ok(close(netOf(data, lineOf(data, c).id), expected), `#${c}: still taken once`);
+  const keptWaste = (data.inventory.wasteEvents ?? []).filter((ev) => ev.lines.some((l) => l.orderFood?.dailyNumber === c));
+  assert.equal(keptWaste.length, 1, 'W2: the karahi is in the Waste Log once');
+  assert.deepEqual([keptWaste[0].source, keptWaste[0].lines[0].reason, keptWaste[0].lines[0].note], ['AVAILABLE_FOOD', 'CLOSING_DISCARD', 'Time over']);
+  assert.equal(data.inventory.movements.filter((m) => m.wasteId === keptWaste[0].id).length, 0, 'W2: no second stock movement');
   await shot(review, '07-desktop-wastage-recorded');
   ok(`after closing (23:00) and past its 3 safe hours: "Closing review: 1 ready food left" in the bell and on Stock → Available Food (time over, red); wasted with "Time over"; its raw stock was taken once`);
 
@@ -389,6 +398,7 @@ try {
   assert.equal(lineX.stock.outcome.kind, 'STOPPED');
   assert.deepEqual(netOf(data, lineX.id), {}, 'not cooked: nothing taken');
   assert.equal(data.inventory.foodWaste.length, wasteCount, 'no wastage');
+  assert.equal((data.inventory.wasteEvents ?? []).filter((ev) => ev.source === 'ORDER_CANCEL' || ev.source === 'AVAILABLE_FOOD').length, data.inventory.foodWaste.length, 'W2: every order-food wastage is in the Waste Log exactly once');
   ok(`#${stopped.n} Stop (nothing spoilt): no stock taken, no wastage`);
 
   assert.deepEqual(errors, [], `page errors: ${errors.join(' | ')}`);

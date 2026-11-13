@@ -1,5 +1,6 @@
 import type { FoodCostSummary } from './recipes';
 import type { SupplierCategory } from './suppliers';
+import type { StockWasteReason } from './wastage';
 import type { BranchScoped, IsoDateTime, Paisa, Uuid } from './types';
 
 /**
@@ -186,8 +187,10 @@ export interface Ingredient extends BranchScoped {
   preferredSupplierId: Uuid | null;
   locationId: Uuid | null;
   batchNo: string;
-  /** Expiry of the stock on hand (YYYY-MM-DD), null = does not expire or not tracked */
+  /** Expiry of the stock on hand (YYYY-MM-DD), null = does not expire or not tracked. From W3 each lot has its own date; this one is the old-stock lot's */
   expiryDate: string | null;
+  /** W3, cooked food only: every batch is thrown away this many hours after it is made; missing = no discard time (no default) */
+  discardHours?: number | null;
   /** false = Not in use: hidden from lists, kept for its history */
   isActive: boolean;
   createdAt: IsoDateTime;
@@ -409,7 +412,11 @@ export function suggestIngredientCode(name: string, existingCodes: readonly stri
 /** Step A: the opening stock and corrections. Purchases, kitchen use, waste and transfers follow in later steps. */
 /** PURCHASE = received from a supplier (Suppliers S1); the khata entry and supplier are kept on the movement. */
 /** COOK_USE = raw ingredients taken by a cooking batch, COOKED = the cooked dish it made (I3, owner 2026-11-09; batchId on both). */
-export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE', 'COOK_USE', 'COOKED', 'SALE_USE', 'SALE_RETURN'] as const;
+/** WASTE = thrown away, from a waste event (W1, 2026-11-11; wasteId and wasteReason on it). */
+/** STAFF_MEAL / DONATION = eaten by the staff / given away, apart from waste; WASTE_REVERSAL = put back by a reversal (W2; wasteId). */
+/** COUNT = the difference of an approved stock count (Stage A; countId on it). */
+/** WASTE_HOLD = a waste report holds the food: one movement out of its lots and one into a held lot (W4; on hand unchanged). */
+export const MOVEMENT_TYPES = ['OPENING', 'ADJUSTMENT', 'PURCHASE', 'COOK_USE', 'COOKED', 'SALE_USE', 'SALE_RETURN', 'WASTE', 'STAFF_MEAL', 'DONATION', 'WASTE_REVERSAL', 'WASTE_HOLD', 'COUNT'] as const;
 export type MovementType = (typeof MOVEMENT_TYPES)[number];
 
 export const ADJUST_REASONS = ['RECOUNT', 'ENTRY_MISTAKE', 'FOUND', 'OTHER'] as const;
@@ -433,6 +440,15 @@ export interface StockMovement extends BranchScoped {
   /** SALE_USE / SALE_RETURN (I4): the order line whose stock it is */
   orderId?: Uuid;
   orderItemId?: Uuid;
+  /** WASTE (W1): the waste event and why it was thrown away */
+  wasteId?: Uuid;
+  wasteReason?: StockWasteReason;
+  /** W3: the lot it went into or came from (a bill line, a cooking batch, a waste line that named its lot, returned food) */
+  lotId?: Uuid;
+  /** W3: a corrected waste puts back exactly what this movement took, into the same lots */
+  restoresMovementId?: Uuid;
+  /** Stage A: the stock count whose difference it is */
+  countId?: Uuid;
   /**
    * What this quantity was worth when it moved (paisa, never negative; the quantity carries the sign): a purchase line's share
    * of its bill, else the cost of that day. Kept so a later price never rewrites an old report. Missing on movements from
@@ -507,6 +523,13 @@ export function stockValueOf(item: Pick<Ingredient, 'purchaseUnit' | 'stockUnit'
 export interface IngredientRow {
   ingredient: Ingredient;
   onHandMilli: number;
+  /** W3: on hand minus expired and held lots (what may be used); the status counts it */
+  usableMilli?: number;
+  /** W3: expired or held stock, and stock without a confirmed date */
+  blockedMilli?: number;
+  reviewMilli?: number;
+  /** W3: the earliest date among its lots with stock (shown with `expiry`) */
+  expiryDate?: string | null;
   status: StockStatus;
   expiry: ExpiryState;
   value: Paisa;
@@ -552,6 +575,8 @@ export interface InventoryView {
   /** I4: ready food that may still be given to another order, and today's sold lines with a part not tracked (no verified recipe) */
   availableFood?: number;
   notTrackedToday?: { name: string; count: number }[];
+  /** W1: stock waste posted today (business day): cost of the lines with a price, lines, lines without a price */
+  wasteToday?: { cost: Paisa; lines: number; unknown: number };
 }
 
 /** The dashboard numbers. Ingredients marked Not in use are left out. */

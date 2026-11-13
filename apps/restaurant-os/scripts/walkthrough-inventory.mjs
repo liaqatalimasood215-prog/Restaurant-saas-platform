@@ -86,7 +86,7 @@ const owner = await openAs(USER.owner, '/inventory', DESKTOP);
 await openOverview(owner);
 await card(owner, 'Ingredients').waitFor();
 const upgraded = await saved(owner);
-assert.equal(upgraded.version, 22, 'brought up to the newest version');
+assert.equal(upgraded.version, 25, 'brought up to the newest version');
 assert.equal(upgraded.employeeCounter, 77, 'the old data was kept');
 assert.equal(upgraded.inventory.ingredients.filter((i) => i.kind === 'BOUGHT').length, 25);
 assert.ok(upgraded.rolePermissions.MANAGER.includes('inventory.view') && upgraded.rolePermissions.MANAGER.includes('menu.view'));
@@ -96,7 +96,8 @@ console.log('2. Dashboard');
 const cardValue = async (label) => (await card(owner, label).innerText()).split('\n').map((s) => s.trim()).filter(Boolean);
 assert.ok((await cardValue('Ingredients')).includes('25'));
 assert.ok((await cardValue('Low stock')).includes('3'));
-assert.ok((await cardValue('Out of stock')).includes('1'));
+// W3: the item whose stock expired counts as out of stock too: it is on hand but may not be used
+assert.ok((await cardValue('Out of stock')).includes('2'));
 assert.ok((await cardValue('Expiring soon')).includes('3'));
 assert.ok((await cardValue('Expiring soon')).includes('1 already expired'));
 assert.ok((await cardValue('Total stock value')).includes('Rs. 78,665'));
@@ -238,8 +239,9 @@ for (const [section, title] of [['Reports', 'Reports']]) {
 }
 await owner.getByRole('tab', { name: 'Stock', exact: true }).click();
 await owner.getByRole('tab', { name: /^Wastage & Expiry/ }).click();
-await owner.locator('main [data-planned="Wastage & Expiry"]').getByText('Comes in inventory phase 4, after your approval.').waitFor();
-ok('History of Chicken: −1.5 kg Counted again by Aziz Ahmed → 8.5 kg, +10 kg opening → 10 kg; kind and period filters; Suppliers opens; Reports and Wastage are clear PLACEHOLDERs with their phase');
+// W1 (2026-11-11): Wastage & Expiry is built (walkthrough:wastage); Stock Counts stays a placeholder
+await owner.locator('main [data-wastage]').getByRole('button', { name: 'Record Waste' }).waitFor();
+ok('History of Chicken: −1.5 kg Counted again by Aziz Ahmed → 8.5 kg, +10 kg opening → 10 kg; kind and period filters; Suppliers opens; Reports is a clear PLACEHOLDER with its phase; Wastage & Expiry opens with Record Waste');
 
 console.log('7. Owner and Manager only');
 const manager = await openAs(USER.manager, '/inventory', DESKTOP);

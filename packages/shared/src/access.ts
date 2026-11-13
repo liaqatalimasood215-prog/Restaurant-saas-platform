@@ -18,6 +18,8 @@ const EXTRA_GRANTS: Partial<Record<Permission, readonly StaffRole[]>> = {
   'menu.manage': ['CASHIER'],
   'item.outOfStock': ['WAITER'],
   'staff.view': ['CASHIER'],
+  // W4 (owner, 2026-11-12): the Kitchen reports waste by default; other floor staff only when the Owner switches it on
+  'inventory.waste.submit': ['CASHIER', 'WAITER', 'SERVICE_WAITER'],
 };
 
 /** Only the Owner, never anybody else (owner decision 2026-10-29). */
@@ -141,6 +143,16 @@ export const PERMISSION_ROWS: readonly PermissionRow[] = [
     key: 'inventory',
     label: 'Inventory & Suppliers',
     cells: { VIEW: cell('inventory.view', 'Open Inventory & Suppliers'), CREATE: cell('inventory.manage', 'Add and edit ingredients, correct stock') },
+  },
+  {
+    key: 'wasteReports',
+    label: 'Waste Reports',
+    cells: { CREATE: cell('inventory.waste.submit', 'Report waste for approval (Kitchen / KDS)'), APPROVE: cell('inventory.waste.approve', 'Approve or reject waste reports') },
+  },
+  {
+    key: 'stockCounts',
+    label: 'Stock Counts',
+    cells: { CREATE: cell('inventory.count', 'Start a stock count and count'), APPROVE: cell('inventory.count.approve', 'Approve a count and post its differences') },
   },
   {
     key: 'onlineApp',

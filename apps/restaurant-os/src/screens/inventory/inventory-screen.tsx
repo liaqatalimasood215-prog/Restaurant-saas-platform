@@ -22,6 +22,8 @@ import { RecipesTab } from './recipes/recipes-tab';
 import { SuppliersTab } from './suppliers-tab';
 import { CookingPlanTab } from './cooking-plan-tab';
 import { AvailableFoodTab } from './available-food-tab';
+import { CountsTab } from './counts-tab';
+import { WastageTab } from './wastage-tab';
 
 /** Five clear sections (owner's second Inventory brief, 2026-11-04); Stock has its own sub-sections. */
 type Section = 'overview' | 'stock' | 'recipes' | 'purchasing' | 'reports';
@@ -40,8 +42,8 @@ const STOCK_TABS: { key: StockTab; icon: LucideIcon; phase?: number }[] = [
   { key: 'movements', icon: History },
   { key: 'cooking', icon: CalendarDays },
   { key: 'food', icon: PackageCheck },
-  { key: 'wastage', icon: Trash2, phase: 4 },
-  { key: 'counts', icon: ClipboardCheck, phase: 4 },
+  { key: 'wastage', icon: Trash2 },
+  { key: 'counts', icon: ClipboardCheck },
 ];
 
 /**
@@ -53,18 +55,24 @@ export function InventoryScreen({
   recipeItemId,
   cookingDate,
   foodReview,
+  wastePending,
+  countId,
 }: {
   recipeItemId?: string;
   /** I3: open the Cooking Plan of this date (from the alert) */
   cookingDate?: string;
   /** I4: open Available Food (the closing review alert) */
   foodReview?: boolean;
+  /** W4: open Wastage & Expiry → Pending approval (a waste report alert) */
+  wastePending?: boolean;
+  /** Stage A: open this stock count (a count waiting for approval) */
+  countId?: string;
 } = {}) {
   const { allowed } = useSession();
   const inventory = useApiQuery(() => getApi().getInventory(), []);
   const order = useSectionOrder();
   // Opened from the Menu with a product's recipe: Recipes first
-  const [chosen, setSection] = useState<Section | null>(recipeItemId ? 'recipes' : cookingDate || foodReview ? 'stock' : null);
+  const [chosen, setSection] = useState<Section | null>(recipeItemId ? 'recipes' : cookingDate || foodReview || wastePending || countId ? 'stock' : null);
   /** I3: a supplier's draft bill opened from the Cooking Plan */
   const [billFor, setBillFor] = useState<string | null>(null);
   // Inventory opens on the first section of his order.
@@ -75,7 +83,7 @@ export function InventoryScreen({
     if (next) saveSectionOrder([...next, ...order.filter((k) => !next.includes(k))]);
     setPicking(null);
   };
-  const [stockTab, setStockTab] = useState<StockTab>(cookingDate ? 'cooking' : foodReview ? 'food' : 'ingredients');
+  const [stockTab, setStockTab] = useState<StockTab>(cookingDate ? 'cooking' : foodReview ? 'food' : wastePending ? 'wastage' : countId ? 'counts' : 'ingredients');
   const [filter, setFilter] = useState<IngredientFilter>('ALL');
   const [historyOf, setHistoryOf] = useState<string | null>(null);
   const [editing, setEditing] = useState<IngredientRow | 'new' | null>(null);
@@ -92,17 +100,18 @@ export function InventoryScreen({
 
   const actions = canManage ? (
     <div className="flex flex-wrap gap-2">
-      <Button variant="outline" onClick={() => setAdjusting('pick')}>
+      <Button size="sm" variant="outline" onClick={() => setAdjusting('pick')}>
         <SlidersHorizontal className="size-4" aria-hidden />
         {t('inventory.actions.adjust')}
       </Button>
-      <Button onClick={() => setEditing('new')}>
+      <Button size="sm" onClick={() => setEditing('new')}>
         <Plus className="size-4" aria-hidden />
         {t('inventory.actions.add')}
       </Button>
     </div>
   ) : undefined;
-  const header = <ScreenHeader icon={Boxes} title={t('nav.inventory')} status="DEMO_PROTOTYPE" description={t('inventory.description')} actions={actions} />;
+  // One slim title row (owner's compact UI brief, 2026-11-11): the work starts higher on the screen
+  const header = <ScreenHeader compact icon={Boxes} title={t('nav.inventory')} status="DEMO_PROTOTYPE" description={t('inventory.description')} actions={actions} />;
 
   if (inventory.loading && !inventory.data) return (<>{header}<LoadingState /></>);
   if (!inventory.data) return (<>{header}<ErrorState message={inventory.error?.message} onRetry={inventory.reload} /></>);
@@ -111,7 +120,7 @@ export function InventoryScreen({
   return (
     <>
       {!building && !billing && header}
-      <div role="tablist" aria-label={t('inventory.sections.label')} hidden={building || billing} className="mb-4 flex overflow-x-auto rounded-2xl border border-slate-200 bg-white px-1 shadow-sm">
+      <div role="tablist" aria-label={t('inventory.sections.label')} hidden={building || billing} className="mb-3 flex overflow-x-auto rounded-xl border border-slate-200 bg-white px-1">
         {order.map((key) => SECTIONS.find((s) => s.key === key)!).map(({ key, icon: Icon, phase }) => (
           <button
             key={key}
@@ -120,11 +129,11 @@ export function InventoryScreen({
             aria-selected={section === key}
             onClick={() => (picking ? setPicking(picking.includes(key) ? picking.filter((k) => k !== key) : [...picking, key]) : setSection(key))}
             className={cn(
-              'flex min-h-14 shrink-0 items-center gap-2 border-b-[3px] px-4 text-sm font-bold transition-colors',
-              section === key ? 'border-brand text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-900',
+              'flex min-h-11 shrink-0 items-center gap-2 border-b-[3px] px-3.5 text-sm font-bold transition-colors',
+              section === key ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-900',
             )}
           >
-            <Icon className={cn('size-5', section === key && 'text-brand')} aria-hidden />
+            <Icon className="size-4" aria-hidden />
             {t(`inventory.sections.${key}`)}
             {phase && <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-500">{t('inventory.soonChip')}</span>}
             {picking?.includes(key) && (
@@ -135,8 +144,8 @@ export function InventoryScreen({
           </button>
         ))}
         {!picking && (
-          <button type="button" onClick={() => setPicking([])} className="press my-2 ml-auto flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-brand">
-            <Pencil className="size-4" aria-hidden />
+          <button type="button" onClick={() => setPicking([])} className="press my-1 ml-auto flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-brand">
+            <Pencil className="size-3.5" aria-hidden />
             {t('inventory.sections.edit')}
           </button>
         )}
@@ -167,6 +176,7 @@ export function InventoryScreen({
           onOpenSuppliers={() => setSection('purchasing')}
           onOpenCooking={() => openStock('cooking')}
           onOpenFood={() => openStock('food')}
+          onOpenWastage={() => openStock('wastage')}
           onOpenMovements={() => {
             setHistoryOf(null);
             openStock('movements');
@@ -175,8 +185,9 @@ export function InventoryScreen({
       )}
 
       {section === 'stock' && (
-        <div className="space-y-4">
-          <div role="tablist" aria-label={t('inventory.stockTabs.label')} className="flex flex-wrap gap-2">
+        <div className="space-y-3">
+          {/* One row on a light grey track; it scrolls sideways on a phone instead of wrapping to a second line */}
+          <div role="tablist" aria-label={t('inventory.stockTabs.label')} className="flex gap-1 overflow-x-auto rounded-xl bg-slate-200/60 p-1">
             {STOCK_TABS.map(({ key, icon: Icon, phase }) => (
               <button
                 key={key}
@@ -185,13 +196,13 @@ export function InventoryScreen({
                 aria-selected={stockTab === key}
                 onClick={() => setStockTab(key)}
                 className={cn(
-                  'press flex min-h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold',
-                  stockTab === key ? 'border-brand bg-brand bg-brand-gradient text-white shadow-brand' : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-brand-soft/50',
+                  'press flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-bold pointer-coarse:min-h-10',
+                  stockTab === key ? 'bg-white text-brand shadow-sm' : 'text-slate-600 hover:bg-white/60 hover:text-slate-900',
                 )}
               >
                 <Icon className="size-4" aria-hidden />
                 {t(`inventory.stockTabs.${key}`)}
-                {phase && <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase', stockTab === key ? 'bg-white/20' : 'bg-slate-100 text-slate-500')}>{t('inventory.soonChip')}</span>}
+                {phase && <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-500">{t('inventory.soonChip')}</span>}
               </button>
             ))}
           </div>
@@ -221,8 +232,8 @@ export function InventoryScreen({
             />
           )}
           {stockTab === 'food' && <AvailableFoodTab canManage={canManage} />}
-          {stockTab === 'wastage' && <PlannedPanel icon={Trash2} title="inventory.planned.wastage.title" items="inventory.planned.wastage.items" phase={4} />}
-          {stockTab === 'counts' && <PlannedPanel icon={ClipboardCheck} title="inventory.planned.counts.title" items="inventory.planned.counts.items" phase={4} />}
+          {stockTab === 'wastage' && <WastageTab view={view} canManage={canManage} startPending={wastePending} />}
+          {stockTab === 'counts' && <CountsTab view={view} startCountId={countId ?? null} />}
         </div>
       )}
 
@@ -230,7 +241,7 @@ export function InventoryScreen({
       {section === 'purchasing' && <SuppliersTab key={billFor ?? 'list'} canManage={canManage} onFocus={setBilling} openBill={billFor ?? undefined} />}
       {section === 'reports' && <PlannedPanel icon={ChartColumn} title="inventory.planned.reports.title" items="inventory.planned.reports.items" phase={6} />}
 
-      {!building && !billing && <p className="mt-4 rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-600">{t('inventory.demoNote')}</p>}
+      {!building && !billing && <p className="mt-3 px-1 text-xs text-slate-500">{t('inventory.demoNote')}</p>}
 
       {editing && <IngredientDialog row={editing === 'new' ? null : editing} view={view} onClose={() => setEditing(null)} />}
       {adjusting && <AdjustStockDialog row={adjusting === 'pick' ? null : adjusting} view={view} onClose={() => setAdjusting(null)} />}
